@@ -1046,18 +1046,25 @@ impl MapperApp {
                 // being dragged narrower than the longest area name.
                 ui.horizontal_top(|ui| {
                     if edit_mode {
-                        let mut ticked = self.svg_areas.contains(&area.name);
-                        if ui
-                            .checkbox(&mut ticked, "")
-                            .on_hover_text("Draw this area and its plates as SVGs")
-                            .changed()
-                        {
-                            if ticked {
-                                self.svg_areas.insert(area.name.clone());
-                            } else {
-                                self.svg_areas.remove(&area.name);
+                        // Scoped by area name: every one of these
+                        // checkboxes has an empty label, and egui derives
+                        // a widget's id from its text and position, so
+                        // without this they all share one id and only a
+                        // single tick can be held across the whole list.
+                        ui.push_id(&area.name, |ui| {
+                            let mut ticked = self.svg_areas.contains(&area.name);
+                            if ui
+                                .checkbox(&mut ticked, "")
+                                .on_hover_text("Draw this area and its plates as SVGs")
+                                .changed()
+                            {
+                                if ticked {
+                                    self.svg_areas.insert(area.name.clone());
+                                } else {
+                                    self.svg_areas.remove(&area.name);
+                                }
                             }
-                        }
+                        });
                     }
                     if ui
                         .add(
