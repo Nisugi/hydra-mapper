@@ -235,7 +235,28 @@ pub fn position_rooms(map: &Map, dirs: &DirectionMap) -> Vec<Group> {
         }
 
         optimize_component(&room_order, &mut positions, map, dirs);
-        let violations = validate_component(&room_order, &positions, map, dirs);
+        let mut violations = validate_component(&room_order, &positions, map, dirs);
+
+        // A violation on satisfiable data is the solver's, not the map's,
+        // and both repair passes above are local: the hill climb moves one
+        // room among its neighbours, and the re-weld cascades outward but
+        // will not move the anchor, so neither can make the coordinated
+        // shift some arrangements need. An arrangement exists in that
+        // case, so take it.
+        if !violations.is_empty()
+            && let Some(placed) = crate::satisfiable::place_by_order(&room_order, map, dirs)
+        {
+            let fixed = validate_component(&room_order, &placed, map, dirs);
+            // Only if it is actually better. The ordering pass satisfies
+            // every direction it knows about, but `validate_component`
+            // reads exits it does not constrain -- a one-way edge whose
+            // reverse disagrees -- so this is checked rather than assumed.
+            if fixed.len() < violations.len() {
+                positions = placed;
+                compact_component(&mut positions);
+                violations = validate_component(&room_order, &positions, map, dirs);
+            }
+        }
 
         groups.push(Group {
             index: groups.len(),

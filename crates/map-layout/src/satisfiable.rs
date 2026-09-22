@@ -7,43 +7,66 @@
 //! existed the panel presented both the same way, and the README asserted
 //! the first -- wrongly, for most of them.
 //!
-//! # Ordering, not geometry
+//! # Every bearing is two constraints, and one of them is often equality
 //!
-//! Every compass direction is a pair of **strict inequalities**, one per
-//! axis, and the axes are independent:
+//! The engine's sign rules make each compass direction a pair of
+//! constraints, one per axis, and the axes are independent:
 //!
 //! ```text
-//! b east of a       =>  x_a < x_b
+//! b east of a       =>  x_a < x_b  and  y_a = y_b
 //! b northeast of a  =>  x_a < x_b  and  y_b < y_a
-//! b north of a      =>              y_b < y_a
+//! b north of a      =>  x_a = x_b  and  y_b < y_a
 //! ```
 //!
-//! Nothing here cares how *far*, which is the point: a stretched edge
-//! satisfies the same inequality a unit one does. A set of strict
-//! inequalities is satisfiable exactly when its constraint graph has no
-//! cycle -- `x_a < x_b < x_c < x_a` cannot hold for any numbers at all --
-//! and a graph with no cycle can always be satisfied, by numbering it in
-//! topological order.
+//! **The equalities matter as much as the inequalities.** An earlier
+//! version of this module dropped them -- "north says nothing about x" --
+//! which made it answer a weaker question than the engine asks, and miss
+//! every contradiction that runs through an alignment. `a` north of `b`,
+//! `b` north of `c` and `a` east of `c` is unsatisfiable, and without the
+//! equalities nothing here would have said so. (Found by ATARI, who also
+//! supplied the four-room fixture the tests below pin.)
 //!
-//! So the question "is this component satisfiable?" is two cycle
-//! detections, in O(V+E), with no search and no arithmetic.
+//! So each axis is judged in two steps:
+//!
+//! 1. **Contract** the rooms an equality binds into one class. Two rooms
+//!    on the same axis-class must share a coordinate, so they stand or
+//!    fall together.
+//! 2. **Check the classes** for a strict-order cycle. `x_a < x_b < x_a`
+//!    cannot hold for any numbers, and neither can a cycle that passes
+//!    through an alignment. A strict order *within* one class is the same
+//!    contradiction: a room cannot be strictly east of something it must
+//!    share an x with.
+//!
+//! A graph with no cycle can always be satisfied, by numbering the classes
+//! in topological order -- so the whole question is union-find plus cycle
+//! detection, O(V+E) either way, with no search and no arithmetic.
+//!
+//! # Forced overlap
+//!
+//! Satisfying every constraint is not enough on its own: two rooms forced
+//! into the same class on **both** axes must occupy the same cell, and a
+//! layout cannot draw that however the constraints are honoured. That is
+//! its own kind of unsatisfiable, reported separately because the fix is
+//! different -- an exit claiming a room is in two places at once, rather
+//! than a loop of bearings.
 //!
 //! Up and down are excluded, as they are from validation: they borrow the
 //! north/south offsets as a placement convenience and are not 2D geometry
 //! (`plan/26` §0).
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use cena_map::{Map, RoomId};
 
 use crate::direction::DirectionMap;
+use crate::positioner::Cell;
 
-/// Which axis a constraint cycle lies on.
+/// Which axis a constraint lies on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Axis {
-    /// East and west: the cycle is in the x ordering.
+    /// East and west: the x ordering.
     EastWest,
-    /// North and south: the cycle is in the y ordering.
+    /// North and south: the y ordering.
     NorthSouth,
 }
 
@@ -57,59 +80,127 @@ impl Axis {
     }
 }
 
-/// A set of rooms whose stated directions contradict each other.
-///
-/// The rooms form a loop on one axis -- each claims to be strictly one
-/// side of the next, all the way round -- which no arrangement can
-/// satisfy, however it is drawn.
+/// Why a component's stated directions cannot all hold at once.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Contradiction {
-    pub axis: Axis,
-    /// The rooms of the cycle, in the order the constraints chain, with
-    /// the first repeated at the end so the loop reads as a loop.
-    pub cycle: Vec<RoomId>,
+pub enum Problem {
+    /// A loop of strict orderings on one axis: each room must be strictly
+    /// one side of the next, all the way round.
+    ///
+    /// The loop may run through an alignment -- `a` north of `b`, `b`
+    /// north of `c`, `a` east of `c` -- which is why equalities are
+    /// contracted before the cycle is looked for.
+    Cycle {
+        axis: Axis,
+        /// The rooms of the loop, first repeated at the end so it reads
+        /// as a loop.
+        cycle: Vec<RoomId>,
+    },
+    /// One room must be strictly east (or north) of another it is also
+    /// aligned with: `a` east of `b` while something else holds their x
+    /// equal.
+    OrderWithinAlignment {
+        axis: Axis,
+        from: RoomId,
+        to: RoomId,
+    },
+    /// Two rooms forced onto the same cell -- aligned on both axes, with
+    /// nothing separating them.
+    ForcedOverlap { a: RoomId, b: RoomId },
 }
 
-/// Every contradiction among a component's rooms, or an empty list when
-/// its directions can all be satisfied at once.
+impl Problem {
+    /// The rooms this problem implicates, for a panel to name.
+    #[must_use]
+    pub fn rooms(&self) -> Vec<RoomId> {
+        match self {
+            Problem::Cycle { cycle, .. } => cycle.clone(),
+            Problem::OrderWithinAlignment { from, to, .. } => vec![*from, *to],
+            Problem::ForcedOverlap { a, b } => vec![*a, *b],
+        }
+    }
+}
+
+/// Everything that stops a component's directions being satisfied at
+/// once, or an empty list when they can be.
 ///
-/// **An empty list is a strong claim**: it means an arrangement exists
-/// that violates nothing. If the layout still has violations, they are
-/// the solver's, not the map's.
+/// **An empty list is a strong claim**: an arrangement exists that
+/// satisfies every stated bearing's signs. If the layout still reports
+/// violations, they are the solver's, not the map's.
 #[must_use]
-pub fn contradictions(rooms: &[RoomId], map: &Map, dirs: &DirectionMap) -> Vec<Contradiction> {
+pub fn problems(rooms: &[RoomId], map: &Map, dirs: &DirectionMap) -> Vec<Problem> {
     let present: HashSet<RoomId> = rooms.iter().copied().collect();
     let mut out = Vec::new();
+
+    let mut classes: Vec<Union> = Vec::new();
     for axis in [Axis::EastWest, Axis::NorthSouth] {
-        let graph = constraints(rooms, map, dirs, &present, axis);
-        out.extend(cycles(rooms, &graph, axis));
+        let edges = axis_edges(rooms, map, dirs, &present, axis);
+        let mut union = Union::new(rooms);
+        for e in edges.iter().filter(|e| e.equal) {
+            union.join(e.from, e.to);
+        }
+        // A strict order inside one alignment class is a contradiction on
+        // its own: the rooms must share a coordinate and differ in it.
+        for e in edges.iter().filter(|e| !e.equal) {
+            if union.find(e.from) == union.find(e.to) {
+                out.push(Problem::OrderWithinAlignment {
+                    axis,
+                    from: e.from,
+                    to: e.to,
+                });
+            }
+        }
+        let graph = contracted(&edges, &mut union);
+        out.extend(cycles(rooms, &graph, &mut union, axis));
+        classes.push(union);
     }
+
+    // Aligned on both axes: the same cell, which cannot be drawn.
+    if let [x, y] = classes.as_mut_slice() {
+        let mut seen: BTreeMap<(RoomId, RoomId), RoomId> = BTreeMap::new();
+        for &room in rooms {
+            let key = (x.find(room), y.find(room));
+            if let Some(&first) = seen.get(&key) {
+                out.push(Problem::ForcedOverlap { a: first, b: room });
+            } else {
+                seen.insert(key, room);
+            }
+        }
+    }
+
     out
 }
 
 /// Whether every stated direction among these rooms can hold at once.
 #[must_use]
 pub fn is_satisfiable(rooms: &[RoomId], map: &Map, dirs: &DirectionMap) -> bool {
-    contradictions(rooms, map, dirs).is_empty()
+    problems(rooms, map, dirs).is_empty()
 }
 
-/// `a -> b` for every constraint reading "a is strictly before b" on this
-/// axis: west of, for x; north of, for y.
-fn constraints(
+/// One axis constraint between two rooms: either they must be equal on
+/// this axis, or `from` must come strictly before `to`.
+struct AxisEdge {
+    from: RoomId,
+    to: RoomId,
+    equal: bool,
+}
+
+/// Every constraint the stated bearings place on one axis, equalities
+/// included.
+fn axis_edges(
     rooms: &[RoomId],
     map: &Map,
     dirs: &DirectionMap,
     present: &HashSet<RoomId>,
     axis: Axis,
-) -> HashMap<RoomId, Vec<RoomId>> {
-    let mut graph: HashMap<RoomId, Vec<RoomId>> = HashMap::new();
+) -> Vec<AxisEdge> {
+    let mut edges = Vec::new();
     for &from in rooms {
         let Some(room) = map.room(from) else {
             continue;
         };
         for exit in &room.exits {
             let to = exit.to;
-            if !present.contains(&to) {
+            if !present.contains(&to) || from == to {
                 continue;
             }
             let Some(dir) = dirs.get(from, to) else {
@@ -123,17 +214,40 @@ fn constraints(
                 Axis::EastWest => dx,
                 Axis::NorthSouth => dy,
             };
-            // A bearing with no component on this axis constrains nothing
-            // here -- "north" says nothing about x.
-            match step {
-                1 => graph.entry(from).or_default().push(to),
-                -1 => graph.entry(to).or_default().push(from),
-                _ => {}
-            }
+            edges.push(match step {
+                1 => AxisEdge {
+                    from,
+                    to,
+                    equal: false,
+                },
+                -1 => AxisEdge {
+                    from: to,
+                    to: from,
+                    equal: false,
+                },
+                // No component on this axis: the engine's sign rules make
+                // that an alignment, not an absence of information.
+                _ => AxisEdge {
+                    from,
+                    to,
+                    equal: true,
+                },
+            });
         }
     }
-    // Deterministic order, so the cycle reported for a given map is the
-    // same one every run.
+    edges
+}
+
+/// The strict-order graph over alignment classes, deduplicated and in a
+/// stable order so the same map reports the same cycle every run.
+fn contracted(edges: &[AxisEdge], union: &mut Union) -> BTreeMap<RoomId, Vec<RoomId>> {
+    let mut graph: BTreeMap<RoomId, Vec<RoomId>> = BTreeMap::new();
+    for e in edges.iter().filter(|e| !e.equal) {
+        let (a, b) = (union.find(e.from), union.find(e.to));
+        if a != b {
+            graph.entry(a).or_default().push(b);
+        }
+    }
     for targets in graph.values_mut() {
         targets.sort_unstable();
         targets.dedup();
@@ -141,16 +255,17 @@ fn constraints(
     graph
 }
 
-/// Every cycle in the constraint graph, found by depth-first search.
+/// Cycles in the contracted graph, by iterative depth-first search.
 ///
-/// One cycle is reported per entry point rather than every distinct cycle
-/// through the same rooms: a person fixing the loop breaks all of them,
-/// and enumerating them all is exponential for no gain.
+/// One cycle per entry point rather than every distinct loop through the
+/// same rooms: breaking one breaks them all, and enumerating them is
+/// exponential for no gain.
 fn cycles(
     rooms: &[RoomId],
-    graph: &HashMap<RoomId, Vec<RoomId>>,
+    graph: &BTreeMap<RoomId, Vec<RoomId>>,
+    union: &mut Union,
     axis: Axis,
-) -> Vec<Contradiction> {
+) -> Vec<Problem> {
     #[derive(Clone, Copy, PartialEq)]
     enum Mark {
         Open,
@@ -158,16 +273,17 @@ fn cycles(
     }
     let mut mark: HashMap<RoomId, Mark> = HashMap::new();
     let mut out = Vec::new();
-    // Iterative DFS, so a long chain cannot overflow the stack: the real
-    // map has components of thousands of rooms.
-    for &start in rooms {
+    // Iterative, because the real map has components of thousands of
+    // rooms and a recursive walk would overflow the stack.
+    let mut starts: Vec<RoomId> = rooms.iter().map(|&r| union.find(r)).collect();
+    starts.sort_unstable();
+    starts.dedup();
+    for start in starts {
         if mark.contains_key(&start) {
             continue;
         }
-        let mut path: Vec<RoomId> = Vec::new();
-        let mut next: Vec<usize> = Vec::new();
-        path.push(start);
-        next.push(0);
+        let mut path = vec![start];
+        let mut next = vec![0usize];
         mark.insert(start, Mark::Open);
         while let Some(&room) = path.last() {
             let index = next
@@ -182,13 +298,11 @@ fn cycles(
             *index += 1;
             match mark.get(&target) {
                 Some(Mark::Done) => {}
-                // Back to a room still on the path: the constraints from
-                // there onward form a loop.
                 Some(Mark::Open) => {
                     if let Some(at) = path.iter().position(|&r| r == target) {
                         let mut cycle: Vec<RoomId> = path[at..].to_vec();
                         cycle.push(target);
-                        out.push(Contradiction { axis, cycle });
+                        out.push(Problem::Cycle { axis, cycle });
                     }
                 }
                 None => {
@@ -202,149 +316,152 @@ fn cycles(
     out
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use cena_map::{Cost, Crossing, Exit, ExitKind, Room};
+/// Disjoint sets over rooms, for the alignment classes.
+struct Union {
+    parent: HashMap<RoomId, RoomId>,
+}
 
-    fn exit(to: u32, command: &str) -> Exit {
-        Exit {
-            to: RoomId(to),
-            kind: ExitKind::Cardinal,
-            crossing: Crossing::Command(command.to_owned()),
-            cost: Some(Cost::Fixed(1.0)),
+impl Union {
+    fn new(rooms: &[RoomId]) -> Union {
+        Union {
+            parent: rooms.iter().map(|&r| (r, r)).collect(),
         }
     }
 
-    fn room(id: u32, exits: Vec<Exit>) -> Room {
-        Room {
-            id: RoomId(id),
-            uid: vec![],
-            title: vec![format!("[R{id}]")],
-            description: vec![],
-            paths: vec![],
-            location: None,
-            location_unknowable: false,
-            check_location: false,
-            unique_loot: vec![],
-            climate: None,
-            terrain: None,
-            tags: vec![],
-            meta: vec![],
-            image: None,
-            exits,
+    fn find(&mut self, of: RoomId) -> RoomId {
+        let mut root = of;
+        while let Some(&up) = self.parent.get(&root) {
+            if up == root {
+                break;
+            }
+            root = up;
+        }
+        // Path compression, so repeated lookups over a long chain stay
+        // cheap.
+        let mut at = of;
+        while let Some(&up) = self.parent.get(&at) {
+            if up == root {
+                break;
+            }
+            self.parent.insert(at, root);
+            at = up;
+        }
+        root
+    }
+
+    fn join(&mut self, a: RoomId, b: RoomId) {
+        let (ra, rb) = (self.find(a), self.find(b));
+        if ra != rb {
+            // Lower id wins, so the class representative -- and every
+            // report naming it -- is the same on every run.
+            let (keep, drop) = if ra < rb { (ra, rb) } else { (rb, ra) };
+            self.parent.insert(drop, keep);
         }
     }
+}
 
-    fn check(rooms: Vec<Room>) -> Vec<Contradiction> {
-        let ids: Vec<RoomId> = rooms.iter().map(|r| r.id).collect();
-        let map = Map::from_rooms(rooms).expect("no duplicate ids");
-        let dirs = DirectionMap::build(&map);
-        contradictions(&ids, &map, &dirs)
+/// An arrangement satisfying every stated bearing's signs, or `None` when
+/// the rooms cannot be satisfied.
+///
+/// **This cannot fail on satisfiable data**: each axis numbers its
+/// alignment classes in topological order, so every strict constraint
+/// `a < b` holds because `a`'s class was numbered first, and every
+/// equality holds because both rooms share a class. No search, no
+/// backtracking, nothing to get stuck in.
+///
+/// The result is *correct*, not *pretty*: a class sits one rank past its
+/// predecessors, which spreads a component out more than BFS placement
+/// does. It is meant as the answer when the ordinary passes have left a
+/// violation behind, with compaction tidying afterwards.
+#[must_use]
+pub fn place_by_order(
+    rooms: &[RoomId],
+    map: &Map,
+    dirs: &DirectionMap,
+) -> Option<HashMap<RoomId, Cell>> {
+    if !problems(rooms, map, dirs).is_empty() {
+        return None;
     }
+    let present: HashSet<RoomId> = rooms.iter().copied().collect();
+    let x = ranks(rooms, map, dirs, &present, Axis::EastWest)?;
+    let y = ranks(rooms, map, dirs, &present, Axis::NorthSouth)?;
 
-    /// The fixture ATARI supplied: the engine reports two violations on
-    /// it, and this says the data is fine -- which is the whole point of
-    /// the module. Every stated direction holds at
-    /// `0=(0,2) 1=(1,0) 2=(2,1) 3=(0,0)`.
-    #[test]
-    fn the_four_room_counterexample_is_satisfiable() {
-        let found = check(vec![
-            room(
-                0,
-                vec![exit(1, "northeast"), exit(2, "northeast"), exit(3, "north")],
-            ),
-            room(1, vec![exit(0, "southwest"), exit(2, "southeast")]),
-            room(2, vec![exit(0, "southwest"), exit(1, "northwest")]),
-            room(3, vec![exit(0, "south")]),
-        ]);
-        assert!(
-            found.is_empty(),
-            "called satisfiable data contradictory: {found:?}"
+    let mut out = HashMap::new();
+    for &room in rooms {
+        out.insert(
+            room,
+            Cell {
+                x: x.get(&room).copied().unwrap_or(0),
+                y: y.get(&room).copied().unwrap_or(0),
+            },
         );
     }
+    Some(out)
+}
 
-    /// Two rooms each claiming the other is east. No arrangement holds.
-    #[test]
-    fn mutual_east_is_a_contradiction() {
-        let found = check(vec![
-            room(1, vec![exit(2, "east")]),
-            room(2, vec![exit(1, "east")]),
-        ]);
-        assert_eq!(found.len(), 1);
-        assert_eq!(found[0].axis, Axis::EastWest);
+/// Longest-path rank per room on one axis: how many strict constraints
+/// must come before its alignment class.
+///
+/// Longest path rather than any topological numbering, because a class
+/// must sit strictly after **every** predecessor, not just the first one
+/// reached.
+fn ranks(
+    rooms: &[RoomId],
+    map: &Map,
+    dirs: &DirectionMap,
+    present: &HashSet<RoomId>,
+    axis: Axis,
+) -> Option<HashMap<RoomId, i32>> {
+    let edges = axis_edges(rooms, map, dirs, present, axis);
+    let mut union = Union::new(rooms);
+    for e in edges.iter().filter(|e| e.equal) {
+        union.join(e.from, e.to);
     }
+    let graph = contracted(&edges, &mut union);
 
-    /// A longer loop: a < b < c < a on one axis. Each edge is reasonable
-    /// alone, which is why this needs finding rather than eyeballing.
-    #[test]
-    fn a_three_room_loop_is_a_contradiction() {
-        let found = check(vec![
-            room(1, vec![exit(2, "east")]),
-            room(2, vec![exit(3, "east")]),
-            room(3, vec![exit(1, "east")]),
-        ]);
-        assert_eq!(found.len(), 1);
-        assert_eq!(found[0].axis, Axis::EastWest);
-        // The loop is reported as a loop: first room repeated at the end.
-        let cycle = &found[0].cycle;
-        assert_eq!(cycle.first(), cycle.last());
+    let mut classes: Vec<RoomId> = rooms.iter().map(|&r| union.find(r)).collect();
+    classes.sort_unstable();
+    classes.dedup();
+
+    let mut incoming: HashMap<RoomId, usize> = classes.iter().map(|&c| (c, 0)).collect();
+    for targets in graph.values() {
+        for t in targets {
+            *incoming.entry(*t).or_default() += 1;
+        }
     }
+    let mut ready: Vec<RoomId> = classes
+        .iter()
+        .copied()
+        .filter(|c| incoming.get(c) == Some(&0))
+        .collect();
+    ready.sort_unstable();
 
-    /// A contradiction on one axis does not condemn the other: these
-    /// rooms disagree about north/south while their x ordering is fine.
-    #[test]
-    fn each_axis_is_judged_on_its_own() {
-        let found = check(vec![
-            room(1, vec![exit(2, "north")]),
-            room(2, vec![exit(1, "north")]),
-        ]);
-        assert_eq!(found.len(), 1);
-        assert_eq!(found[0].axis, Axis::NorthSouth);
+    let mut rank: HashMap<RoomId, i32> = classes.iter().map(|&c| (c, 0)).collect();
+    let mut done = 0usize;
+    while let Some(class) = ready.pop() {
+        done += 1;
+        let here = rank.get(&class).copied().unwrap_or(0);
+        for &target in graph.get(&class).map_or(&[] as &[_], Vec::as_slice) {
+            let slot = rank.entry(target).or_default();
+            *slot = (*slot).max(here + 1);
+            let left = incoming.entry(target).or_default();
+            *left = left.saturating_sub(1);
+            if *left == 0 {
+                ready.push(target);
+                ready.sort_unstable();
+            }
+        }
     }
-
-    /// An ordinary square is satisfiable, and so is a long chain -- the
-    /// check must not cry contradiction over normal maps.
-    #[test]
-    fn ordinary_shapes_are_satisfiable() {
-        assert!(
-            check(vec![
-                room(1, vec![exit(2, "east"), exit(3, "south")]),
-                room(2, vec![exit(1, "west"), exit(4, "south")]),
-                room(3, vec![exit(1, "north"), exit(4, "east")]),
-                room(4, vec![exit(2, "north"), exit(3, "west")]),
-            ])
-            .is_empty()
-        );
-
-        // A hundred rooms in a line: deep enough to overflow a recursive
-        // search, which is why the walk is iterative.
-        let long: Vec<Room> = (1..=100u32)
-            .map(|id| {
-                let mut e = vec![];
-                if id > 1 {
-                    e.push(exit(id - 1, "west"));
-                }
-                if id < 100 {
-                    e.push(exit(id + 1, "east"));
-                }
-                room(id, e)
+    if done != classes.len() {
+        return None; // a class still waiting on itself: a cycle
+    }
+    Some(
+        rooms
+            .iter()
+            .map(|&r| {
+                let class = union.find(r);
+                (r, rank.get(&class).copied().unwrap_or(0))
             })
-            .collect();
-        assert!(check(long).is_empty());
-    }
-
-    /// Stretched edges are ordering, not distance: three rooms in a row
-    /// where the far pair also names a bearing directly.
-    #[test]
-    fn a_stretched_edge_is_no_contradiction() {
-        assert!(
-            check(vec![
-                room(1, vec![exit(2, "east"), exit(3, "east")]),
-                room(2, vec![exit(1, "west"), exit(3, "east")]),
-                room(3, vec![exit(1, "west"), exit(2, "west")]),
-            ])
-            .is_empty()
-        );
-    }
+            .collect(),
+    )
 }

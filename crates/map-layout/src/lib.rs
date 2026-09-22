@@ -41,6 +41,8 @@ pub mod packer;
 pub mod pipeline;
 pub mod positioner;
 pub mod satisfiable;
+#[cfg(test)]
+mod satisfiable_tests;
 pub mod scene;
 pub mod stats;
 
@@ -50,6 +52,6 @@ pub use overrides::{EdgeAction, EdgeOverride};
 pub use packer::PackInfo;
 pub use pipeline::{Layout, generate_layout, generate_layout_reference, generate_layout_with};
 pub use positioner::{Cell, Group, PackMethod, Violation};
-pub use satisfiable::{Axis, Contradiction, contradictions, is_satisfiable};
+pub use satisfiable::{Axis, Problem, is_satisfiable, place_by_order, problems};
 pub use scene::{MapScene, Sheet, SheetScene, build_scene};
 pub use stats::LayoutStats;

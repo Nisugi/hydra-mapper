@@ -1,0 +1,226 @@
+//! Tests for [`crate::satisfiable`], in their own file only because the
+//! module they cover is long enough already.
+
+use cena_map::{Cost, Crossing, Exit, ExitKind, Map, Room, RoomId};
+
+use crate::direction::DirectionMap;
+use crate::satisfiable::{Axis, Problem, place_by_order, problems};
+
+fn exit(to: u32, command: &str) -> Exit {
+    Exit {
+        to: RoomId(to),
+        kind: ExitKind::Cardinal,
+        crossing: Crossing::Command(command.to_owned()),
+        cost: Some(Cost::Fixed(1.0)),
+    }
+}
+
+fn room(id: u32, exits: Vec<Exit>) -> Room {
+    Room {
+        id: RoomId(id),
+        uid: vec![],
+        title: vec![format!("[R{id}]")],
+        description: vec![],
+        paths: vec![],
+        location: None,
+        location_unknowable: false,
+        check_location: false,
+        unique_loot: vec![],
+        climate: None,
+        terrain: None,
+        tags: vec![],
+        meta: vec![],
+        image: None,
+        exits,
+    }
+}
+
+fn check(rooms: Vec<Room>) -> Vec<Problem> {
+    let ids: Vec<RoomId> = rooms.iter().map(|r| r.id).collect();
+    let map = Map::from_rooms(rooms).expect("no duplicate ids");
+    let dirs = DirectionMap::build(&map);
+    problems(&ids, &map, &dirs)
+}
+
+/// The fixture ATARI supplied: the engine reported two violations on it,
+/// and the data is fine. Every stated direction holds at
+/// `0=(0,2) 1=(1,0) 2=(2,1) 3=(0,0)`.
+#[test]
+fn the_four_room_counterexample_is_satisfiable() {
+    let found = check(vec![
+        room(
+            0,
+            vec![exit(1, "northeast"), exit(2, "northeast"), exit(3, "north")],
+        ),
+        room(1, vec![exit(0, "southwest"), exit(2, "southeast")]),
+        room(2, vec![exit(0, "southwest"), exit(1, "northwest")]),
+        room(3, vec![exit(0, "south")]),
+    ]);
+    assert!(found.is_empty(), "called satisfiable data bad: {found:?}");
+}
+
+/// **The case the equalities exist for.** Room 1 north of 2 and 2 north
+/// of 3 put all three on one x; 1 east of 3 then demands a difference in
+/// the x they must share. Dropping the equalities -- as an earlier
+/// version did -- finds nothing here, because neither axis holds a cycle
+/// on its own.
+#[test]
+fn a_contradiction_through_an_alignment_is_found() {
+    let found = check(vec![
+        room(1, vec![exit(2, "north"), exit(3, "east")]),
+        room(2, vec![exit(3, "north")]),
+        room(3, vec![]),
+    ]);
+    assert!(
+        found.iter().any(|p| matches!(
+            p,
+            Problem::OrderWithinAlignment {
+                axis: Axis::EastWest,
+                ..
+            }
+        )),
+        "missed a contradiction running through an alignment: {found:?}"
+    );
+}
+
+/// Rooms aligned on both axes with nothing separating them must share a
+/// cell, which no layout can draw.
+#[test]
+fn rooms_forced_onto_one_cell_are_reported() {
+    let found = check(vec![
+        room(1, vec![exit(2, "north"), exit(3, "north")]),
+        room(2, vec![exit(3, "north")]),
+        room(3, vec![exit(2, "north")]),
+    ]);
+    assert!(
+        !found.is_empty(),
+        "rooms pinned to one cell went unreported: {found:?}"
+    );
+}
+
+/// Two rooms each claiming the other is east. No arrangement holds.
+#[test]
+fn mutual_east_is_a_contradiction() {
+    assert!(
+        !check(vec![
+            room(1, vec![exit(2, "east")]),
+            room(2, vec![exit(1, "east")]),
+        ])
+        .is_empty()
+    );
+}
+
+/// A longer loop: a < b < c < a on one axis. Each edge is reasonable
+/// alone, which is why it needs finding rather than eyeballing.
+#[test]
+fn a_three_room_loop_is_a_contradiction() {
+    let found = check(vec![
+        room(1, vec![exit(2, "east")]),
+        room(2, vec![exit(3, "east")]),
+        room(3, vec![exit(1, "east")]),
+    ]);
+    assert!(found.iter().any(|p| matches!(
+        p,
+        Problem::Cycle {
+            axis: Axis::EastWest,
+            ..
+        }
+    )));
+}
+
+/// An ordinary square is satisfiable, and so is a long chain -- the check
+/// must not cry contradiction over normal maps.
+#[test]
+fn ordinary_shapes_are_satisfiable() {
+    assert!(
+        check(vec![
+            room(1, vec![exit(2, "east"), exit(3, "south")]),
+            room(2, vec![exit(1, "west"), exit(4, "south")]),
+            room(3, vec![exit(1, "north"), exit(4, "east")]),
+            room(4, vec![exit(2, "north"), exit(3, "west")]),
+        ])
+        .is_empty()
+    );
+
+    // A hundred rooms in a line: deep enough to overflow a recursive
+    // search, which is why the walk is iterative.
+    let long: Vec<Room> = (1..=100u32)
+        .map(|id| {
+            let mut e = vec![];
+            if id > 1 {
+                e.push(exit(id - 1, "west"));
+            }
+            if id < 100 {
+                e.push(exit(id + 1, "east"));
+            }
+            room(id, e)
+        })
+        .collect();
+    assert!(check(long).is_empty());
+}
+
+/// Stretched edges are ordering, not distance: three rooms in a row where
+/// the far pair also names a bearing directly.
+#[test]
+fn a_stretched_edge_is_no_contradiction() {
+    assert!(
+        check(vec![
+            room(1, vec![exit(2, "east"), exit(3, "east")]),
+            room(2, vec![exit(1, "west"), exit(3, "east")]),
+            room(3, vec![exit(1, "west"), exit(2, "west")]),
+        ])
+        .is_empty()
+    );
+}
+
+/// What the ordering placer produces must satisfy every sign it was built
+/// from -- the alignments included, which is the half that was missing.
+#[test]
+fn the_ordering_placement_satisfies_every_sign() {
+    let rooms = vec![
+        room(1, vec![exit(2, "east"), exit(3, "south")]),
+        room(2, vec![exit(1, "west"), exit(4, "south")]),
+        room(3, vec![exit(1, "north"), exit(4, "east")]),
+        room(4, vec![exit(2, "north"), exit(3, "west")]),
+    ];
+    let ids: Vec<RoomId> = rooms.iter().map(|r| r.id).collect();
+    let map = Map::from_rooms(rooms).expect("ok");
+    let dirs = DirectionMap::build(&map);
+    let placed = place_by_order(&ids, &map, &dirs).expect("satisfiable");
+
+    for &from in &ids {
+        let Some(r) = map.room(from) else { continue };
+        for e in &r.exits {
+            let Some(dir) = dirs.get(from, e.to) else {
+                continue;
+            };
+            let (ex, ey) = dir.offset();
+            let (a, b) = (placed[&from], placed[&e.to]);
+            assert_eq!(
+                (b.x - a.x).signum(),
+                ex,
+                "x sign wrong for {from:?} -> {:?}",
+                e.to
+            );
+            assert_eq!(
+                (b.y - a.y).signum(),
+                ey,
+                "y sign wrong for {from:?} -> {:?}",
+                e.to
+            );
+        }
+    }
+}
+
+/// Contradictory rooms get no arrangement rather than a wrong one.
+#[test]
+fn contradictory_rooms_place_to_nothing() {
+    let rooms = vec![
+        room(1, vec![exit(2, "east")]),
+        room(2, vec![exit(1, "east")]),
+    ];
+    let ids: Vec<RoomId> = rooms.iter().map(|r| r.id).collect();
+    let map = Map::from_rooms(rooms).expect("ok");
+    let dirs = DirectionMap::build(&map);
+    assert!(place_by_order(&ids, &map, &dirs).is_none());
+}
