@@ -55,9 +55,9 @@ pub enum AreaKind {
     /// The game's `location` verb (`source` = `mapdb location`).
     Mapdb,
     /// Areas read off the room graph, with mapdb's names as labels. See
-    /// [`cena_map_layout::regions`]. An experiment beside the other two,
-    /// not a replacement yet: no corrections are keyed to these, and
-    /// none can be made on them.
+    /// [`cena_map_layout::regions`]. Beside the other two rather than
+    /// replacing them yet; its corrections are stored under their own
+    /// key (see [`Area::store_key`]).
     Derived,
     /// Plates a person made, and moved rooms onto, to keep satellites off
     /// a town's own sheet. See [`crate::overrides`].
@@ -82,13 +82,21 @@ impl AreaKind {
             AreaKind::Plates => "Plates",
         }
     }
+}
 
-    /// Whether corrections can be made while looking at this list. A
-    /// derived area often shares a mapdb area's name with a different
-    /// set of rooms, and a correction keyed to the name would land on
-    /// the wrong grid.
-    pub const fn editable(self) -> bool {
-        !matches!(self, AreaKind::Derived)
+impl Area {
+    /// The key this area's corrections are stored under. A derived area
+    /// often shares a mapdb area's name over a different set of rooms with
+    /// different group numbers, and a correction keyed to the bare name
+    /// would land on the wrong grid, so its key is prefixed. The prefix
+    /// is not shown anywhere: the list, the header and the export say the
+    /// name.
+    #[must_use]
+    pub fn store_key(&self) -> String {
+        match self.kind {
+            AreaKind::Derived => format!("derived:{}", self.name),
+            _ => self.name.clone(),
+        }
     }
 }
 

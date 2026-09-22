@@ -55,6 +55,9 @@ impl std::fmt::Display for LoadProblem {
 /// switching areas does not require holding every area's scene at once.
 struct Shown {
     name: String,
+    /// Where this area's corrections live in the store. See
+    /// [`Area::store_key`].
+    store_key: String,
     /// Read by the inspector panel, for the diagnostics the scene does not
     /// carry: group, pack method and direction violations.
     layout: Layout,
@@ -264,7 +267,7 @@ impl MapperApp {
         let mut out = Vec::new();
         for kind in [AreaKind::Official, AreaKind::Mapdb, AreaKind::Plates] {
             for area in self.areas.list(kind) {
-                let Some(location) = self.store.location(&area.name) else {
+                let Some(location) = self.store.location(&area.store_key()) else {
                     continue;
                 };
                 if location.group_offsets.is_empty() && location.room_pins.is_empty() {
@@ -295,7 +298,7 @@ impl MapperApp {
                 let Ok(subset) = Map::from_rooms(rooms) else {
                     continue;
                 };
-                let location = self.store.location(&area.name);
+                let location = self.store.location(&area.store_key());
                 let edges = location
                     .map(|l| l.edge_overrides(&subset))
                     .unwrap_or_default();
@@ -411,7 +414,7 @@ impl MapperApp {
             let Ok(subset) = Map::from_rooms(rooms) else {
                 continue;
             };
-            let location = self.store.location(name);
+            let location = self.store.location(&area.store_key());
             let edges = location
                 .map(|l| l.edge_overrides(&subset))
                 .unwrap_or_default();
@@ -714,13 +717,8 @@ impl MapperApp {
             return;
         };
         let name = area.name.clone();
-        // A derived area takes no corrections: its name is often a mapdb
-        // area's, and those corrections describe a different set of rooms.
-        let location = area
-            .kind
-            .editable()
-            .then(|| self.store.location(&name))
-            .flatten();
+        let store_key = area.store_key();
+        let location = self.store.location(&store_key);
         // Edge corrections go IN to the solve: they change what the solver
         // does, so the rooms are placed by the corrected geometry. Moves
         // and pins come after, as a diff on its result.
@@ -757,6 +755,7 @@ impl MapperApp {
         }
         self.shown = Some(Shown {
             name,
+            store_key,
             layout,
             subset,
             scene,
@@ -849,14 +848,19 @@ impl MapperApp {
 
     /// Apply an edit, save the store, and redraw whatever it changed.
     fn commit(&mut self, edit: EditAction) {
-        let area = self.shown.as_ref().map(|shown| shown.name.clone());
+        // Corrections are keyed by the store key; plate ownership by the
+        // area's name, which is what the header and the plate list show.
+        let area = self.shown.as_ref().map(|shown| shown.store_key.clone());
         // A plate made while looking at a plate belongs to that plate's
         // own area, not to the plate: plates are sheets of an area, never
         // of each other, and a plate owning itself is a dead end with no
         // way back to the town it hangs off.
-        let owning_area = area
-            .as_deref()
-            .map(|name| self.store.owner_of(name).unwrap_or(name).to_owned());
+        let owning_area = self.shown.as_ref().map(|shown| {
+            self.store
+                .owner_of(&shown.name)
+                .unwrap_or(&shown.name)
+                .to_owned()
+        });
         let mut membership_changed = false;
         match edit {
             EditAction::NudgeGroup { anchor, delta } => {
@@ -979,7 +983,7 @@ impl MapperApp {
                 shown,
                 id,
                 whole,
-                store.location(&shown.name),
+                store.location(&shown.store_key),
                 &mut follow,
             );
             if !edit_mode {
@@ -1445,7 +1449,7 @@ fn edges_editor(
 ) -> Option<EditAction> {
     let mut edit = None;
     let here = RoomKey::of(facts.id, &shown.subset);
-    let saved = store.location(&shown.name);
+    let saved = store.location(&shown.store_key);
 
     ui.add_space(8.0);
     ui.strong("Edges");
@@ -1620,9 +1624,7 @@ impl eframe::App for MapperApp {
         // frame's panels have let go of their borrows.
         let mut jump: Option<String> = None;
         let go_to_plate = &mut jump;
-        let can_edit = self.store_path.is_some()
-            && self.store_problem.is_none()
-            && self.selected.is_none_or(|s| s.kind.editable());
+        let can_edit = self.store_path.is_some() && self.store_problem.is_none();
 
         if self.corrections_bar(ui, can_edit) {
             self.export_corrections();
