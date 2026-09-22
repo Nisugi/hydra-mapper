@@ -299,6 +299,30 @@ fn convert_loose_tags(
     reachable: &BTreeSet<u32>,
 ) {
     for conversion in curation.tags.conversions.values() {
+        // A prefix rewrite moves a whole namespace and has nothing to do
+        // with tags or with walkability.
+        if let (Some(from), Some(to)) =
+            (&conversion.from_meta_prefix, &conversion.to_meta_prefix)
+        {
+            for room in rooms {
+                for meta in &room.meta {
+                    if let Some(rest) = meta.strip_prefix(from.as_str()) {
+                        plan.changes.push(Change::DropMeta {
+                            id: room.id.0,
+                            meta: meta.clone(),
+                        });
+                        let moved = format!("{to}{rest}");
+                        if !room.meta.contains(&moved) {
+                            plan.changes.push(Change::AddMeta {
+                                id: room.id.0,
+                                meta: moved,
+                            });
+                        }
+                    }
+                }
+            }
+            continue;
+        }
         for room in rooms {
             if assigned.contains_key(&room.id.0) {
                 continue;
@@ -310,6 +334,14 @@ fn convert_loose_tags(
                 id: room.id.0,
                 tag: conversion.from_tag.clone(),
             });
+            if let Some(meta) = &conversion.to_meta
+                && !room.meta.contains(meta)
+            {
+                plan.changes.push(Change::AddMeta {
+                    id: room.id.0,
+                    meta: meta.clone(),
+                });
+            }
             if let Some(verdict) = conversion.verdict()
                 && let Some(meta) = verdict.meta()
                 && !room.meta.iter().any(|m| m == meta)

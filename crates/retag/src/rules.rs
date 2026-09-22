@@ -165,17 +165,29 @@ pub struct LocationFile {
 /// the hard cases. A room someone can stand in is live whatever a tag
 /// written years ago claims, so a conversion to `closed` or `gone` is
 /// allowed only where nothing contradicts it.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 #[allow(
     clippy::struct_excessive_bools,
     reason = "each is an independent precondition on one room, read straight               from the TOML; folding them into an enum would make the file               less legible to the person editing it, which is the point"
 )]
 pub struct TagConversion {
     /// The tag this rule consumes.
+    #[serde(default)]
     pub from_tag: String,
-    /// The status it becomes: `gone`, `closed`, or `none` to drop the tag
-    /// and write nothing, for a tag that was never a disposition.
+    /// The status it becomes: `gone`, `closed`, or `none` to write no
+    /// status, for a tag that was never a disposition.
+    #[serde(default)]
     pub to_status: String,
+    /// A meta key to write instead of a status. For a tag that belongs in
+    /// a namespace rather than being a disposition at all.
+    #[serde(default)]
+    pub to_meta: Option<String>,
+    /// Rewrite every meta with this prefix to `to_meta_prefix`, keeping
+    /// the value. `fest:anfelt` -> `event:anfelt`.
+    #[serde(default)]
+    pub from_meta_prefix: Option<String>,
+    #[serde(default)]
+    pub to_meta_prefix: Option<String>,
     #[serde(default)]
     pub only_if_unwalkable: bool,
     /// Convert even though the room is walkable.
@@ -226,7 +238,7 @@ impl TagConversion {
     /// Whether this conversion applies to `room`.
     #[must_use]
     pub fn applies(&self, room: &Room, walkable: bool) -> bool {
-        if !room.tags.contains(&self.from_tag) {
+        if self.from_tag.is_empty() || !room.tags.contains(&self.from_tag) {
             return false;
         }
         if self.only_if_unwalkable && walkable && !self.allow_walkable {

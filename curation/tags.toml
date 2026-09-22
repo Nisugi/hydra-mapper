@@ -84,3 +84,55 @@ only_if_walkable = true
 require_uid = true
 require_exits = true
 note = "Stale mapping note on rooms that are demonstrably fine."
+
+# ============================================================ namespaces
+# Two tags that are not dispositions but belong in `map:` with the rest of
+# the mapper's own hints, so a consumer reads one namespace instead of
+# checking `tags` as well.
+
+# "Do not auto-map this room." A mapper instruction, like
+# `map:ignore-blanks` and `map:ignore-selfpath` already in that namespace.
+# 135 rooms: [Whistler's Pass, Tunnel], [Temporal Rift], [Abandoned Sewer].
+[convert.no-auto-map]
+from_tag = "no-auto-map"
+to_status = "none"
+to_meta = "map:no-auto-map"
+allow_walkable = true
+
+# "Replaced by new ids." NOT a disposition -- Cairnfang Manor is rewritten
+# AND live, which is why this never became a status. It records that the
+# game renumbered these rooms, which is a fact about the map's history.
+# 140 rooms, 63 of them Icemule Trace.
+[convert.rewritten]
+from_tag = "rewritten"
+to_status = "none"
+to_meta = "map:rewritten"
+allow_walkable = true
+
+# ============================================================= festivals
+# `fest:*` (590 rooms) and `event:*` (2,126) name the same thing and
+# overlap on ZERO rooms -- two vocabularies for "which paid event owns
+# this area", split by who happened to add each one.
+#
+# `event:*` wins. It is the larger set, it already covers the three events
+# that actually run on the published schedule (Duskruin, Ebon Gate, Rumor
+# Woods), and its values are the event names rather than abbreviations.
+# The six `fest:` values fold in:
+#
+#   fest:anfelt   -> event:anfelt     (Revel of the Anfelt, 186)
+#   fest:grawood  -> event:grawood    (Grawood Farmstead, 211)
+#   fest:velathae -> event:velathae   (Village of Velathae, 113)
+#   fest:highman  -> event:highman    (Highman Games, 75, last run 2010)
+#   fest:fof      -> event:fof        (4)
+#   fest:frontier -> event:frontier   (1)
+#
+# `mapcategory:Events and Festivals` (14 rooms) is left alone with the
+# rest of the mapdb legacy. It is metadata about the old map FILES, not
+# about rooms, only one of its 14 rooms carries a `fest:` key, and the
+# other 13 are scattered across Feywrot, Ta'Vaalor and the Spitfire. It
+# names no event and so cannot fold into one.
+[convert.fest]
+from_meta_prefix = "fest:"
+to_meta_prefix = "event:"
+allow_walkable = true
+note = "590 rooms, disjoint from event:* -- nothing is overwritten."

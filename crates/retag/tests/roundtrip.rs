@@ -250,12 +250,7 @@ fn allow_walkable_waives_the_veto_but_only_when_asked() {
         from_tag: "closed".to_owned(),
         to_status: "closed".to_owned(),
         only_if_unwalkable: true,
-        allow_walkable: false,
-        only_if_walkable: false,
-        require_uid: false,
-        require_no_uid: false,
-        require_exits: false,
-        note: None,
+        ..TagConversion::default()
     };
     let waived = TagConversion {
         allow_walkable: true,
@@ -328,11 +323,8 @@ fn every_locker_key_is_well_formed() {
             let segments: Vec<&str> = meta.split(':').collect();
             let ok = matches!(
                 segments.as_slice(),
-                ["locker", "public"]
-                    | ["locker", "che"]
-                    | ["locker", "che", "house", _]
-                    | ["locker", "che", "annex", _]
-                    | ["locker", "che", "entrance", _]
+                ["locker", "public" | "che"]
+                    | ["locker", "che", "house" | "annex" | "entrance", _]
             );
             if !ok {
                 bad.push(meta.clone());
