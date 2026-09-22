@@ -160,7 +160,7 @@ fn build_inline_candidates(
         if members.len() == 1 {
             local.insert(members[0], Cell::default());
         } else {
-            merge_cluster_members(groups, members, map, &mut local, None);
+            merge_cluster_members(groups, members, map, &mut local, &[]);
         }
         let mut positions: HashMap<RoomId, Cell> = HashMap::new();
         let mut room_ids: Vec<RoomId> = Vec::new();
@@ -403,9 +403,9 @@ struct Item {
     /// The doorway's room, and the lowest group index, breaking ties so the
     /// order is stable between runs rather than following hash iteration.
     tie: (u32, usize),
-    /// For an island, the street room drawn among its buildings: which
-    /// room, and where in this item's frame.
-    anchor: Option<(RoomId, Cell)>,
+    /// The street rooms drawn among this frame's buildings: which rooms,
+    /// and where in the frame.
+    anchors: Vec<(RoomId, Cell)>,
 }
 
 /// One shelvable unit per building cluster: its merged floor plan
@@ -442,79 +442,175 @@ fn shelf_items(
         members.sort_unstable();
     }
 
-    // **Islands.** Every cluster with a street door is claimed by that
-    // door's outdoor room -- the lowest-id one, when a building has
-    // several -- and all the clusters off one street room become a
-    // single item with that room drawn at its heart. A cluster with no
-    // street door at all (reached only through other interiors, or cut
-    // off) shelves on its own as before.
-    //
-    // Whole clusters, never single groups: a back room is usually its own
-    // group behind the shopfront, and seating the shopfront while leaving
-    // the back room would sever a building the clustering already keeps
-    // together.
-    let mut islands: BTreeMap<RoomId, Vec<usize>> = BTreeMap::new();
-    let mut alone: Vec<Vec<usize>> = Vec::new();
-    for members in members_of.values() {
-        let door_room = members
-            .iter()
-            .filter_map(|m| entrances.get(m))
-            .flatten()
-            .map(|e| e.outdoor_room_id)
-            .filter(|r| outdoor_cell.contains_key(r))
-            .min_by_key(|r| r.0);
-        match door_room {
-            Some(a) => islands
-                .entry(a)
-                .or_default()
-                .extend(members.iter().copied()),
-            None => alone.push(members.clone()),
-        }
-    }
-
+    let (frames, claimed) = frames(groups, interior, clusters, &members_of, map, &outdoor_cell);
     let mut items: Vec<Item> = Vec::new();
-    for (anchor, mut members) in islands {
-        members.sort_unstable();
+    for frame in &frames {
         items.push(shelf_item(
             groups,
-            &members,
-            Some(anchor),
+            &frame.members,
+            &frame.streets,
             map,
             entrances,
             &outdoor_cell,
         ));
     }
-    for members in &alone {
-        items.push(shelf_item(
-            groups,
-            members,
-            None,
-            map,
-            entrances,
-            &outdoor_cell,
-        ));
+    for (&cluster, members) in &members_of {
+        if !claimed.contains(&cluster) {
+            items.push(shelf_item(
+                groups,
+                members,
+                &[],
+                map,
+                entrances,
+                &outdoor_cell,
+            ));
+        }
     }
     items
 }
 
+/// **Frames.** A cluster with a street door and the street room it
+/// opens onto belong together; so do that street room's other
+/// buildings, and their other street rooms, and so on. Walking the
+/// door edges outward from any cluster gives a connected component of
+/// buildings and street rooms, and each component is merged as one
+/// frame with every one of its street rooms echoed inside it.
+///
+/// Components, not islands: seeding a frame from a single street room
+/// and claiming each building for the lowest-id one left a building
+/// with five doors attached to one of them and stretched across the
+/// sheet to the other four. In Wehnimer's Landing that was 134 of 421
+/// door edges. Here the five street rooms are placed around the
+/// building instead.
+///
+/// Whole clusters, never single groups: a back room is usually its own
+/// group behind the shopfront, and seating the shopfront alone would
+/// sever a building the clustering already keeps together. A cluster
+/// with no street door at all shelves on its own as before.
+///
+/// Returns each frame's member groups and street rooms, and the set of
+/// clusters that landed in one -- the rest shelve alone.
+fn frames(
+    groups: &[Group],
+    interior: &[usize],
+    clusters: &HashMap<usize, usize>,
+    members_of: &BTreeMap<usize, Vec<usize>>,
+    map: &Map,
+    outdoor_cell: &HashMap<RoomId, Cell>,
+) -> (Vec<Frame>, HashSet<usize>) {
+    // Doors, read from the map in **both** directions. `entrances` only
+    // knows outdoor -> interior exits, and a shop whose one link to the
+    // street is its own `out` is not in it -- 110 of the 120 door edges
+    // still stretched across Wehnimer's Landing after the first frames
+    // were built were exactly those, attached to nothing.
+    let mut group_of_room: HashMap<RoomId, usize> = HashMap::new();
+    for &idx in interior {
+        for &id in &groups[idx].room_ids {
+            group_of_room.insert(id, idx);
+        }
+    }
+    let mut cluster_doors: BTreeMap<usize, Vec<RoomId>> = BTreeMap::new();
+    let mut door_clusters: BTreeMap<RoomId, Vec<usize>> = BTreeMap::new();
+    let mut note = |cluster: usize, street: RoomId| {
+        cluster_doors.entry(cluster).or_default().push(street);
+        door_clusters.entry(street).or_default().push(cluster);
+    };
+    for (&cluster, members) in members_of {
+        for &m in members {
+            for &id in &groups[m].room_ids {
+                let Some(room) = map.room(id) else {
+                    continue;
+                };
+                for exit in &room.exits {
+                    if outdoor_cell.contains_key(&exit.to) {
+                        note(cluster, exit.to);
+                    }
+                }
+            }
+        }
+    }
+    for &street in outdoor_cell.keys() {
+        let Some(room) = map.room(street) else {
+            continue;
+        };
+        for exit in &room.exits {
+            if let Some(&g) = group_of_room.get(&exit.to) {
+                note(clusters.get(&g).copied().unwrap_or(g), street);
+            }
+        }
+    }
+    for list in cluster_doors.values_mut() {
+        list.sort_unstable();
+        list.dedup();
+    }
+    for list in door_clusters.values_mut() {
+        list.sort_unstable();
+        list.dedup();
+    }
+    let mut claimed: HashSet<usize> = HashSet::new();
+    let mut frames: Vec<Frame> = Vec::new();
+    for &cluster in members_of.keys() {
+        if claimed.contains(&cluster) || !cluster_doors.contains_key(&cluster) {
+            continue;
+        }
+        // Flood the door graph from here.
+        let mut frame_clusters: Vec<usize> = Vec::new();
+        let mut frame_streets: Vec<RoomId> = Vec::new();
+        let mut seen_streets: HashSet<RoomId> = HashSet::new();
+        let mut queue: Vec<usize> = vec![cluster];
+        claimed.insert(cluster);
+        while let Some(c) = queue.pop() {
+            frame_clusters.push(c);
+            for &street in cluster_doors.get(&c).map_or(&[] as &[_], Vec::as_slice) {
+                if !seen_streets.insert(street) {
+                    continue;
+                }
+                frame_streets.push(street);
+                for &other in door_clusters
+                    .get(&street)
+                    .map_or(&[] as &[_], Vec::as_slice)
+                {
+                    if claimed.insert(other) {
+                        queue.push(other);
+                    }
+                }
+            }
+        }
+        frame_clusters.sort_unstable();
+        frame_streets.sort_unstable();
+        let mut members: Vec<usize> = frame_clusters
+            .iter()
+            .flat_map(|c| members_of[c].iter().copied())
+            .collect();
+        members.sort_unstable();
+        frames.push(Frame {
+            members,
+            streets: frame_streets,
+        });
+    }
+    (frames, claimed)
+}
+
 /// One shelf item: the members merged into a frame normalised to a
-/// (0,0) top-left, with the anchor -- if this is an island -- kept in
-/// that frame too.
+/// (0,0) top-left, with every echo -- if this is a frame with street
+/// rooms in it -- kept in that frame too.
 fn shelf_item(
     groups: &[Group],
     members: &[usize],
-    anchor: Option<RoomId>,
+    anchors: &[RoomId],
     map: &Map,
     entrances: &HashMap<usize, Vec<Entrance>>,
     outdoor_cell: &HashMap<RoomId, Cell>,
 ) -> Item {
     let mut local: HashMap<usize, Cell> = HashMap::new();
-    if anchor.is_none() && members.len() == 1 {
+    if anchors.is_empty() && members.len() == 1 {
         local.insert(members[0], Cell::default());
     } else {
-        merge_cluster_members(groups, members, map, &mut local, anchor);
+        let mut all: Vec<usize> = members.to_vec();
+        all.extend((0..anchors.len()).map(anchor_index));
+        merge_cluster_members(groups, &all, map, &mut local, anchors);
     }
-    // Normalize the frame to a (0,0) top-left, the anchor included.
+    // Normalize the frame to a (0,0) top-left, the echoes included.
     let mut min = Cell {
         x: i32::MAX,
         y: i32::MAX,
@@ -524,7 +620,7 @@ fn shelf_item(
         y: i32::MIN,
     };
     for (&idx, off) in &local {
-        if idx == ANCHOR {
+        if anchor_at(idx).is_some() {
             min.x = min.x.min(off.x);
             min.y = min.y.min(off.y);
             max.x = max.x.max(off.x);
@@ -551,20 +647,24 @@ fn shelf_item(
         })
         .collect();
     ordered.sort_unstable_by_key(|&(idx, _)| idx);
-    let anchor_local = anchor.and_then(|a| {
-        local.get(&ANCHOR).map(|off| {
-            (
-                a,
-                Cell {
-                    x: off.x - min.x,
-                    y: off.y - min.y,
-                },
-            )
+    let echoes: Vec<(RoomId, Cell)> = anchors
+        .iter()
+        .enumerate()
+        .filter_map(|(i, &room)| {
+            local.get(&anchor_index(i)).map(|off| {
+                (
+                    room,
+                    Cell {
+                        x: off.x - min.x,
+                        y: off.y - min.y,
+                    },
+                )
+            })
         })
-    });
-    // Where to shelve it: an island by its street room, a lone
+        .collect();
+    // Where to shelve it: a frame by its lowest street room, a lone
     // building by whichever door it has, if any.
-    let door_room = anchor.or_else(|| {
+    let door_room = anchors.iter().copied().min_by_key(|r| r.0).or_else(|| {
         members
             .iter()
             .filter_map(|m| entrances.get(m))
@@ -581,7 +681,7 @@ fn shelf_item(
             door_room.map_or(u32::MAX, |r| r.0),
             members.first().copied().unwrap_or(usize::MAX),
         ),
-        anchor: anchor_local,
+        anchors: echoes,
     }
 }
 
@@ -656,7 +756,7 @@ pub fn pack_interior_shelf(
             });
             groups[*idx].packing = Some(PackMethod::InteriorShelf);
         }
-        if let Some((room, local)) = item.anchor {
+        for &(room, local) in &item.anchors {
             anchors.push(Anchor {
                 room,
                 cell: Cell {
@@ -689,31 +789,57 @@ pub struct Anchor {
     pub cell: Cell,
 }
 
-/// The virtual member index of an island's anchor room. Not an index into
-/// `groups` -- every access that would be is branched on this instead --
-/// but it lets the merge treat "the street room" as one more member with
-/// one room at the origin.
-const ANCHOR: usize = usize::MAX;
+/// Virtual member indices for a frame's street-room echoes. Not indices
+/// into `groups` -- every access that would be is branched on
+/// [`anchor_at`] instead -- but they let the merge treat "the street
+/// room" as one more member, one cell in size, placed beside the door
+/// room it opens onto like anything else.
+///
+/// Echo `i` is `ANCHOR_BASE - i`, so any number of them fit in the same
+/// member list as the real groups without colliding with a real index.
+const ANCHOR_BASE: usize = usize::MAX;
+
+/// Which echo a member index stands for, if it is one.
+const fn anchor_at(idx: usize) -> Option<usize> {
+    // Real group indices are small; anything in the top half is an echo.
+    if idx > usize::MAX / 2 {
+        Some(ANCHOR_BASE - idx)
+    } else {
+        None
+    }
+}
+
+const fn anchor_index(i: usize) -> usize {
+    ANCHOR_BASE - i
+}
 
 fn passages_within(
     groups: &[Group],
     members: &[usize],
     map: &Map,
-    anchor: Option<RoomId>,
+    anchors: &[RoomId],
 ) -> HashMap<usize, Vec<Edge>> {
     let member_set: HashSet<usize> = members.iter().copied().collect();
     let mut group_of: HashMap<RoomId, usize> = HashMap::new();
     for &idx in members {
+        if anchor_at(idx).is_some() {
+            continue;
+        }
         for &id in &groups[idx].room_ids {
             group_of.insert(id, idx);
         }
     }
-    if let Some(a) = anchor {
-        group_of.insert(a, ANCHOR);
+    for (i, &a) in anchors.iter().enumerate() {
+        group_of.insert(a, anchor_index(i));
     }
     let mut edges: HashMap<usize, Vec<Edge>> = HashMap::new();
     for &idx in members {
-        for &room_id in &groups[idx].room_ids {
+        // A member's rooms: one, for an echo.
+        let rooms: Vec<RoomId> = match anchor_at(idx) {
+            Some(i) => vec![anchors[i]],
+            None => groups[idx].room_ids.clone(),
+        };
+        for room_id in rooms {
             let Some(room) = map.room(room_id) else {
                 continue;
             };
@@ -722,7 +848,7 @@ fn passages_within(
                 let Some(&other) = group_of.get(&target_id) else {
                     continue;
                 };
-                if other == idx || (other != ANCHOR && !member_set.contains(&other)) {
+                if other == idx || !member_set.contains(&other) {
                     continue;
                 }
                 edges.entry(idx).or_default().push(Edge {
@@ -734,50 +860,53 @@ fn passages_within(
             }
         }
     }
-    // The anchor's own exits, so a door the street room opens *into* the
-    // building still seats the building even when the way back is not a
-    // plain exit.
-    if let Some(a) = anchor
-        && let Some(room) = map.room(a)
-    {
-        for exit in &room.exits {
-            let Some(&idx) = group_of.get(&exit.to) else {
-                continue;
+    // Every passage is known from both ends, so a one-way door still
+    // seats whichever side is placed second.
+    let keys: Vec<usize> = edges.keys().copied().collect();
+    for idx in keys {
+        let list = edges[&idx].clone();
+        for e in list {
+            let back = Edge {
+                other_group: idx,
+                room_id: e.other_room_id,
+                other_room_id: e.room_id,
+                uid_delta: e.uid_delta,
             };
-            if idx == ANCHOR {
-                continue;
+            let mine = edges.entry(e.other_group).or_default();
+            if !mine
+                .iter()
+                .any(|m| m.other_group == idx && m.room_id == back.room_id)
+            {
+                mine.push(back);
             }
-            edges.entry(idx).or_default().push(Edge {
-                other_group: ANCHOR,
-                room_id: exit.to,
-                other_room_id: a,
-                uid_delta: uid_delta(map.room(exit.to), Some(room)),
-            });
         }
     }
     edges
 }
 
-/// Merge a cluster's members into one floor plan: each is placed beside
+/// Merge a frame's members into one floor plan: each is placed beside
 /// the room its passage connects to, shortest-uid-delta passage first.
 ///
-/// With an `anchor`, this builds an **island**: the anchor -- a street
-/// room, one cell at the origin -- is the seed, and every building's door
-/// room is proposed *on* that cell and slid to the nearest free one. That
-/// puts the buildings off one street room pressed around it, which is the
-/// point of drawing the street room on the interiors sheet at all.
+/// `members` may include echoes -- street rooms, one cell each, indexed
+/// by [`anchor_index`] -- and they are placed exactly like buildings: an
+/// echo lands beside the door room it opens onto, a building's door room
+/// lands on the echo it opens off, and whichever of the two is placed
+/// second is the one that moves. A building with five street doors gets
+/// its five echoes placed around *it*, which is what keeps every door
+/// short; seeding from a single echo and claiming the building for it
+/// left the other four doors stretched across the sheet.
 fn merge_cluster_members(
     groups: &[Group],
     members: &[usize],
     map: &Map,
     local: &mut HashMap<usize, Cell>,
-    anchor: Option<RoomId>,
+    anchors: &[RoomId],
 ) {
-    let edges = passages_within(groups, members, map, anchor);
+    let edges = passages_within(groups, members, map, anchors);
 
     let mut occupied: HashSet<Cell> = HashSet::new();
     let place = |idx: usize, off: Cell, occupied: &mut HashSet<Cell>| {
-        if idx == ANCHOR {
+        if anchor_at(idx).is_some() {
             occupied.insert(off);
             return;
         }
@@ -788,11 +917,10 @@ fn merge_cluster_members(
             });
         }
     };
-    // Where a member's room sits in the frame, the anchor being one room
-    // at its own offset.
+    // Where a member's room sits in the frame; an echo is its own offset.
     let room_at = |idx: usize, room: RoomId, local: &HashMap<usize, Cell>| -> Cell {
         let off = local[&idx];
-        if idx == ANCHOR {
+        if anchor_at(idx).is_some() {
             return off;
         }
         let p = groups[idx].positions[&room];
@@ -801,64 +929,65 @@ fn merge_cluster_members(
             y: p.y + off.y,
         }
     };
+    // A member's own room's position in its own frame; an echo's is the
+    // origin.
+    let internal_of = |idx: usize, room: RoomId| -> Cell {
+        if anchor_at(idx).is_some() {
+            Cell::default()
+        } else {
+            groups[idx].positions[&room]
+        }
+    };
     let width_of = |idx: usize| {
-        if idx == ANCHOR {
+        if anchor_at(idx).is_some() {
             1
         } else {
             groups[idx].bounds().width()
         }
     };
-
-    let seed = if anchor.is_some() {
-        ANCHOR
-    } else {
-        *members
-            .iter()
-            .max_by_key(|&&idx| (groups[idx].room_ids.len(), std::cmp::Reverse(idx)))
-            .unwrap_or_else(|| unreachable!("members is non-empty"))
+    // Where a member can go, nearest `proposed`: a building by the shared
+    // search, an echo by a one-cell ring walk.
+    let free_for = |idx: usize, proposed: Cell, occupied: &HashSet<Cell>| -> Option<Cell> {
+        if anchor_at(idx).is_some() {
+            if !occupied.contains(&proposed) {
+                return Some(proposed);
+            }
+            for r in 1..=crate::packer::SEARCH_RADIUS {
+                let mut found = None;
+                crate::packer::for_ring(proposed, r, |c| {
+                    if found.is_none() && !occupied.contains(&c) {
+                        found = Some(c);
+                    }
+                });
+                if found.is_some() {
+                    return found;
+                }
+            }
+            return None;
+        }
+        find_free_offset(&groups[idx], proposed, occupied)
     };
+
+    // Seed on the largest building, so echoes gather round it rather than
+    // it being dragged to one of them; a frame with no building at all
+    // seeds on its first echo.
+    let seed = *members
+        .iter()
+        .filter(|&&idx| anchor_at(idx).is_none())
+        .max_by_key(|&&idx| (groups[idx].room_ids.len(), std::cmp::Reverse(idx)))
+        .or_else(|| members.first())
+        .unwrap_or_else(|| unreachable!("members is non-empty"));
     local.insert(seed, Cell::default());
     place(seed, Cell::default(), &mut occupied);
 
     loop {
-        // Most placed-passages first; ties to the lowest member index.
-        let mut best: Option<(usize, Vec<Edge>)> = None;
-        for &idx in members {
-            if local.contains_key(&idx) {
-                continue;
-            }
-            let placed_edges: Vec<Edge> = edges
-                .get(&idx)
-                .map(|l| {
-                    l.iter()
-                        .filter(|e| local.contains_key(&e.other_group))
-                        .copied()
-                        .collect()
-                })
-                .unwrap_or_default();
-            if placed_edges.is_empty() {
-                continue;
-            }
-            if best
-                .as_ref()
-                .is_none_or(|(_, b)| placed_edges.len() > b.len())
-            {
-                best = Some((idx, placed_edges));
-            }
-        }
-
+        let best = next_to_place(members, local, &edges);
         let Some((idx, placed_edges)) = best else {
-            // Stragglers (shouldn't happen: clusters are connected).
+            // Stragglers (shouldn't happen: frames are connected).
             let Some(&idx) = members.iter().find(|&&m| !local.contains_key(&m)) else {
                 return;
             };
-            let max_x = occupied.iter().map(|c| c.x).max().unwrap_or(0);
-            let bounds = groups[idx].bounds();
-            let proposed = Cell {
-                x: max_x + 2 - bounds.min_x,
-                y: 0,
-            };
-            let off = find_free_offset(&groups[idx], proposed, &occupied).unwrap_or(proposed);
+            let off = straggler_offset(groups, idx, &occupied, &free_for);
             local.insert(idx, off);
             place(idx, off, &mut occupied);
             continue;
@@ -869,20 +998,86 @@ fn merge_cluster_members(
             .min_by_key(|e| e.uid_delta)
             .unwrap_or_else(|| unreachable!("placed_edges is non-empty"));
         let neighbor_room = room_at(edge.other_group, edge.other_room_id, local);
-        let internal = groups[idx].positions[&edge.room_id];
+        let internal = internal_of(idx, edge.room_id);
         // Land the passage endpoints as close together as the frame
         // allows.
         let proposed = Cell {
             x: neighbor_room.x - internal.x,
             y: neighbor_room.y - internal.y,
         };
-        let off = find_free_offset(&groups[idx], proposed, &occupied).unwrap_or(Cell {
+        let off = free_for(idx, proposed, &occupied).unwrap_or(Cell {
             x: proposed.x + width_of(edge.other_group) + 1,
             y: proposed.y,
         });
         local.insert(idx, off);
         place(idx, off, &mut occupied);
     }
+}
+
+/// One connected set of buildings and the street rooms they open onto,
+/// merged and shelved as a single unit.
+struct Frame {
+    /// Every group of every cluster in the frame.
+    members: Vec<usize>,
+    /// The street rooms echoed inside it.
+    streets: Vec<RoomId>,
+}
+
+/// Where a member can go, nearest a proposed offset, or nowhere.
+type FreeFor<'a> = dyn Fn(usize, Cell, &HashSet<Cell>) -> Option<Cell> + 'a;
+
+/// The unplaced member with the most passages to placed ones, and those
+/// passages; ties go to the lowest member index.
+fn next_to_place(
+    members: &[usize],
+    local: &HashMap<usize, Cell>,
+    edges: &HashMap<usize, Vec<Edge>>,
+) -> Option<(usize, Vec<Edge>)> {
+    let mut best: Option<(usize, Vec<Edge>)> = None;
+    for &idx in members {
+        if local.contains_key(&idx) {
+            continue;
+        }
+        let placed_edges: Vec<Edge> = edges
+            .get(&idx)
+            .map(|l| {
+                l.iter()
+                    .filter(|e| local.contains_key(&e.other_group))
+                    .copied()
+                    .collect()
+            })
+            .unwrap_or_default();
+        if placed_edges.is_empty() {
+            continue;
+        }
+        if best
+            .as_ref()
+            .is_none_or(|(_, b)| placed_edges.len() > b.len())
+        {
+            best = Some((idx, placed_edges));
+        }
+    }
+    best
+}
+
+/// Where a member no passage reaches goes: off the right-hand end.
+fn straggler_offset(
+    groups: &[Group],
+    idx: usize,
+    occupied: &HashSet<Cell>,
+    free_for: &FreeFor<'_>,
+) -> Cell {
+    let max_x = occupied.iter().map(|c| c.x).max().unwrap_or(0);
+    let min_x = if anchor_at(idx).is_some() {
+        0
+    } else {
+        groups[idx].bounds().min_x
+    };
+    let proposed = Cell {
+        x: max_x + 2 - min_x,
+        y: 0,
+    };
+    free_for(idx, proposed, occupied).unwrap_or(proposed)
 }
 
 #[cfg(test)]
@@ -1030,6 +1225,81 @@ mod tests {
                     other.room.0
                 );
             }
+        }
+    }
+
+    /// A building with doors onto several street rooms -- a guild hall
+    /// with a front on each of five streets -- gets every one of those
+    /// street rooms placed round *it*, so all five doors are short.
+    ///
+    /// Seeding a frame from one street room and claiming the building
+    /// for it left the other four doors stretched across the sheet: 134
+    /// of 421 door edges in Wehnimer's Landing, converging on buildings
+    /// like the Warehouse (six streets) and Sylvanfair (five).
+    #[test]
+    fn a_building_on_several_streets_keeps_every_door_short() {
+        const OUT: &str = "Obvious paths: east, west";
+        const IN: &str = "Obvious exits: out";
+        const STREETS: u32 = 12;
+        const HALL_STREETS: [u32; 5] = [1000, 1003, 1006, 1009, 1011];
+
+        let mut rooms = Vec::new();
+        // The hall: five rooms in a row, each with its own street door.
+        for (i, &street) in HALL_STREETS.iter().enumerate() {
+            let id = 500 + i as u32;
+            let mut exits = vec![door(street, "out")];
+            if i > 0 {
+                exits.push(exit(id - 1, "west"));
+            }
+            if i + 1 < HALL_STREETS.len() {
+                exits.push(exit(id + 1, "east"));
+            }
+            rooms.push(room(id, "[Guild Hall]", IN, exits));
+        }
+        // A street of twelve rooms, enough to be a town, with a shop on
+        // each so the shelf runs, and the hall's doors where they are.
+        for i in 0..STREETS {
+            let id = 1000 + i;
+            let mut exits = vec![door(2000 + i, "shop")];
+            if let Some(k) = HALL_STREETS.iter().position(|&s| s == id) {
+                exits.push(door(500 + k as u32, "hall"));
+            }
+            if i > 0 {
+                exits.push(exit(id - 1, "west"));
+            }
+            if i + 1 < STREETS {
+                exits.push(exit(id + 1, "east"));
+            }
+            rooms.push(room(id, "[Street]", OUT, exits));
+            rooms.push(room(2000 + i, "[Shop]", IN, vec![door(id, "out")]));
+        }
+        let map = Map::from_rooms(rooms).expect("no duplicate ids");
+        let layout = generate_layout(&map);
+        assert!(
+            !layout.interiors.is_empty(),
+            "fixture inlined; the shelf is untested"
+        );
+
+        let cell_of = |id: u32| {
+            layout
+                .groups
+                .iter()
+                .find(|g| g.room_ids.contains(&RoomId(id)))
+                .map(|g| g.final_cell(RoomId(id)))
+                .expect("room is placed")
+        };
+        let apart = |a: Cell, b: Cell| (a.x - b.x).abs().max((a.y - b.y).abs());
+        for (i, &street) in HALL_STREETS.iter().enumerate() {
+            let echo = layout
+                .anchors
+                .iter()
+                .find(|a| a.room == RoomId(street))
+                .unwrap_or_else(|| panic!("street {street} is not echoed"));
+            let d = apart(cell_of(500 + i as u32), echo.cell);
+            assert!(
+                d <= 3,
+                "the hall's door onto street {street} is {d} cells long"
+            );
         }
     }
 }

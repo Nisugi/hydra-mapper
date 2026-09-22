@@ -24,7 +24,7 @@ use crate::direction::DirectionMap;
 use crate::positioner::{Cell, Group, PackMethod};
 
 pub(crate) const GROUP_PADDING: i32 = 3; // cells between strip-placed groups
-const SEARCH_RADIUS: i32 = 30; // max spiral distance resolving collisions
+pub(crate) const SEARCH_RADIUS: i32 = 30; // max spiral distance resolving collisions
 const DEFAULT_SCALE: f64 = 30.0; // px per grid cell when estimation has no data
 const SCALE_MIN: f64 = 5.0;
 const SCALE_MAX: f64 = 300.0;
@@ -128,7 +128,7 @@ pub(crate) fn uid_delta(a: Option<&cena_map::Room>, b: Option<&cena_map::Room>) 
 
 /// Walk ring `r` around `center` in the reference order: dx from -r to r; at
 /// the vertical edges (|dx| == r) every dy, elsewhere only dy = +/-r.
-fn for_ring(center: Cell, r: i32, mut f: impl FnMut(Cell)) {
+pub(crate) fn for_ring(center: Cell, r: i32, mut f: impl FnMut(Cell)) {
     for dx in -r..=r {
         if dx.abs() == r {
             for dy in -r..=r {

@@ -506,14 +506,15 @@ fn populate_anchors(scene: &mut MapScene, layout: &Layout, map: &Map) {
                 continue;
             };
             let target = &scene.interiors.rooms[at];
-            // A building with doors onto two street rooms sits by one of
-            // them; the other echo is on its own island, possibly across
-            // the sheet, and a line that long is clutter. The same cap the
-            // other interior connectors use.
+            // Every street room a building opens onto is in its frame,
+            // so a door edge is short by construction -- max 13 cells
+            // across the real map's towns, median 1. The cap is the
+            // outdoor connector's, generous: a door this long is a frame
+            // that failed, and hiding it would hide the failure.
             let len = (anchor.cell.x - target.cell.x)
                 .abs()
                 .max((anchor.cell.y - target.cell.y).abs());
-            if len > INTERIOR_CONNECTOR_MAX_CELLS {
+            if len > CONNECTOR_MAX_CELLS {
                 continue;
             }
             let cmd = room
