@@ -59,6 +59,15 @@ pub struct Hit {
     pub drag_stopped: bool,
 }
 
+/// How the canvas behaves and what it draws, beyond the sheet itself.
+#[derive(Clone, Copy, Debug)]
+pub struct View {
+    /// Dragging moves rooms instead of panning.
+    pub edit_mode: bool,
+    /// Room titles are drawn beside the rooms.
+    pub labels: bool,
+}
+
 /// Draw one sheet into a pannable, zoomable canvas filling the panel,
 /// apply whatever drag and wheel input lands on it, and report what the
 /// pointer touched.
@@ -72,9 +81,10 @@ pub fn scene(
     sheet: Sheet,
     camera: &mut Camera,
     selected: Option<RoomId>,
-    edit_mode: bool,
+    view: View,
     ghost: Option<(usize, Option<RoomId>, Cell)>,
 ) -> Hit {
+    let View { edit_mode, labels } = view;
     let sheet = scene.sheet(sheet);
     if sheet.rooms.is_empty() {
         ui.label("This sheet has no rooms to show.");
@@ -111,8 +121,8 @@ pub fn scene(
     let painter = painter.with_clip_rect(canvas);
     draw_edges(&painter, sheet, *camera, canvas);
     draw_rooms(&painter, sheet, *camera, canvas, selected, hovered);
-    draw_echoes(&painter, sheet, *camera, canvas);
-    if camera.scale >= LABEL_MIN_SCALE {
+    draw_echoes(&painter, sheet, *camera, canvas, labels);
+    if labels && camera.scale >= LABEL_MIN_SCALE {
         draw_labels(&painter, sheet, *camera, canvas);
     }
     if let Some((group, room, delta)) = ghost {
@@ -290,7 +300,13 @@ fn draw_rooms(
 /// Street rooms echoed among their buildings, drawn as signposts: the
 /// entrance amber on a dim fill, and the street's name beside it whenever
 /// the zoom leaves room for text.
-fn draw_echoes(painter: &egui::Painter, sheet: &SheetScene, camera: Camera, canvas: Rect) {
+fn draw_echoes(
+    painter: &egui::Painter,
+    sheet: &SheetScene,
+    camera: Camera,
+    canvas: Rect,
+    labels: bool,
+) {
     let side = (ROOM_PX * camera.scale).max(2.0);
     for echo in &sheet.anchors {
         let centre = camera.to_screen(echo.cell, canvas);
@@ -312,7 +328,7 @@ fn draw_echoes(painter: &egui::Painter, sheet: &SheetScene, camera: Camera, canv
             Stroke::new((camera.scale * 2.0).max(1.0), ENTRANCE_STROKE),
             StrokeKind::Outside,
         );
-        if camera.scale >= LABEL_MIN_SCALE && !echo.title.is_empty() {
+        if labels && camera.scale >= LABEL_MIN_SCALE && !echo.title.is_empty() {
             painter.text(
                 rect.right_center() + Vec2::new(4.0, 0.0),
                 Align2::LEFT_CENTER,

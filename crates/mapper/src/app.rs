@@ -160,6 +160,9 @@ pub struct MapperApp {
     store_problem: Option<String>,
     /// Whether dragging moves rooms instead of panning the view.
     edit_mode: bool,
+    /// Whether room titles are drawn. Off, a dense interiors sheet reads
+    /// as shape instead of as overlapping text.
+    show_labels: bool,
     drag: Option<DragState>,
     /// Name being typed for a new plate.
     new_plate: String,
@@ -235,6 +238,7 @@ impl MapperApp {
             store_path,
             store_problem,
             edit_mode: false,
+            show_labels: true,
             drag: None,
             new_plate: String::new(),
             pending_inspect: None,
@@ -1619,6 +1623,7 @@ impl eframe::App for MapperApp {
                 self.tab,
                 &mut self.sheet,
                 &mut self.edit_mode,
+                &mut self.show_labels,
                 can_edit,
                 edit_out,
                 go_to_plate,
@@ -1646,7 +1651,10 @@ impl eframe::App for MapperApp {
                 self.sheet,
                 &mut self.camera,
                 self.inspected,
-                self.edit_mode,
+                draw::View {
+                    edit_mode: self.edit_mode,
+                    labels: self.show_labels,
+                },
                 ghost,
             );
             if let Some(id) = hit.clicked {
@@ -1680,6 +1688,7 @@ fn canvas_header(
     tab: AreaKind,
     sheet: &mut Sheet,
     edit_mode: &mut bool,
+    show_labels: &mut bool,
     can_edit: bool,
     edit_out: &mut Option<EditAction>,
     go_to_plate: &mut Option<String>,
@@ -1733,6 +1742,8 @@ fn canvas_header(
         if ui.button("Fit").clicked() {
             shown.needs_fit = true;
         }
+        ui.toggle_value(&mut *show_labels, "Labels")
+            .on_hover_text("Draw room titles (hover still shows them)");
         ui.separator();
         // Editing is refused outright while the store would not
         // load: the file holds hand curation, and saving over it
