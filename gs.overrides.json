@@ -1,0 +1,32 @@
+{
+  "locations": {
+    "elven-nations-cemetary-and-neartofar-forest": {
+      "group_offsets": {
+        "uid:14015201": {
+          "x": 4,
+          "y": 6
+        }
+      },
+      "room_pins": {
+        "uid:14015007": {
+          "x": 6,
+          "y": 8
+        }
+      }
+    },
+    "the town of Kharam-Dzu": {
+      "group_offsets": {
+        "uid:703301": {
+          "x": -1,
+          "y": -4
+        }
+      },
+      "room_pins": {
+        "uid:703307": {
+          "x": 11,
+          "y": 1
+        }
+      }
+    }
+  }
+}

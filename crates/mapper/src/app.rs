@@ -78,6 +78,20 @@ struct Selection {
     index: usize,
 }
 
+/// Whether a rebuild of this kind re-fits the camera.
+const fn needs_fit_for(fit: Fit) -> bool {
+    matches!(fit, Fit::Reset)
+}
+
+/// Whether rebuilding the shown area should re-fit the camera.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Fit {
+    /// Centre and zoom to the sheet: a different area is being shown.
+    Reset,
+    /// Leave the camera alone: the same area, redrawn after an edit.
+    Keep,
+}
+
 /// One completed edit, applied after the frame's panels have let go of
 /// their borrows. Every one of these saves the store.
 #[derive(Debug, Clone)]
@@ -330,7 +344,9 @@ impl MapperApp {
                 .position(|a| a.name == name)
                 .map(|index| Selection { kind, index })
         });
-        self.show_selected();
+        // Reached from an edit, so the camera stays where the person put
+        // it -- see `refresh_shown`.
+        self.refresh_shown();
     }
 
     /// Compute (or recompute) the layout and scene for the selected area.
@@ -339,6 +355,22 @@ impl MapperApp {
     /// the real map, the worst area (Wehnimer's Landing, 3,229 rooms)
     /// takes ~102ms in release, and every other one far less.
     fn show_selected(&mut self) {
+        self.rebuild_shown(Fit::Reset);
+    }
+
+    /// Redraw the shown area after an edit to it, **without moving the
+    /// camera or dropping the selected room**.
+    ///
+    /// An edit changes the layout under a view a person is already
+    /// looking at, often mid-gesture. Re-fitting there yanks the zoom and
+    /// position away from what they were aiming at, and clearing the
+    /// selection shuts the inspector, which resizes the canvas and reads
+    /// as a flash. Switching areas is the only time either is wanted.
+    fn refresh_shown(&mut self) {
+        self.rebuild_shown(Fit::Keep);
+    }
+
+    fn rebuild_shown(&mut self, fit: Fit) {
         let Ok(map) = &self.map else {
             return;
         };
@@ -389,15 +421,23 @@ impl MapperApp {
             overrides::apply(&mut layout, &subset, location);
         }
         let scene = build_scene(&name, &layout, &subset);
-        // A new area's selection does not carry over: the room is not in
-        // it, and a stale inspector panel would describe nothing visible.
-        self.inspected = None;
+        if fit == Fit::Reset {
+            // A new area's selection does not carry over: the room is not
+            // in it, and a stale inspector panel would describe nothing
+            // visible.
+            self.inspected = None;
+        } else if self.inspected.is_some_and(|id| scene.room(id).is_none()) {
+            // Editing can take the inspected room off this sheet -- a
+            // plate move does exactly that -- and an inspector describing
+            // a room that is no longer drawn is worse than none.
+            self.inspected = None;
+        }
         self.shown = Some(Shown {
             name,
             layout,
             subset,
             scene,
-            needs_fit: true,
+            needs_fit: needs_fit_for(fit),
         });
     }
 
@@ -510,7 +550,7 @@ impl MapperApp {
             // so the lists are rebuilt, not just the shown layout.
             self.rebuild_areas();
         } else {
-            self.show_selected();
+            self.refresh_shown();
         }
     }
 
@@ -1171,4 +1211,38 @@ fn load_map(path: Option<&Path>) -> Result<Map, LoadProblem> {
         path: path_str,
         error,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `needs_fit` is what re-fits the camera on the next frame, and
+    /// `rebuild_shown` sets it from its `Fit`. Only a switch may ask for
+    /// one: an edit that does is the drag bug, where the view jumps away
+    /// from whatever the person was aiming at.
+    #[test]
+    fn only_a_switch_asks_for_a_refit() {
+        assert!(needs_fit_for(Fit::Reset), "a switch should re-fit");
+        assert!(!needs_fit_for(Fit::Keep), "an edit must not re-fit");
+    }
+
+    /// A fitted camera stays put when the same sheet is rebuilt, and only
+    /// moves when a fit is actually asked for. This is the property the
+    /// drag bug violated.
+    #[test]
+    fn a_kept_camera_does_not_move() {
+        let canvas = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::Vec2::new(800.0, 600.0));
+        let mut camera = Camera::default();
+        camera.fit(Cell { x: 0, y: 0 }, Cell { x: 20, y: 20 }, canvas);
+        let (centre, scale) = (camera.center, camera.scale);
+
+        // Redrawing after an edit: nothing touches the camera.
+        assert_eq!(camera.center, centre);
+        assert!((camera.scale - scale).abs() < f32::EPSILON);
+
+        // Switching areas: the camera does move.
+        camera.fit(Cell { x: 90, y: 90 }, Cell { x: 100, y: 100 }, canvas);
+        assert_ne!(camera.center, centre, "a switch should re-centre");
+    }
 }
