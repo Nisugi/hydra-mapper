@@ -35,7 +35,7 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use cena_map::{Map, Room, RoomId};
+use cena_map::{Crossing, Map, Room, RoomId};
 
 use crate::classifier::{Sense, room_sense};
 
@@ -207,8 +207,50 @@ pub fn derive_areas(map: &Map) -> Vec<DerivedArea> {
             .cmp(&a.rooms.len())
             .then_with(|| a.name.cmp(&b.name))
     });
+    gather_the_unwalkable(&mut areas);
     name_satellites(&mut areas, map);
     areas
+}
+
+/// Rooms with no passage in or out, sharing a location, are one place:
+/// the Elemental Confluence and the Rift are reached by routines whose
+/// destinations shuffle, so their rooms are joined by nothing that counts
+/// as adjacency here, yet they are plainly one area each. Rooms with no
+/// location stay isolated -- there is nothing to gather them by.
+fn gather_the_unwalkable(areas: &mut Vec<DerivedArea>) {
+    let mut gathered: BTreeMap<String, DerivedArea> = BTreeMap::new();
+    let mut keep: Vec<DerivedArea> = Vec::new();
+    for area in areas.drain(..) {
+        if area.kind != AreaKind::Isolated {
+            keep.push(area);
+            continue;
+        }
+        let Some(name) = area.name.strip_suffix("").filter(|_| area.region.is_some()) else {
+            keep.push(area);
+            continue;
+        };
+        let name = name.to_owned();
+        gathered
+            .entry(name.clone())
+            .and_modify(|g| g.rooms.extend(area.rooms.iter().copied()))
+            .or_insert(area);
+    }
+    for (_, mut area) in gathered {
+        area.rooms.sort_unstable();
+        area.kind = if area.rooms.len() == 1 {
+            AreaKind::Isolated
+        } else {
+            AreaKind::Zone
+        };
+        keep.push(area);
+    }
+    keep.sort_by(|a, b| {
+        b.rooms
+            .len()
+            .cmp(&a.rooms.len())
+            .then_with(|| a.name.cmp(&b.name))
+    });
+    *areas = keep;
 }
 
 /// A region's largest area keeps its name; the rest -- the
@@ -261,13 +303,53 @@ fn title_inner(room: &Room) -> Option<&str> {
     (!inner.is_empty()).then_some(inner)
 }
 
+/// A room with exits into this many *other* regions is a transport hub --
+/// the wagon at Bloodriven that goes to twelve towns, a portmaster, a
+/// caravan master, an urchin hideout -- and none of its exits say two
+/// places are adjacent. The street's own exit *into* it still counts, so
+/// a hideout joins its town rather than fusing every town it reaches.
+pub const HUB_REGIONS: usize = 3;
+
 /// Adjacency in both directions: a one-way door still says the two rooms
 /// are one place.
+///
+/// **Not every exit is a passage.** Measured on gs.map, the exits that
+/// cross a region boundary: 1,866 plain commands, 719 routines (477 of
+/// them the Elemental Confluence, 165 the Rift -- travel puzzles whose
+/// destinations shuffle), 217 ported scripts, 111 urchin pass-throughs.
+/// Routines and pass-throughs never count; an unported or unknown
+/// crossing is impassable and never counts; and a hub's exits never count
+/// (see [`HUB_REGIONS`]).
 fn adjacency(rooms: &[Room]) -> Vec<Vec<usize>> {
     let index: HashMap<RoomId, usize> = rooms.iter().enumerate().map(|(i, r)| (r.id, i)).collect();
+    let region: Vec<Option<&str>> = rooms
+        .iter()
+        .map(|r| r.location.as_deref().map(region_of))
+        .collect();
+    let passage =
+        |exit: &cena_map::Exit| matches!(exit.crossing, Crossing::Command(_) | Crossing::Steps(_));
+    let is_hub: Vec<bool> = rooms
+        .iter()
+        .enumerate()
+        .map(|(i, room)| {
+            let mut others: HashSet<&str> = HashSet::new();
+            for exit in room.exits.iter().filter(|e| passage(e)) {
+                if let Some(&j) = index.get(&exit.to)
+                    && let Some(there) = region[j]
+                    && region[i] != Some(there)
+                {
+                    others.insert(there);
+                }
+            }
+            others.len() >= HUB_REGIONS
+        })
+        .collect();
     let mut adj: Vec<Vec<usize>> = vec![Vec::new(); rooms.len()];
     for (i, room) in rooms.iter().enumerate() {
-        for exit in &room.exits {
+        if is_hub[i] {
+            continue;
+        }
+        for exit in room.exits.iter().filter(|e| passage(e)) {
             if let Some(&j) = index.get(&exit.to)
                 && j != i
             {
@@ -584,6 +666,61 @@ mod tests {
             rooms.push(room(id, "[Catacombs]", Some("the catacombs"), IN, &to));
         }
         Map::from_rooms(rooms).expect("no duplicate ids")
+    }
+
+    /// The Landing's urchin hideout has an exit to a hideout in each of
+    /// three other towns; each town's street has an exit into its own
+    /// hideout. Those hops are not passages: the hideout is a room of the
+    /// Landing, and the towns stay apart.
+    #[test]
+    fn a_hideout_joins_its_town_and_fuses_nothing() {
+        let mut rooms = Vec::new();
+        for (t, town) in ["Wehn", "Sol", "Ice", "Riv"].iter().enumerate() {
+            let base = 100 * (t as u32 + 1);
+            let loc = format!("the town of {town}");
+            for i in 0..TINY_ROOMS as u32 {
+                let id = base + i;
+                let mut to = vec![];
+                if i > 0 {
+                    to.push(id - 1);
+                }
+                if i + 1 < TINY_ROOMS as u32 {
+                    to.push(id + 1);
+                }
+                if i == 0 {
+                    to.push(base + 50);
+                }
+                rooms.push(room(id, &format!("[{town}, Street]"), Some(&loc), OUT, &to));
+            }
+            // The hideout: back to its street, and on to the others'.
+            let mut to: Vec<u32> = vec![base];
+            to.extend((1..=4u32).map(|o| o * 100 + 50).filter(|&h| h != base + 50));
+            rooms.push(room(
+                base + 50,
+                &format!("[{town} - Urchin Hideout]"),
+                Some(town),
+                IN,
+                &to,
+            ));
+        }
+        let map = Map::from_rooms(rooms).expect("no duplicate ids");
+        let areas = derive_areas(&map);
+        let towns: Vec<&DerivedArea> = [100, 200, 300, 400]
+            .iter()
+            .map(|&id| area_of(&areas, id))
+            .collect();
+        for pair in towns.windows(2) {
+            assert!(
+                pair[0].rooms != pair[1].rooms,
+                "two towns fused: {:?}",
+                pair[0].name
+            );
+        }
+        assert_eq!(
+            area_of(&areas, 150).rooms,
+            area_of(&areas, 100).rooms,
+            "the hideout left its town"
+        );
     }
 
     #[test]
