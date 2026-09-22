@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use cena_map::Map;
 
 use crate::classifier::Classification;
+use crate::interior_shelf::Anchor;
 use crate::overrides::EdgeOverride;
 use crate::packer::PackInfo;
 use crate::positioner::Group;
@@ -29,6 +30,11 @@ pub struct Layout {
     /// can label them.
     #[serde(default)]
     pub inlined: Vec<usize>,
+    /// Street rooms echoed onto the interiors sheet, one at the heart of
+    /// each island of buildings that open off it. See
+    /// [`crate::interior_shelf::Anchor`].
+    #[serde(default)]
+    pub anchors: Vec<Anchor>,
     pub classification: Classification,
     pub pack_info: PackInfo,
 }
@@ -117,7 +123,16 @@ fn generate_layout_impl(map: &Map, inline_interiors: bool, edges: &[EdgeOverride
         }
     }
 
-    interior_shelf::pack_interior_shelf(&mut groups, &interiors, &clusters, map);
+    // After the outdoor pass, which is what gives the doorway rooms the
+    // cells the shelf is ordered by.
+    let anchors = interior_shelf::pack_interior_shelf(
+        &mut groups,
+        &interiors,
+        &clusters,
+        map,
+        &classification.entrances,
+        &outdoor,
+    );
 
     // Building names for interior groups (assigned after shelf packing so
     // the shelf order matches the reference, which sorts unnamed groups).
@@ -131,6 +146,7 @@ fn generate_layout_impl(map: &Map, inline_interiors: bool, edges: &[EdgeOverride
         outdoor,
         interiors,
         inlined,
+        anchors,
         classification,
         pack_info,
     }

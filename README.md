@@ -46,6 +46,28 @@ where no artist ever drew one.
   indoor/outdoor classification → cluster packing onto a shared outdoor
   sheet, plus a shelf for whatever interior doesn't seat cleanly beside
   its own doorway.
+
+  Two places it now diverges from the port, both because the new mapdb
+  format carries what the old one flattened away:
+
+  **A ported script that only moves names its direction.** Upstream
+  string procs were opaque, so every scripted exit was directionless by
+  necessity. The steps now carry their movement as text, and 943 edges
+  turn out to name an ordinary bearing. The commonest shape is one
+  movement branched on opposite conditions — `west` or `swim west`,
+  whichever the tide allows — so a script resolves when *every* movement
+  it contains agrees, reading each command's last word. Movements that
+  disagree are a walk through several rooms (10 edges), and anything with
+  no bearing at all still resolves to nothing.
+
+  **The interiors shelf follows the town.** It packed buildings in rows
+  ordered by group index, which put two shops whose doors open off the
+  *same* street room a median of 42 cells apart in Wehnimer's Landing —
+  reliably in different rows, for no reason but their ids. Ordering by
+  where each doorway sits on the outdoor sheet brings that to 8
+  (Solhaven 49 → 11, Mist Harbor 27 → 5), for about 10% more shelf area.
+  The indoor/outdoor split is unchanged: towns still shelve their
+  interiors, which is what keeps the streets uncluttered.
 - **`cena-mapper`** — the standalone window (`egui`/`eframe`, the same
   fork Cena's future GUI is expected to use). Loads a `.map` file
   (`CENA_MAP` env var, or a path as the first argument) and draws the
@@ -75,6 +97,15 @@ where no artist ever drew one.
   `Journeys_End.jpg`) and not area names at all. It is a frozen snapshot;
   refreshing it is a file copy.
 
+  **An area filter never strands a room from its building.** 361 rooms
+  used to lay out alone with no connection inside their own area at all,
+  because the boundary cut them from the room their door opens onto —
+  `[Haegan's Weaponry]` has `location` "Cysaegir" while its street is
+  "the village of Cysaegir". An area is laid out from its own rooms plus
+  whatever a stranded room needs to stay attached, which takes that to
+  zero. Layout only: the room still belongs to its own area, so the
+  lists, the counts and the export are unchanged.
+
   **The canvas is a camera**, not a scroll pane: drag to pan, wheel to
   zoom about the pointer, and a newly picked area starts centred and
   fitted rather than in the top-left corner. **Outdoor** and **Interiors**
@@ -88,19 +119,50 @@ where no artist ever drew one.
   - the **room record** — title (and its day/night and seasonal variants),
     id, uids, location, terrain, climate, tags, description, paths;
   - its **exits** — where each goes, the command, and *how* it is crossed.
-    7,400 of the map's 84,867 exits are scripted rather than plain
-    commands, and unported ones are impassable; the canvas draws them all
-    identically, so the panel says which is which;
+    7,923 of the map's 84,867 exits arrive as something other than a plain
+    command: 2,915 as ported scripts, 4,485 as named routines, and 523 as
+    pass-throughs, the A→hub→B urchin hops that are not passages at all.
+    The canvas draws them identically, so the panel says which is which;
   - the **layout** — the room's cell, its group and building name, how
     that group was packed, and **any direction violations naming it**:
     what the exit claimed against where the room actually landed.
 
   That last part is the reason the panel reads the layout at all. There
-  are 955 violations across the real map, in 108 of 356 areas, and nothing
-  showed them before — a layout that had gone wrong looked exactly like
-  one that had not. They are genuine data conflicts, not layout bugs: two
-  rooms in Old Ta'Faendryl are joined by exits claiming *both* east and
-  west, which no 2D placement can satisfy.
+  are 667 violations across the real map, and nothing showed them before —
+  a layout that had gone wrong looked exactly like one that had not.
+
+  **More than half are the solver's fault, not the data's.** An earlier
+  version of this README claimed they were all data conflicts, and it was
+  wrong.
+
+  `cena_map_layout::satisfiable` answers the question properly. Every
+  compass direction is a pair of strict inequalities — *b northeast of a*
+  is `x_a < x_b` and `y_b < y_a` — the two axes are independent, and such
+  a set is satisfiable exactly when its constraint graph holds no cycle.
+  Nothing there cares how far, so a stretched edge satisfies what a unit
+  one does. Two cycle detections, O(V+E), no search.
+
+  Against the real map: of 667 violations, **358 sit in components whose
+  directions are entirely satisfiable** — an arrangement exists and the
+  solver did not find it — and **309** are in the 25 groups that close a
+  genuine contradictory loop, like the two Old Ta'Faendryl rooms joined
+  by exits claiming *both* east and west.
+
+  That is reproducible in four rooms. Given exits
+  `0: 1 ne, 2 ne, 3 n / 1: 0 sw, 2 se / 2: 0 sw, 1 nw / 3: 0 s`, the
+  arrangement `0=(0,2) 1=(1,0) 2=(2,1) 3=(0,0)` satisfies all eight, and
+  the engine instead reports two violations. Searching every satisfiable
+  arrangement on a 3×3 grid, the failure rate rises with density: 3% at
+  four rooms, 8% at five, 14% at six. It needs **stretched diagonals** —
+  a search that only connects adjacent cells never produces the case,
+  which is why it went unnoticed here for so long. Found by ATARI, who
+  supplied the fixture.
+
+  So a violation currently means "something is wrong here", not "the data
+  contradicts itself". Telling those apart is open work: the lead is to
+  establish whether the directional constraints are satisfiable at all
+  before compacting, which would separate *ask a human* from *the solver
+  got stuck*.
 
   **Editing.** The `Edit` toggle turns dragging from panning into moving:
   drag a group to shift it, hold Alt to move one room. A ghost outline
@@ -117,7 +179,9 @@ where no artist ever drew one.
   geometry rather than nudged afterwards, and packing, classification and
   violation counts all follow from it.
 
-  This is what answers a direction violation. In
+  This is what answers a violation of the **contradictory** kind — the
+  309 above, not the 358 the solver is responsible for, which no
+  correction should have to paper over. In
   `elven-nations-old-tafaendryl-west`, rooms 11988 and 11989 are joined by
   exits claiming *both* east and west; one correction takes that area from
   36 violations to 34, with overlaps still at zero. Vellum's other three
@@ -196,16 +260,31 @@ cargo run --release -p cena-mapper -- path\to\hydra.map
 
 ## Status
 
-Verified against a hand-built fixture town (20 tests: BFS placement,
-indoor/outdoor classification, cluster packing, image-anchor seating, the
-scene the window draws, and the camera's transform and fit).
+92 tests, most against hand-built fixtures: BFS placement, indoor/outdoor
+classification, cluster packing, image-anchor seating, shelf ordering, the
+scene the window draws, the camera's transform and fit, direction
+resolution, the override store's round trip and the correction format.
 
 **Layout cost is measured**, against the real 36,838-room map: the worst
 case, Wehnimer's Landing at 3,229 rooms, lays out and builds its scene in
 ~102ms (release). Recomputing on every selection change is therefore
 fine, which the code previously only assumed.
 
-Still open: reproducing VellumFE's own statistical *quality* targets
-(zone-by-zone violation counts, connector lengths) against the real map.
-Timing says the pipeline is fast enough; it does not say the layouts it
-produces are good.
+**Layout quality is not.** Timing says the pipeline is fast enough; it
+does not say the layouts are good, and on the evidence above they are
+not as good as the violation count was taken to mean. The open work, in
+the order it matters:
+
+- **The placement and repair passes fail on satisfiable input** — 358 of
+  the 667 violations, reproducible in four rooms. Both repair passes are
+  local: the hill climb moves one room among its neighbours, and the
+  reweld cascades outward but refuses to move the anchor, so neither can
+  make the coordinated shift a fix sometimes needs. Placing by
+  topological order, which the satisfiability check already computes,
+  would satisfy every constraint by construction.
+- Reproducing VellumFE's own statistical quality targets (zone-by-zone
+  violation counts, connector lengths) against the real map.
+- **35% of edges still resolve no direction at all** — 29,798 of 84,867,
+  overwhelmingly `go <door>` (15,928) and `out` (5,171). That is the
+  structural limit on how much of the map can be placed by geometry
+  rather than packed, and no amount of solver work moves it.
