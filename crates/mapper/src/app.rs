@@ -262,7 +262,17 @@ impl MapperApp {
         // grid slug: the two sheets are packed independently and merging
         // them puts 632 rooms of the real map on another room's cell.
         let interiors = self.interiors_by_area(map);
-        let (export, skipped) = export::build(&self.store, map, source, &interiors);
+        // Which area each room belongs to, so a plated room's place
+        // travels alongside the grid it is drawn on.
+        let area_of = |id: RoomId| -> Option<String> {
+            for kind in [AreaKind::Official, AreaKind::Mapdb] {
+                if let Some(area) = self.areas.list(kind).iter().find(|a| a.rooms.contains(&id)) {
+                    return Some(area.name.clone());
+                }
+            }
+            None
+        };
+        let (export, skipped) = export::build(&self.store, map, source, &interiors, &area_of);
         if export.is_empty() {
             self.export_note = Some("Nothing to export yet.".to_owned());
             return;
@@ -340,11 +350,21 @@ impl MapperApp {
             self.shown = None;
             return;
         };
+        // A room on a plate is drawn there, not here -- that is what a
+        // plate is for. It stays in this area's *list*, because it is
+        // still a room of this place; it just lays out elsewhere.
         let rooms: Vec<cena_map::Room> = area
             .rooms
             .iter()
+            .filter(|&&id| {
+                area.kind == AreaKind::Plates || !self.store.is_plated(RoomKey::of(id, map))
+            })
             .filter_map(|&id| map.room(id).cloned())
             .collect();
+        if rooms.is_empty() {
+            self.shown = None;
+            return;
+        }
         let Ok(subset) = Map::from_rooms(rooms) else {
             // Two rooms sharing an id within one area cannot happen -- the
             // whole map already rejected duplicate ids on load -- but a
@@ -579,7 +599,27 @@ impl MapperApp {
                     index,
                 };
                 let selected = self.selected == Some(selection);
-                let label = format!("{}  ({})", area.name, area.rooms.len());
+                // An area's count includes rooms drawn on a plate, which
+                // is the point -- they are still rooms of this place --
+                // so the ones that lay out elsewhere are called out
+                // rather than leaving the count looking wrong.
+                let plated = if self.tab == AreaKind::Plates {
+                    0
+                } else {
+                    area.rooms
+                        .iter()
+                        .filter(|&&id| {
+                            self.map
+                                .as_ref()
+                                .is_ok_and(|m| self.store.is_plated(RoomKey::of(id, m)))
+                        })
+                        .count()
+                };
+                let label = if plated > 0 {
+                    format!("{}  ({}, {plated} on plates)", area.name, area.rooms.len())
+                } else {
+                    format!("{}  ({})", area.name, area.rooms.len())
+                };
                 if ui.selectable_label(selected, label).clicked() {
                     self.selected = Some(selection);
                     changed = true;

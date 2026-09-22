@@ -127,11 +127,39 @@ where no artist ever drew one.
 
   **Plates** are the answer to a crowded town. Wehnimer's Town Square
   Central has a well and a treehouse hanging off it; moving those onto
-  `landing.well` and `landing.treehouse` takes them out of the town's own
-  list, so they stop competing for space on its sheet while staying
-  reachable as plates of their own. The inspector's Plate section moves
-  the selected room, or its whole group, onto a new or existing plate; a
-  third picker tab lists them.
+  `landing.well` and `landing.treehouse` stops them competing for space on
+  the town's sheet. The inspector's Plate section moves the selected room,
+  or its whole group, onto a new or existing plate; a third picker tab
+  lists them.
+
+  **A plate is a grid, not a place.** A plated room is *drawn* elsewhere
+  but still *belongs* to its area: the Town Well sits on `landing.well`
+  and remains a room of Wehnimer's Landing, so it appears in both lists
+  and the town's count is unchanged. `plan/21` §3f keeps the same pair
+  apart, as `location` (the area) and `map` (the grid), and collapsing
+  them would lose the area for travel and everything else that groups by
+  it. An area's list marks how many of its rooms lay out on plates.
+
+  **Export for the combiner** writes `<map>.corrections.json`: the
+  corrections in terms another program can merge. Hydra and Vellum run the
+  layout engine themselves, so what travels is not positions but the
+  corrected *inputs* a layout is derived from.
+
+  Edge corrections export as **`dirto`**, a field the mapdb room record
+  already has and the layout engine already reads before the movement
+  command — a bearing for a forced direction, and upstream's own
+  `cross-group` for a passage. Entries are written on both rooms, the far
+  one carrying the opposite bearing. Plates export as `map_membership`
+  (the grid) plus `area` (the place). Each area's interiors shelf exports
+  as its own `<area>.interiors` slug, because the two sheets are packed as
+  independent grids and merging them puts 632 rooms of the real map on
+  another room's cell.
+
+  Everything in the export is keyed by **uid**: the combiner merges into a
+  map whose room ids it assigns itself, so a room with no uid cannot be
+  named in a way that survives that. Those corrections are reported as
+  skipped rather than written under an id that would mean a different room
+  next build.
 
   Corrections save to `<map>.overrides.json` beside the map file, written
   atomically on every edit, and are a diff applied *after* generation — so

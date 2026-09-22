@@ -73,20 +73,13 @@ impl AreaKind {
 /// One browsable area: a name and the rooms that make it up.
 pub struct Area {
     pub name: String,
+    /// Which kind of list this came from, so a caller can tell a plate
+    /// (a grid) from an area (a place).
+    pub kind: AreaKind,
     /// Members, in map order. Official areas carry them from `areas.tsv`;
     /// mapdb areas collect every room sharing a `location`; plates collect
     /// whatever was moved onto them.
     pub rooms: Vec<RoomId>,
-}
-
-impl Area {
-    /// This area without the rooms in `taken`, or `None` when that leaves
-    /// nothing -- an area emptied onto plates stops being listed rather
-    /// than offering a name that draws a blank sheet.
-    fn without(mut self, taken: &HashSet<RoomId>) -> Option<Area> {
-        self.rooms.retain(|id| !taken.contains(id));
-        (!self.rooms.is_empty()).then_some(self)
-    }
 }
 
 /// All three lists, each sorted by name, rebuilt whenever a room is moved
@@ -98,16 +91,18 @@ pub struct Areas {
 }
 
 impl Areas {
-    /// Build the lists for `map`, honouring the plates and membership
-    /// moves in `store`.
+    /// Build the lists for `map`, plus the plates in `store`.
     ///
-    /// **A moved room leaves its old area.** Membership moves are applied
-    /// first and win over everything: that is the whole point of moving a
-    /// room onto its own plate -- the Town Well stops crowding the
-    /// Landing's sheet because it is no longer *in* the Landing's list.
+    /// **A plate is a grid, not an area.** Moving a room onto one changes
+    /// where it is *laid out*, not where it *is*: the Town Well sits on
+    /// `landing.well` and remains a room of Wehnimer's Landing, so it
+    /// appears in both lists. `plan/21` §3f keeps the same two facts
+    /// apart, as `location` (the area) and `map` (the grid), and
+    /// collapsing them would lose the area for anything that groups by
+    /// it.
     ///
-    /// After that, **official layout is truth, and the lists do not
-    /// overlap.** A room an official area claims is not listed a second
+    /// The Official and Mapdb lists still do not overlap each other:
+    /// **official layout is truth.** A room an official area claims is not listed a second
     /// time under its mapdb location: the official layout is the curated
     /// split, whereas mapdb `location` frequently cuts a building into
     /// areas of one or two rooms. So the official list is taken first and
@@ -120,22 +115,15 @@ impl Areas {
     /// draws as a hole.
     #[must_use]
     pub fn build(map: &Map, store: &MapOverrides) -> Areas {
-        let plates = plate_areas(map, store);
-        let mut claimed: HashSet<RoomId> = plates
+        let official = official_areas(map);
+        let claimed: HashSet<RoomId> = official
             .iter()
             .flat_map(|a| a.rooms.iter().copied())
             .collect();
-
-        let official: Vec<Area> = official_areas(map)
-            .into_iter()
-            .filter_map(|area| area.without(&claimed))
-            .collect();
-        claimed.extend(official.iter().flat_map(|a| a.rooms.iter().copied()));
-
         Areas {
             official,
             mapdb: mapdb_areas(map, &claimed),
-            plates,
+            plates: plate_areas(map, store),
         }
     }
 
@@ -174,6 +162,7 @@ fn plate_areas(map: &Map, store: &MapOverrides) -> Vec<Area> {
                 .get(plate)
                 .cloned()
                 .unwrap_or_else(|| plate.to_owned()),
+            kind: AreaKind::Plates,
             rooms,
         })
         .collect()
@@ -219,6 +208,7 @@ fn official_areas(map: &Map) -> Vec<Area> {
         }
         areas.push(Area {
             name: (*name).to_owned(),
+            kind: AreaKind::Official,
             rooms,
         });
     }
@@ -254,6 +244,7 @@ fn mapdb_areas(map: &Map, claimed: &HashSet<RoomId>) -> Vec<Area> {
             } else {
                 name.to_owned()
             },
+            kind: AreaKind::Mapdb,
             rooms,
         })
         .collect()

@@ -336,6 +336,12 @@ impl MapOverrides {
         key
     }
 
+    /// Whether this room is drawn on a plate rather than with its area.
+    #[must_use]
+    pub fn is_plated(&self, key: RoomKey) -> bool {
+        self.membership_moves.contains_key(&key)
+    }
+
     /// Move a room to a plate, or (with `None`) return it to whichever
     /// area would hold it naturally.
     pub fn move_room(&mut self, key: RoomKey, to: Option<&str>) {

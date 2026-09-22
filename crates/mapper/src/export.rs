@@ -76,6 +76,16 @@ pub struct Export {
     /// Map slug -> display name, for the plates the membership names.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub maps: BTreeMap<String, String>,
+    /// Room uid -> the area it belongs to, for every room the export
+    /// puts on a plate.
+    ///
+    /// A plate is a **grid**, not a place: the Town Well is drawn on
+    /// `landing.well` and is still a room of Wehnimer's Landing. Without
+    /// this, a consumer reading only `map_membership` would lose the area
+    /// -- which is the one fact travel and every area-grouping need.
+    /// `plan/21` §3f keeps the same pair apart, as `location` and `map`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub area: BTreeMap<i64, String>,
 }
 
 /// A correction that could not be exported, and why -- reported rather
@@ -99,6 +109,7 @@ pub fn build(
     map: &Map,
     source_map: Option<String>,
     interiors: &[(String, Vec<RoomId>)],
+    area_of: &dyn Fn(RoomId) -> Option<String>,
 ) -> (Export, Vec<Skipped>) {
     let mut export = Export {
         generator: concat!("hydra-mapper ", env!("CARGO_PKG_VERSION")).to_owned(),
@@ -132,6 +143,13 @@ pub fn build(
         match uid_of(*key, map) {
             Some(uid) => {
                 export.map_membership.insert(uid, plate.clone());
+                // The area the room still belongs to, recorded because
+                // the plate replaced its grid, not its place.
+                if let Some(id) = room_id_of(*key, map)
+                    && let Some(area) = area_of(id)
+                {
+                    export.area.insert(uid, area);
+                }
             }
             None => skipped.push(Skipped {
                 what: format!("plate move of {key} to {plate}"),
@@ -191,6 +209,18 @@ fn uid_of(key: RoomKey, map: &Map) -> Option<i64> {
             .room(RoomId(id))
             .and_then(|r| r.uid.first())
             .map(|u| u.0),
+    }
+}
+
+/// The room a key names in this map.
+fn room_id_of(key: RoomKey, map: &Map) -> Option<RoomId> {
+    match key {
+        RoomKey::Uid(uid) => map
+            .rooms()
+            .iter()
+            .find(|r| r.uid.iter().any(|u| u.0 == uid))
+            .map(|r| r.id),
+        RoomKey::Id(id) => map.room(RoomId(id)).map(|r| r.id),
     }
 }
 
@@ -291,7 +321,7 @@ mod tests {
             Some(EdgeAction::Direction(Dir::East)),
         );
 
-        let (export, skipped) = build(&store, &map, None, &[]);
+        let (export, skipped) = build(&store, &map, None, &[], &|_| None);
         assert!(skipped.is_empty());
         assert_eq!(export.dirto[&7_000_001][&7_000_002], "east");
         assert_eq!(
@@ -314,7 +344,7 @@ mod tests {
             Some(EdgeAction::Connector),
         );
 
-        let (export, _) = build(&store, &map, None, &[]);
+        let (export, _) = build(&store, &map, None, &[], &|_| None);
         assert_eq!(export.dirto[&7_000_001][&7_000_002], "cross-group");
         assert_eq!(export.dirto[&7_000_002][&7_000_001], "cross-group");
     }
@@ -333,7 +363,7 @@ mod tests {
             Some(EdgeAction::Connector),
         );
 
-        let (export, skipped) = build(&store, &map, None, &[]);
+        let (export, skipped) = build(&store, &map, None, &[], &|_| None);
         assert!(export.dirto.is_empty(), "exported an unusable key");
         assert_eq!(skipped.len(), 1);
         assert_eq!(skipped[0].why, NO_UID);
@@ -348,7 +378,7 @@ mod tests {
         store.move_room(RoomKey::Uid(7120), Some(&key));
         store.create_map("landing.empty");
 
-        let (export, _) = build(&store, &map, None, &[]);
+        let (export, _) = build(&store, &map, None, &[], &|_| None);
         assert_eq!(export.map_membership[&7120], "landing.well");
         assert_eq!(export.maps.len(), 1, "an empty plate travelled anyway");
         assert!(export.maps.contains_key("landing.well"));
@@ -368,11 +398,30 @@ mod tests {
     fn shelved_rooms_export_onto_their_own_slug() {
         let map = Map::from_rooms(vec![room(1, Some(7120)), room(2, Some(7121))]).expect("rooms");
         let interiors = vec![("town".to_owned(), vec![RoomId(2)])];
-        let (export, _) = build(&MapOverrides::default(), &map, None, &interiors);
+        let (export, _) = build(&MapOverrides::default(), &map, None, &interiors, &|_| None);
         assert_eq!(export.map_membership[&7121], "town.interiors");
         assert!(
             !export.map_membership.contains_key(&7120),
             "an outdoor room was given an interiors slug"
+        );
+    }
+
+    /// A plate is a grid, not a place: the room's area travels with it,
+    /// so nothing downstream loses where the room actually is.
+    #[test]
+    fn a_plated_room_keeps_its_area() {
+        let map = Map::from_rooms(vec![room(1, Some(7122))]).expect("one room");
+        let mut store = MapOverrides::default();
+        let key = store.create_map("landing.well");
+        store.move_room(RoomKey::Uid(7122), Some(&key));
+
+        let (export, _) = build(&store, &map, None, &[], &|_| {
+            Some("the town of Wehnimer's Landing".to_owned())
+        });
+        assert_eq!(export.map_membership[&7122], "landing.well");
+        assert_eq!(
+            export.area[&7122], "the town of Wehnimer's Landing",
+            "the room's area did not travel with its plate"
         );
     }
 
@@ -386,7 +435,7 @@ mod tests {
         store.move_room(RoomKey::Uid(7120), Some(&key));
         let interiors = vec![("town".to_owned(), vec![RoomId(1)])];
 
-        let (export, _) = build(&store, &map, None, &interiors);
+        let (export, _) = build(&store, &map, None, &interiors, &|_| None);
         assert_eq!(export.map_membership[&7120], "landing.well");
     }
 }
