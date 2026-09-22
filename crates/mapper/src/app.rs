@@ -161,6 +161,11 @@ pub struct MapperApp {
     /// A room to inspect once its area is on screen, from a room-number
     /// search. Applied after `show_selected`, which clears the selection.
     pending_inspect: Option<RoomId>,
+    /// The rooms walked through to reach the inspected one, most recent
+    /// last. Following an exit out of an area can go several rooms deep
+    /// into a building, and without this the only way back is finding the
+    /// room again on the canvas.
+    trail: Vec<RoomId>,
     /// What the last export did, shown until the next one.
     export_note: Option<String>,
 }
@@ -220,6 +225,7 @@ impl MapperApp {
             drag: None,
             new_plate: String::new(),
             pending_inspect: None,
+            trail: Vec::new(),
             export_note: None,
         }
     }
@@ -294,6 +300,19 @@ impl MapperApp {
         });
         }
         export_now
+    }
+
+    /// Walk to a room reached by following an exit, remembering where it
+    /// was reached from.
+    ///
+    /// Following an exit back to a room already on the trail unwinds to
+    /// it rather than stacking a second copy: rooms link both ways, so
+    /// walking a corridor and back would otherwise grow the trail without
+    /// bound and make the back button retrace a path rather than leave
+    /// it.
+    fn walk_to(&mut self, next: RoomId) {
+        walk(&mut self.trail, self.inspected, next);
+        self.inspected = Some(next);
     }
 
     /// Show a plate, from its key -- what the header's dropdown does.
@@ -484,13 +503,21 @@ impl MapperApp {
         if fit == Fit::Reset {
             // A new area's selection does not carry over: the room is not
             // in it, and a stale inspector panel would describe nothing
-            // visible.
+            // visible. The trail goes with it -- walking back into the
+            // area just left would be worse than no button.
             self.inspected = None;
-        } else if self.inspected.is_some_and(|id| scene.room(id).is_none()) {
-            // Editing can take the inspected room off this sheet -- a
-            // plate move does exactly that -- and an inspector describing
-            // a room that is no longer drawn is worse than none.
-            self.inspected = None;
+            self.trail.clear();
+        } else if self
+            .inspected
+            .is_some_and(|id| scene.room(id).is_none() && subset.room(id).is_none())
+        {
+            // Editing can take the inspected room off this area
+            // entirely -- a plate move does exactly that -- and an
+            // inspector describing a room that is neither drawn nor held
+            // here is worse than none. A room still in the area but off
+            // the shown sheet keeps its panel: it is a visit, which is
+            // the case the trail exists for.
+            self.inspected = self.trail.pop();
         }
         self.shown = Some(Shown {
             name,
@@ -630,6 +657,17 @@ impl MapperApp {
         let whole = self.map.as_ref().ok();
         let visiting = shown.subset.room(id).is_none();
         let mut follow = None;
+        let mut back = false;
+        // What the back button returns to, named rather than numbered:
+        // "back to [Town Square Central]" says where it goes.
+        let previous = self.trail.last().and_then(|&id| {
+            self.map
+                .as_ref()
+                .ok()
+                .and_then(|m| m.room(id))
+                .and_then(|r| r.title.first().cloned())
+                .or_else(|| Some(format!("room {}", id.0)))
+        });
 
         egui::Panel::right("inspector").show(ui, |ui| {
             ui.horizontal(|ui| {
@@ -639,6 +677,14 @@ impl MapperApp {
                     .clicked()
                 {
                     open = false;
+                }
+                if let Some(previous) = &previous
+                    && ui
+                        .button("\u{2190}")
+                        .on_hover_text(format!("Back to {previous}"))
+                        .clicked()
+                {
+                    back = true;
                 }
                 ui.label("Inspector");
             });
@@ -688,8 +734,11 @@ impl MapperApp {
         });
         if !open {
             self.inspected = None;
+            self.trail.clear();
         } else if let Some(next) = follow {
-            self.inspected = Some(next);
+            self.walk_to(next);
+        } else if back {
+            self.inspected = self.trail.pop();
         }
         edit
     }
@@ -1444,6 +1493,18 @@ fn plate_key_of(store: &MapOverrides, shown: &str) -> Option<String> {
         .map(|(key, _)| key.clone())
 }
 
+/// Record a step onto `next` in `trail`, coming from `at`.
+///
+/// Stepping back onto a room already on the trail unwinds to it instead
+/// of stacking a second copy -- see [`MapperApp::walk_to`].
+fn walk(trail: &mut Vec<RoomId>, at: Option<RoomId>, next: RoomId) {
+    if let Some(index) = trail.iter().position(|&id| id == next) {
+        trail.truncate(index);
+    } else if let Some(from) = at {
+        trail.push(from);
+    }
+}
+
 /// A drag's pixel travel as whole grid cells, rounded, so a move snaps to
 /// the grid the layout is drawn on.
 #[allow(clippy::cast_possible_truncation)]
@@ -1485,6 +1546,37 @@ mod tests {
     fn only_a_switch_asks_for_a_refit() {
         assert!(needs_fit_for(Fit::Reset), "a switch should re-fit");
         assert!(!needs_fit_for(Fit::Keep), "an edit must not re-fit");
+    }
+
+    /// Walking room to room remembers the way back, and walking into a
+    /// room already behind you unwinds to it rather than growing the
+    /// trail -- rooms link both ways, so a corridor walked up and down
+    /// would otherwise never stop stacking.
+    #[test]
+    fn the_trail_unwinds_rather_than_looping() {
+        let (a, b, c) = (RoomId(1), RoomId(2), RoomId(3));
+        let mut trail = Vec::new();
+
+        walk(&mut trail, Some(a), b);
+        assert_eq!(trail, vec![a], "did not remember where it came from");
+        walk(&mut trail, Some(b), c);
+        assert_eq!(trail, vec![a, b]);
+
+        // Back into b, which is behind us: unwind to it.
+        walk(&mut trail, Some(c), b);
+        assert_eq!(trail, vec![a], "a revisit stacked instead of unwinding");
+
+        // And back to a, the start: nothing left to go back to.
+        walk(&mut trail, Some(b), a);
+        assert!(trail.is_empty());
+    }
+
+    /// The first room inspected has nothing behind it, so no back button.
+    #[test]
+    fn the_first_room_has_no_way_back() {
+        let mut trail = Vec::new();
+        walk(&mut trail, None, RoomId(7));
+        assert!(trail.is_empty());
     }
 
     /// A fitted camera stays put when the same sheet is rebuilt, and only
