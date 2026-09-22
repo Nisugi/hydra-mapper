@@ -28,10 +28,6 @@ const ZOOM_PER_NOTCH: f32 = 1.0015;
 pub(crate) const ROOM_FILL: Color32 = Color32::from_rgb(60, 90, 130);
 pub(crate) const ROOM_STROKE: Color32 = Color32::from_rgb(140, 180, 220);
 pub(crate) const ENTRANCE_STROKE: Color32 = Color32::from_rgb(230, 170, 60);
-/// A street room echoed among its buildings on the interiors sheet: the
-/// entrance amber, on a dimmer fill, so it reads as a signpost to the
-/// street rather than a room of the building.
-pub(crate) const ECHO_FILL: Color32 = Color32::from_rgb(70, 60, 35);
 pub(crate) const DIRECTIONAL_LINE: Color32 = Color32::from_rgb(120, 150, 180);
 pub(crate) const CONNECTOR_LINE: Color32 = Color32::from_rgb(150, 120, 90);
 pub(crate) const LABEL_COLOR: Color32 = Color32::from_rgb(220, 220, 200);
@@ -314,39 +310,20 @@ fn draw_echoes(
         if !canvas.intersects(rect) {
             continue;
         }
-        // A street room is road, not a building: a dot on the line, so
-        // the street reads as a street among the squares that are the
-        // buildings. One with a doorway is a larger dot, and named, so
-        // the shops off it can be told which dot they hang from.
-        if !echo.building {
-            let r = if echo.has_door {
-                (side * 0.3).max(2.5)
-            } else {
-                (side * 0.18).max(1.5)
-            };
-            painter.circle_filled(centre, r, ENTRANCE_STROKE);
-            if echo.has_door && labels && camera.scale >= LABEL_MIN_SCALE && !echo.title.is_empty()
-            {
-                painter.text(
-                    centre + Vec2::new(r + 4.0, 0.0),
-                    Align2::LEFT_CENTER,
-                    &echo.title,
-                    FontId::proportional(11.0_f32.max(11.0 * camera.scale)),
-                    ENTRANCE_STROKE,
-                );
-            }
-            continue;
-        }
-        painter.rect(
-            rect,
-            2.0 * camera.scale,
-            ECHO_FILL,
-            Stroke::new((camera.scale * 2.0).max(1.0), ENTRANCE_STROKE),
-            StrokeKind::Outside,
-        );
-        if labels && camera.scale >= LABEL_MIN_SCALE && !echo.title.is_empty() {
+        // An echo is a dot, whichever sheet it is on: a street room among
+        // its buildings, or a building's doorway beside its street. The
+        // squares are the rooms; an echo only says "this is over there".
+        // One with a doorway is a larger dot, and named when labels are
+        // on, so the shops off it can be told which dot they hang from.
+        let r = if echo.has_door {
+            (side * 0.3).max(2.5)
+        } else {
+            (side * 0.18).max(1.5)
+        };
+        painter.circle_filled(centre, r, ENTRANCE_STROKE);
+        if echo.has_door && labels && camera.scale >= LABEL_MIN_SCALE && !echo.title.is_empty() {
             painter.text(
-                rect.right_center() + Vec2::new(4.0, 0.0),
+                centre + Vec2::new(r + 4.0, 0.0),
                 Align2::LEFT_CENTER,
                 &echo.title,
                 FontId::proportional(11.0_f32.max(11.0 * camera.scale)),

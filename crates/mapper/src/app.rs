@@ -239,7 +239,7 @@ impl MapperApp {
             store_path,
             store_problem,
             edit_mode: false,
-            show_labels: true,
+            show_labels: false,
             drag: None,
             new_plate: String::new(),
             pending_inspect: None,

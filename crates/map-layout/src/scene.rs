@@ -208,12 +208,6 @@ pub struct SceneAnchor {
     /// should read as road -- a dot -- not as another doorway.
     #[serde(default)]
     pub has_door: bool,
-    /// What the echo stands for. `true`: a building, echoed onto the
-    /// outdoor sheet beside its street, drawn as a doorway. `false`: a
-    /// street room, echoed onto the interiors sheet among its buildings,
-    /// drawn as a dot on the road -- the buildings are the squares there.
-    #[serde(default)]
-    pub building: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -578,7 +572,6 @@ fn populate_anchors(scene: &mut MapScene, layout: &Layout, map: &Map, dirs: &Dir
             cell: anchor.cell,
             title: room.title.first().cloned().unwrap_or_default(),
             has_door: false,
-            building: false,
         });
         // Every door from this street room to a room on the interiors
         // sheet, read from both ends so a one-way door still draws.
@@ -725,7 +718,6 @@ fn populate_doorways(scene: &mut MapScene, layout: &Layout, map: &Map) {
             cell,
             title,
             has_door: true,
-            building: true,
         });
         scene.outdoor.edges.push(SceneEdge {
             a: at,
