@@ -275,3 +275,71 @@ fn allow_walkable_waives_the_veto_but_only_when_asked() {
         "an unwalkable closed room converts either way"
     );
 }
+
+/// Bare `meta:locker` means "is a locker", not "is public".
+///
+/// 112 of its 164 rooms also carry a `che:*` key and are house vaults.
+/// Mapping it to `locker:public` unguarded marks [Paupers, Vault] public.
+#[test]
+fn a_che_room_is_never_marked_a_public_locker() {
+    let Some((_, map)) = real_map() else {
+        eprintln!("skipping: gs.map not present");
+        return;
+    };
+    let Ok(curation) = Curation::load(&curation_dir()) else {
+        eprintln!("skipping: curation/ not readable");
+        return;
+    };
+    let rooms = apply(map.rooms(), &plan(&map, &curation));
+    let both: Vec<u32> = rooms
+        .iter()
+        .filter(|r| {
+            r.meta.iter().any(|m| m == "locker:public")
+                && r.meta.iter().any(|m| m.starts_with("locker:che"))
+        })
+        .map(|r| r.id.0)
+        .collect();
+    assert!(both.is_empty(), "rooms marked public AND che-owned: {both:?}");
+}
+
+/// Every `locker:*` key is one of the five shapes, with exactly one
+/// segment for the house.
+///
+/// The guard that matters: `che:{House}` will otherwise match
+/// `che:paupers:locker` and call the house "paupers:locker", producing
+/// `locker:che:house:paupers:locker`.
+#[test]
+fn every_locker_key_is_well_formed() {
+    let Some((_, map)) = real_map() else {
+        eprintln!("skipping: gs.map not present");
+        return;
+    };
+    let Ok(curation) = Curation::load(&curation_dir()) else {
+        eprintln!("skipping: curation/ not readable");
+        return;
+    };
+    let rooms = apply(map.rooms(), &plan(&map, &curation));
+    let mut bad: Vec<String> = Vec::new();
+    for room in &rooms {
+        for meta in &room.meta {
+            if !meta.starts_with("locker") {
+                continue;
+            }
+            let segments: Vec<&str> = meta.split(':').collect();
+            let ok = matches!(
+                segments.as_slice(),
+                ["locker", "public"]
+                    | ["locker", "che"]
+                    | ["locker", "che", "house", _]
+                    | ["locker", "che", "annex", _]
+                    | ["locker", "che", "entrance", _]
+            );
+            if !ok {
+                bad.push(meta.clone());
+            }
+        }
+    }
+    bad.sort();
+    bad.dedup();
+    assert!(bad.is_empty(), "malformed locker keys: {bad:?}");
+}

@@ -38,6 +38,8 @@ pub enum Change {
     AddMeta { id: u32, meta: String },
     /// A `tag` removed, because `meta` now carries the same fact.
     DropTag { id: u32, tag: String },
+    /// A `meta` entry removed, superseded by a consolidated one.
+    DropMeta { id: u32, meta: String },
     /// A tag renamed to the canonical spelling of its family.
     RenameTag {
         id: u32,
@@ -55,6 +57,7 @@ impl Change {
             Change::Location { id, .. }
             | Change::AddMeta { id, .. }
             | Change::DropTag { id, .. }
+            | Change::DropMeta { id, .. }
             | Change::RenameTag { id, .. }
             | Change::DeleteRoom { id, .. } => *id,
         }
@@ -69,6 +72,7 @@ impl std::fmt::Display for Change {
             }
             Change::AddMeta { id, meta } => write!(f, "{id}\t+meta\t{meta}"),
             Change::DropTag { id, tag } => write!(f, "{id}\t-tag\t{tag}"),
+            Change::DropMeta { id, meta } => write!(f, "{id}	-meta	{meta}"),
             Change::RenameTag { id, from, to } => write!(f, "{id}\ttag\t{from} -> {to}"),
             Change::DeleteRoom { id, title } => write!(f, "{id}\tDELETE\t{title}"),
         }
@@ -117,6 +121,7 @@ impl Plan {
                 Change::Location { .. } => "location",
                 Change::AddMeta { .. } => "meta added",
                 Change::DropTag { .. } => "tag dropped",
+                Change::DropMeta { .. } => "meta dropped",
                 Change::RenameTag { .. } => "tag renamed",
                 Change::DeleteRoom { .. } => "room deleted",
             };
@@ -223,6 +228,9 @@ pub fn plan(map: &Map, curation: &Curation) -> Plan {
 
     // Pass 2c: tag spellings.
     normalise_spellings(&mut plan, rooms, curation);
+
+    // Pass 2d: lockers.
+    consolidate_lockers(&mut plan, rooms, curation);
 
     // `urchin-hideout` duplicates `meta:map:virtual room` exactly -- the
     // same 16 rooms, verified, not assumed.
@@ -395,6 +403,7 @@ pub fn apply(rooms: &[Room], plan: &Plan) -> Vec<Room> {
                 }
             }
             Change::DropTag { tag, .. } => rooms[i].tags.retain(|t| t != tag),
+            Change::DropMeta { meta, .. } => rooms[i].meta.retain(|m| m != meta),
             Change::RenameTag { from, to, .. } => {
                 for tag in &mut rooms[i].tags {
                     if tag == from {
@@ -421,4 +430,202 @@ pub fn apply(rooms: &[Room], plan: &Plan) -> Vec<Room> {
         }
     }
     rooms
+}
+
+/// Display name -> `che:` key, learned from the map and topped up from
+/// curation.
+///
+/// A room carrying both `locker annex:House of Paupers` and
+/// `che:paupers:entrance_annex` states the pair outright, and eleven of
+/// the fourteen houses have such a room. Reading them beats hand-listing
+/// them: the map is the thing being changed, so it is the thing that
+/// should say how its own keys line up. `curation/lockers.toml` supplies
+/// only the four no room pairs up, each with a reason.
+#[must_use]
+pub fn house_keys(rooms: &[Room], curation: &Curation) -> BTreeMap<String, String> {
+    let mut keys: BTreeMap<String, String> = BTreeMap::new();
+    for room in rooms {
+        let displays: Vec<&str> = room
+            .meta
+            .iter()
+            .filter_map(|m| m.strip_prefix("locker annex:"))
+            .collect();
+        let snake: Vec<&str> = room
+            .meta
+            .iter()
+            .filter_map(|m| m.strip_suffix(":entrance_annex"))
+            .filter_map(|m| m.strip_prefix("che:"))
+            .collect();
+        if let (Some(display), Some(key)) = (displays.first(), snake.first()) {
+            keys.insert((*display).to_owned(), (*key).to_owned());
+        }
+    }
+    for (display, key) in &curation.lockers.house_keys {
+        keys.insert(display.clone(), key.clone());
+    }
+    keys
+}
+
+/// Fold four locker schemes and 19 tags into `meta:locker:*`.
+///
+/// The consolidation exists because `publiclockers` (89 rooms) and bare
+/// `meta:locker` (164 rooms) overlap on **zero** rooms: two disjoint sets
+/// naming one concept in two fields, so neither field alone answers
+/// "where are the lockers".
+///
+/// Sources are dropped only where `drop_source` says so. `che:*` keys
+/// stay: they carry the access fact -- who may open the door -- which is
+/// a different question from whose locker it is, and not this pass's to
+/// delete.
+fn consolidate_lockers(plan: &mut Plan, rooms: &[Room], curation: &Curation) {
+    let keys = house_keys(rooms, curation);
+    let add = |plan: &mut Plan, room: &Room, meta: String| {
+        if !room.meta.contains(&meta) {
+            plan.changes.push(Change::AddMeta {
+                id: room.id.0,
+                meta,
+            });
+        }
+    };
+
+    for rule in &curation.lockers.rules {
+        for room in rooms {
+            let mut matched = false;
+
+            for tag in &rule.from_tags {
+                if room.tags.contains(tag) {
+                    matched = true;
+                    if rule.drop_source {
+                        plan.changes.push(Change::DropTag {
+                            id: room.id.0,
+                            tag: tag.clone(),
+                        });
+                    }
+                }
+            }
+            let che_free = !room.meta.iter().any(|m| m.starts_with("che:"));
+            for meta in &rule.from_meta {
+                if room.meta.contains(meta) && (che_free || !rule.from_meta_requires_no_che) {
+                    matched = true;
+                    if rule.drop_source {
+                        plan.changes.push(Change::DropMeta {
+                            id: room.id.0,
+                            meta: meta.clone(),
+                        });
+                    }
+                }
+            }
+            if matched && let Some(to) = &rule.to_meta {
+                add(plan, room, to.clone());
+            }
+
+            // Patterned sources: the house is a wildcard in the middle.
+            if let Some(required) = &rule.require_meta
+                && !room.meta.contains(required)
+            {
+                continue;
+            }
+            for pattern in [&rule.from_meta_pattern, &rule.from_meta_pattern_alt]
+                .into_iter()
+                .flatten()
+            {
+                for source in &room.meta {
+                    let Some(house) = match_house(pattern, source) else {
+                        continue;
+                    };
+                    // A display name needs translating; a snake key is
+                    // already the form the target wants.
+                    let key = keys.get(&house).cloned().unwrap_or(house);
+                    if let Some(to) = &rule.to_meta_pattern {
+                        add(plan, room, to.replace("{house}", &key));
+                    }
+                    if rule.drop_source {
+                        plan.changes.push(Change::DropMeta {
+                            id: room.id.0,
+                            meta: source.clone(),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    apply_house_tags(plan, rooms, curation);
+
+    // A room the CHE rules claimed is not public, whatever a tag said.
+    // Three Beacon Hall annex lockers carry both a house tag and a public
+    // one; the house is the truth and `locker:public` is the mistake.
+    let che_owned: BTreeSet<u32> = plan
+        .changes
+        .iter()
+        .filter_map(|c| match c {
+            Change::AddMeta { id, meta } if meta.starts_with("locker:che:") => Some(*id),
+            _ => None,
+        })
+        .collect();
+    plan.changes.retain(|c| !matches!(
+        c,
+        Change::AddMeta { id, meta } if meta == "locker:public" && che_owned.contains(id)
+    ));
+
+    // Bare `meta:locker` on a room the consolidation has now described
+    // properly is redundant. It is dropped here rather than in the public
+    // rule because only now is it known that something replaced it.
+    for room in rooms {
+        if room.meta.iter().any(|m| m == "locker") && che_owned.contains(&room.id.0) {
+            plan.changes.push(Change::DropMeta {
+                id: room.id.0,
+                meta: "locker".to_owned(),
+            });
+        }
+    }
+
+}
+
+/// The 19 tags spelling "this house's lockers" three different ways.
+fn apply_house_tags(plan: &mut Plan, rooms: &[Room], curation: &Curation) {
+    for entry in &curation.lockers.house_tags {
+        let kind = entry.kind.as_deref().unwrap_or("house");
+        for room in rooms {
+            for tag in &entry.tags {
+                if room.tags.contains(tag) {
+                    let meta = format!("locker:che:{kind}:{}", entry.house);
+                    if !room.meta.contains(&meta) {
+                        plan.changes.push(Change::AddMeta {
+                            id: room.id.0,
+                            meta,
+                        });
+                    }
+                    plan.changes.push(Change::DropTag {
+                        id: room.id.0,
+                        tag: tag.clone(),
+                    });
+                }
+            }
+        }
+    }
+}
+
+/// Match `che:{house}:locker` or `locker annex:{House}` against one meta
+/// string, returning the house part.
+fn match_house(pattern: &str, source: &str) -> Option<String> {
+    let token = if pattern.contains("{house}") {
+        "{house}"
+    } else {
+        "{House}"
+    };
+    let (before, after) = pattern.split_once(token)?;
+    let rest = source.strip_prefix(before)?;
+    let house = if after.is_empty() {
+        rest
+    } else {
+        rest.strip_suffix(after)?
+    };
+    // The house part is always ONE segment. Without this,
+    // `che:{House}` happily matches `che:paupers:locker` and calls the
+    // house "paupers:locker", producing `locker:che:house:paupers:locker`.
+    if house.is_empty() || house.contains(':') {
+        return None;
+    }
+    Some(house.to_owned())
 }

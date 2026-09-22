@@ -276,6 +276,7 @@ pub struct Curation {
     pub status: StatusFile,
     pub tags: TagFile,
     pub spellings: SpellingFile,
+    pub lockers: LockerFile,
 }
 
 impl Curation {
@@ -292,6 +293,7 @@ impl Curation {
         let status: StatusFile = read_toml(&dir.join("status.toml"))?;
         let tags: TagFile = read_toml(&dir.join("tags.toml"))?;
         let spellings: SpellingFile = read_toml(&dir.join("spellings.toml"))?;
+        let lockers: LockerFile = read_toml(&dir.join("lockers.toml"))?;
 
         for (i, rule) in status.rules.iter().enumerate() {
             if rule.location.is_none() && rule.title.is_none() && rule.ids.is_none() {
@@ -313,6 +315,7 @@ impl Curation {
             status,
             tags,
             spellings,
+            lockers,
         })
     }
 
@@ -394,3 +397,62 @@ impl std::fmt::Display for LoadError {
 }
 
 impl std::error::Error for LoadError {}
+
+/// One locker consolidation rule: where the fact is now, and where it
+/// should be.
+#[derive(Debug, Clone, Deserialize)]
+pub struct LockerRule {
+    /// A fixed target, for lockers nobody owns.
+    #[serde(default)]
+    pub to_meta: Option<String>,
+    /// A target with `{house}` in it, filled from the source key.
+    #[serde(default)]
+    pub to_meta_pattern: Option<String>,
+    #[serde(default)]
+    pub from_tags: Vec<String>,
+    #[serde(default)]
+    pub from_meta: Vec<String>,
+    /// `che:{house}:locker` or `locker annex:{House}` -- `{house}` matches
+    /// a `snake_case` key, `{House}` a display name needing translation.
+    /// Only treat `from_meta` as a match when the room carries no
+    /// `che:*` key. Bare `meta:locker` means "is a locker", not "is
+    /// public", and 112 of its 164 rooms are house vaults.
+    #[serde(default)]
+    pub from_meta_requires_no_che: bool,
+    #[serde(default)]
+    pub from_meta_pattern: Option<String>,
+    #[serde(default)]
+    pub from_meta_pattern_alt: Option<String>,
+    /// Only apply the patterns when the room also carries this meta.
+    /// Guards a broad alternate like `che:{House}`, which alone would
+    /// match every room of every house.
+    #[serde(default)]
+    pub require_meta: Option<String>,
+    /// Remove the source once the fact has moved. False where the source
+    /// carries an access fact too, which is not ours to delete.
+    #[serde(default)]
+    pub drop_source: bool,
+    #[serde(default)]
+    pub note: Option<String>,
+}
+
+/// Tags naming a house's lockers in one of three spellings.
+#[derive(Debug, Clone, Deserialize)]
+pub struct HouseTags {
+    pub house: String,
+    /// `house` (the default) or `entrance`.
+    #[serde(default)]
+    pub kind: Option<String>,
+    pub tags: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct LockerFile {
+    #[serde(default, rename = "locker")]
+    pub rules: Vec<LockerRule>,
+    #[serde(default, rename = "house_tags")]
+    pub house_tags: Vec<HouseTags>,
+    /// Display name -> `che:` key, for the four no room pairs up.
+    #[serde(default)]
+    pub house_keys: BTreeMap<String, String>,
+}
