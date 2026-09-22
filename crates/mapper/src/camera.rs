@@ -102,6 +102,12 @@ impl Camera {
         self.scale = fit_x.min(fit_y).clamp(MIN_SCALE, MAX_SCALE);
     }
 
+    /// Put `cell` in the middle of the view, at the current zoom.
+    #[allow(clippy::cast_precision_loss)]
+    pub fn center_on(&mut self, cell: Cell) {
+        self.center = Vec2::new(cell.x as f32, cell.y as f32);
+    }
+
     /// Drag the sheet by a pointer movement in pixels.
     pub fn pan_by(&mut self, delta: Vec2) {
         self.center -= delta / self.cell_px();

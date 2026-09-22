@@ -764,6 +764,25 @@ impl MapperApp {
         });
     }
 
+    /// A click on a room: inspect it, or close the panel if it was the
+    /// inspected one already. A click on an echo -- a doorway beside a
+    /// street, a street among its buildings -- goes to the room's own
+    /// sheet, with it in the middle of the view.
+    fn clicked(&mut self, id: RoomId) {
+        self.inspected = (self.inspected != Some(id)).then_some(id);
+        let Some(shown) = &self.shown else {
+            return;
+        };
+        if let Some(&(sheet, index)) = shown.scene.room_index.get(&id)
+            && sheet != self.sheet
+        {
+            self.sheet = sheet;
+            self.camera
+                .center_on(shown.scene.sheet(sheet).rooms[index].cell);
+            self.inspected = Some(id);
+        }
+    }
+
     /// Track a drag across frames and turn a finished one into an edit.
     ///
     /// The whole drag is one correction: pixels accumulate while the mouse
@@ -789,7 +808,11 @@ impl MapperApp {
         }
 
         let drag = self.drag.take()?;
-        let delta = cells_dragged(drag, self.camera);
+        let scale = self
+            .shown
+            .as_ref()
+            .map_or(1, |shown| shown.scene.sheet(self.sheet).scale);
+        let delta = cells_dragged(drag, self.camera, scale);
         if delta.x == 0 && delta.y == 0 {
             return None;
         }
@@ -1656,9 +1679,19 @@ impl eframe::App for MapperApp {
             }
 
             // The in-flight drag, in whole cells, for the ghost preview.
-            let ghost = self
-                .drag
-                .map(|drag| (drag.group, drag.room, cells_dragged(drag, self.camera)));
+            let scale = shown.scene.sheet(self.sheet).scale;
+            let ghost = self.drag.map(|drag| {
+                let d = cells_dragged(drag, self.camera, scale);
+                // Drawn back at the sheet's spacing.
+                (
+                    drag.group,
+                    drag.room,
+                    Cell {
+                        x: d.x * scale,
+                        y: d.y * scale,
+                    },
+                )
+            });
             let hit = draw::scene(
                 ui,
                 &shown.scene,
@@ -1672,9 +1705,7 @@ impl eframe::App for MapperApp {
                 ghost,
             );
             if let Some(id) = hit.clicked {
-                // Clicking the inspected room again closes the panel, so
-                // the canvas can be cleared without reaching for the x.
-                self.inspected = (self.inspected != Some(id)).then_some(id);
+                self.clicked(id);
             }
             if edit_out.is_none() {
                 *edit_out = self.handle_drag(&hit);
@@ -1898,8 +1929,11 @@ fn offset_phrase(dx: i32, dy: i32) -> String {
 /// A drag's pixel travel as whole grid cells, rounded, so a move snaps to
 /// the grid the layout is drawn on.
 #[allow(clippy::cast_possible_truncation)]
-fn cells_dragged(drag: DragState, camera: Camera) -> Cell {
-    let px = camera.cell_px();
+fn cells_dragged(drag: DragState, camera: Camera, scale: i32) -> Cell {
+    // A drawn cell is `scale` solver cells wide on a spread-out sheet;
+    // the edit is in the solver's cells.
+    #[allow(clippy::cast_precision_loss)] // a sheet scale is 1 or 2
+    let px = camera.cell_px() * scale.max(1) as f32;
     if px <= 0.0 {
         return Cell::default();
     }
