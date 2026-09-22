@@ -996,7 +996,16 @@ mod tests {
             b.max
         );
 
-        // **And the mirror.** Both of the corner's shops are echoed on the
+        the_mirror(&scene, &map);
+    }
+
+    /// **And the mirror.** Both of the corner's shops are echoed on the
+    /// outdoor sheet as doorways beside the corner, named for the shop,
+    /// each joined to the corner by a connector; the corner's own cell
+    /// is a multiple of the sheet's scale, so the street is spread out
+    /// enough for them to fit.
+    fn the_mirror(scene: &MapScene, map: &Map) {
+        // Both of the corner's shops are echoed on the
         // outdoor sheet as doorways beside the corner, named for the
         // shop, each joined to the corner by a connector; the corner's
         // own cell is a multiple of the sheet's scale, so the street is
