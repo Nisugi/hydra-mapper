@@ -117,7 +117,16 @@ fn generate_layout_impl(map: &Map, inline_interiors: bool, edges: &[EdgeOverride
         }
     }
 
-    interior_shelf::pack_interior_shelf(&mut groups, &interiors, &clusters, map);
+    // After the outdoor pass, which is what gives the doorway rooms the
+    // cells the shelf is ordered by.
+    interior_shelf::pack_interior_shelf(
+        &mut groups,
+        &interiors,
+        &clusters,
+        map,
+        &classification.entrances,
+        &outdoor,
+    );
 
     // Building names for interior groups (assigned after shelf packing so
     // the shelf order matches the reference, which sorts unnamed groups).

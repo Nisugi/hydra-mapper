@@ -395,21 +395,35 @@ struct Item {
     local: Vec<(usize, Cell)>,
     width: i32,
     height: i32,
+    /// Where this building's doorway is on the outdoor sheet, so the shelf
+    /// can be laid out in the town's own order. `None` for a building with
+    /// no outdoor entrance, which sorts last.
+    door: Option<Cell>,
+    /// The doorway's room, and the lowest group index, breaking ties so the
+    /// order is stable between runs rather than following hash iteration.
+    tie: (u32, usize),
 }
 
-/// Interiors sheet: wrapped shelf rows in an independent coordinate space.
-/// A cluster (one walkable building) is merged into a single floor plan
-/// first -- members are placed beside the rooms their passages connect to,
-/// like the outdoor connector pass but cluster-local -- and then each
-/// merged building is shelved as one unit (spec §7).
-pub fn pack_interior_shelf(
+/// One shelvable unit per building cluster: its merged floor plan
+/// normalised to a (0,0) top-left, its size, and where its doorway sits on
+/// the outdoor sheet -- which is what [`pack_interior_shelf`] orders by.
+fn shelf_items(
     groups: &mut [Group],
     interior: &[usize],
     clusters: &HashMap<usize, usize>,
     map: &Map,
-) {
-    if interior.is_empty() {
-        return;
+    entrances: &HashMap<usize, Vec<Entrance>>,
+    outdoor: &[usize],
+) -> Vec<Item> {
+    // Where each outdoor room sits, so a building can be shelved near the
+    // others off the same street rather than at its group index.
+    let mut outdoor_cell: HashMap<RoomId, Cell> = HashMap::new();
+    for &idx in outdoor {
+        if groups[idx].base_offset.is_some() {
+            for &id in &groups[idx].room_ids {
+                outdoor_cell.insert(id, groups[idx].final_cell(id));
+            }
+        }
     }
 
     // Cluster membership, canonical order (BTreeMap keys + sorted members).
@@ -462,12 +476,67 @@ pub fn pack_interior_shelf(
             })
             .collect();
         ordered.sort_unstable_by_key(|&(idx, _)| idx);
+        // The doorway this building is entered by: the lowest-id entrance
+        // among all its members, so a building with several doors picks
+        // one deterministically.
+        let door_room = members
+            .iter()
+            .filter_map(|m| entrances.get(m))
+            .flatten()
+            .map(|e| e.outdoor_room_id)
+            .min_by_key(|r| r.0);
         items.push(Item {
             local: ordered,
             width: max.x - min.x + 1,
             height: max.y - min.y + 1,
+            door: door_room.and_then(|r| outdoor_cell.get(&r).copied()),
+            tie: (
+                door_room.map_or(u32::MAX, |r| r.0),
+                members.first().copied().unwrap_or(usize::MAX),
+            ),
         });
     }
+    items
+}
+
+/// Interiors sheet: wrapped shelf rows in an independent coordinate space.
+/// A cluster (one walkable building) is merged into a single floor plan
+/// first -- members are placed beside the rooms their passages connect to,
+/// like the outdoor connector pass but cluster-local -- and then each
+/// merged building is shelved as one unit (spec §7).
+pub fn pack_interior_shelf(
+    groups: &mut [Group],
+    interior: &[usize],
+    clusters: &HashMap<usize, usize>,
+    map: &Map,
+    entrances: &HashMap<usize, Vec<Entrance>>,
+    outdoor: &[usize],
+) {
+    if interior.is_empty() {
+        return;
+    }
+
+    let mut items = shelf_items(groups, interior, clusters, map, entrances, outdoor);
+
+    // **The shelf is laid out in the town's own order.** Buildings were
+    // previously emitted by group index -- a number with no geographic
+    // meaning -- which put two shops off the same street corner a median
+    // of 42 cells apart on the real map's largest town, in different rows.
+    // Sorting by where each doorway sits outdoors brings that to 8, for
+    // about 10% more shelf area: the rows no longer pack in whatever order
+    // the indices fell in, so buildings of unlike size sit together and
+    // leave more ragged gaps. Finding a shop where the town says it should
+    // be is worth the cells.
+    //
+    // A building with no outdoor doorway -- reachable only through other
+    // interiors -- has nothing to sort by and goes last.
+    items.sort_by_key(|i| {
+        (
+            i.door.map_or(i32::MAX, |c| c.y),
+            i.door.map_or(i32::MAX, |c| c.x),
+            i.tie,
+        )
+    });
 
     // Padded area, so the sheet comes out roughly square even when padding
     // dwarfs the mostly tiny buildings.
@@ -636,5 +705,150 @@ fn merge_cluster_members(
         });
         local.insert(idx, off);
         place(idx, off, &mut occupied);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use cena_map::{Cost, Crossing, Exit, ExitKind, Map, Room, RoomId};
+
+    use crate::generate_layout;
+
+    fn room(id: u32, title: &str, paths: &str, exits: Vec<Exit>) -> Room {
+        Room {
+            id: RoomId(id),
+            uid: vec![],
+            title: vec![title.to_owned()],
+            description: vec![],
+            paths: vec![paths.to_owned()],
+            location: None,
+            location_unknowable: false,
+            check_location: false,
+            unique_loot: vec![],
+            climate: None,
+            terrain: None,
+            tags: vec![],
+            meta: vec![],
+            image: None,
+            exits,
+        }
+    }
+
+    fn exit(to: u32, command: &str) -> Exit {
+        Exit {
+            to: RoomId(to),
+            kind: ExitKind::Cardinal,
+            crossing: Crossing::Command(command.to_owned()),
+            cost: Some(Cost::Fixed(1.0)),
+        }
+    }
+
+    fn door(to: u32, what: &str) -> Exit {
+        Exit {
+            to: RoomId(to),
+            kind: ExitKind::Go,
+            crossing: Crossing::Command(format!("go {what}")),
+            cost: Some(Cost::Fixed(1.0)),
+        }
+    }
+
+    /// A street of six corners, each with two shops behind doors, built so
+    /// that group index and geography disagree: the shops are declared
+    /// east-to-west while the street runs west-to-east.
+    ///
+    /// More than `INLINE_MAX_BUILDINGS` buildings makes this a town, so the
+    /// shelf is what places them -- which is the path under test. The shelf
+    /// must follow the street: two shops off one corner belong nearer each
+    /// other than shops from opposite ends of the road. Ordering by index
+    /// put same-doorway rooms a median of 42 cells apart in Wehnimer's
+    /// Landing, in different rows of the sheet.
+    #[test]
+    fn the_shelf_follows_the_street_not_the_indices() {
+        const OUT: &str = "Obvious paths: east, west";
+        const IN: &str = "Obvious exits: out";
+        const CORNERS: u32 = 6;
+
+        let mut rooms = Vec::new();
+        // Shops first and in reverse, so low ids sit at the east end. Each
+        // corner's shops are a different depth from the next corner's, so
+        // the rows pack differently under a different order -- with every
+        // building the same size, any order gives the same sheet and the
+        // assertion below would hold vacuously.
+        for i in (0..CORNERS).rev() {
+            let street = 1000 + i;
+            for s in 0..2u32 {
+                let head = i * 20 + s * 10;
+                let depth = i + 1;
+                let mut back: Vec<Exit> = vec![door(street, "out")];
+                if depth > 1 {
+                    back.push(exit(head + 1, "north"));
+                }
+                rooms.push(room(head, "[Shop]", IN, back));
+                for d in 1..depth {
+                    let mut e = vec![exit(head + d - 1, "south")];
+                    if d + 1 < depth {
+                        e.push(exit(head + d + 1, "north"));
+                    }
+                    rooms.push(room(head + d, "[Shop Back]", IN, e));
+                }
+            }
+        }
+        for i in 0..CORNERS {
+            let id = 1000 + i;
+            let mut exits = vec![door(i * 20, "shop"), door(i * 20 + 10, "shop")];
+            if i > 0 {
+                exits.push(exit(id - 1, "west"));
+            }
+            if i + 1 < CORNERS {
+                exits.push(exit(id + 1, "east"));
+            }
+            rooms.push(room(id, "[Street]", OUT, exits));
+        }
+        let map = Map::from_rooms(rooms).expect("no duplicate ids");
+
+        let layout = generate_layout(&map);
+        assert!(
+            !layout.interiors.is_empty(),
+            "fixture inlined instead of shelving; the shelf is untested"
+        );
+        let cell_of = |id: u32| {
+            layout
+                .groups
+                .iter()
+                .find(|g| g.room_ids.contains(&RoomId(id)))
+                .map(|g| g.final_cell(RoomId(id)))
+                .expect("room is placed")
+        };
+
+        // The claim is about *order*: buildings are emitted along the
+        // street, so the shelf's reading order matches the town's. Row
+        // wrapping can still split one corner's pair across a row break,
+        // which is why this asserts the sequence rather than raw distance.
+        //
+        // Reading order on the shelf is row-major: down first, then across.
+        let mut seen: Vec<(i32, i32, u32)> = (0..CORNERS)
+            .flat_map(|i| [i * 20, i * 20 + 10])
+            .map(|id| {
+                let c = cell_of(id);
+                (c.y, c.x, id)
+            })
+            .collect();
+        seen.sort_unstable();
+        // The street runs west (high corner) to east (corner 0), and the
+        // shelf is ordered by where each doorway sits outdoors, so corners
+        // must come out grouped -- never interleaved with another corner.
+        let corner_of = |id: u32| id / 20;
+        let order: Vec<u32> = seen.iter().map(|&(_, _, id)| corner_of(id)).collect();
+        let mut runs: Vec<u32> = Vec::new();
+        for c in &order {
+            if runs.last() != Some(c) {
+                runs.push(*c);
+            }
+        }
+        assert_eq!(
+            runs.len(),
+            CORNERS as usize,
+            "corners were interleaved on the shelf ({order:?}); each corner's              shops should be emitted together"
+        );
     }
 }
