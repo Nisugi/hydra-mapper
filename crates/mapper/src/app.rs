@@ -11,7 +11,7 @@ use cena_map_layout::{
     Dir, EdgeAction, Layout, MapScene, build_scene, generate_layout, generate_layout_with,
 };
 
-use crate::areas::{AreaKind, Areas};
+use crate::areas::{self, AreaKind, Areas};
 use crate::camera::Camera;
 use crate::draw;
 use crate::export;
@@ -265,11 +265,7 @@ impl MapperApp {
                 if location.group_offsets.is_empty() && location.room_pins.is_empty() {
                     continue;
                 }
-                let rooms: Vec<cena_map::Room> = area
-                    .rooms
-                    .iter()
-                    .filter_map(|&id| map.room(id).cloned())
-                    .collect();
+                let rooms = areas::layout_rooms(&area.rooms, map);
                 let Ok(subset) = Map::from_rooms(rooms) else {
                     continue;
                 };
@@ -290,11 +286,7 @@ impl MapperApp {
         let mut out = Vec::new();
         for kind in [AreaKind::Official, AreaKind::Mapdb, AreaKind::Plates] {
             for area in self.areas.list(kind) {
-                let rooms: Vec<cena_map::Room> = area
-                    .rooms
-                    .iter()
-                    .filter_map(|&id| map.room(id).cloned())
-                    .collect();
+                let rooms = areas::layout_rooms(&area.rooms, map);
                 let Ok(subset) = Map::from_rooms(rooms) else {
                     continue;
                 };
@@ -410,11 +402,7 @@ impl MapperApp {
             else {
                 continue;
             };
-            let rooms: Vec<cena_map::Room> = area
-                .rooms
-                .iter()
-                .filter_map(|&id| map.room(id).cloned())
-                .collect();
+            let rooms = areas::layout_rooms(&area.rooms, map);
             let Ok(subset) = Map::from_rooms(rooms) else {
                 continue;
             };
@@ -693,14 +681,17 @@ impl MapperApp {
         // A room on a plate is drawn there, not here -- that is what a
         // plate is for. It stays in this area's *list*, because it is
         // still a room of this place; it just lays out elsewhere.
-        let rooms: Vec<cena_map::Room> = area
+        // A plated room is drawn on its plate, not here; the rest of the
+        // area lays out with whatever neighbours it needs to stay whole.
+        let own: Vec<RoomId> = area
             .rooms
             .iter()
-            .filter(|&&id| {
+            .copied()
+            .filter(|&id| {
                 area.kind == AreaKind::Plates || !self.store.is_plated(RoomKey::of(id, map))
             })
-            .filter_map(|&id| map.room(id).cloned())
             .collect();
+        let rooms = areas::layout_rooms(&own, map);
         if rooms.is_empty() {
             self.shown = None;
             return;

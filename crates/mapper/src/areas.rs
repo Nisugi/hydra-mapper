@@ -246,6 +246,72 @@ fn mapdb_areas(map: &Map, claimed: &HashSet<RoomId>) -> Vec<Area> {
         .collect()
 }
 
+/// The rooms to lay an area out from: its own, plus the neighbours a
+/// stranded room needs to stay attached to its building.
+///
+/// **An area filter should not strand a room from the building it opens
+/// off.** Measured on `gs.map`: 361 rooms lay out as single-room groups
+/// with no connection at all inside their own area, purely because the
+/// boundary cut them from their doorway -- `[Haegan's Weaponry]` is in
+/// "Cysaegir" while its street is in "the village of Cysaegir", and
+/// `[Ebonstone Manor, Lockers]` sits in "CHE Central" with its door in
+/// Wehnimer's Landing. 335 of those have every neighbour in one other
+/// area, and 309 have exactly one neighbour.
+///
+/// Those neighbours are pulled in **for the layout only**. The room still
+/// belongs to its own area: the lists, the counts and the export are
+/// unchanged, because `location` is not being second-guessed here. A
+/// mapdb location that disagrees with a doorway is a fact about the data,
+/// and changing it is a correction a person makes deliberately -- this
+/// just stops the solver being lied to about what connects to what.
+///
+/// Only rooms that would otherwise be **wholly cut off** pull anything in,
+/// so an area that is already whole is laid out from exactly its own
+/// rooms, as before.
+#[must_use]
+pub fn layout_rooms(area_rooms: &[RoomId], map: &Map) -> Vec<cena_map::Room> {
+    let own: HashSet<RoomId> = area_rooms.iter().copied().collect();
+
+    // Who points at a room, so a one-way door inward still counts as an
+    // attachment -- a shop entered from the street but leaving by another
+    // exit is still that street's shop.
+    let mut inbound: BTreeMap<RoomId, Vec<RoomId>> = BTreeMap::new();
+    for room in map.rooms() {
+        for exit in &room.exits {
+            if own.contains(&exit.to) && !own.contains(&room.id) {
+                inbound.entry(exit.to).or_default().push(room.id);
+            }
+        }
+    }
+
+    let mut pulled: HashSet<RoomId> = HashSet::new();
+    for &id in area_rooms {
+        let Some(room) = map.room(id) else {
+            continue;
+        };
+        let neighbours: Vec<RoomId> = room
+            .exits
+            .iter()
+            .map(|e| e.to)
+            .chain(inbound.get(&id).into_iter().flatten().copied())
+            .filter(|n| map.room(*n).is_some())
+            .collect();
+        // A room with a neighbour of its own is attached already; only one
+        // with none is stranded by the boundary.
+        if neighbours.is_empty() || neighbours.iter().any(|n| own.contains(n)) {
+            continue;
+        }
+        pulled.extend(neighbours);
+    }
+
+    area_rooms
+        .iter()
+        .copied()
+        .chain(pulled.into_iter().filter(|id| !own.contains(id)))
+        .filter_map(|id| map.room(id).cloned())
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -332,5 +398,94 @@ mod tests {
             image: None,
             exits: vec![],
         }
+    }
+
+    /// A room whose only doorway is in another area is drawn with that
+    /// doorway, so the boundary does not leave it floating alone.
+    ///
+    /// Measured on `gs.map`: 361 rooms lay out as single-room groups with
+    /// no connection inside their own area at all, because the filter cut
+    /// them from their street -- `[Haegan's Weaponry]` is in "Cysaegir"
+    /// while its door is in "the village of Cysaegir".
+    #[test]
+    fn a_stranded_room_brings_its_doorway_with_it() {
+        let shop = RoomId(1);
+        let street = RoomId(2);
+        let map = Map::from_rooms(vec![
+            room_linked(shop, "Cysaegir", &[street]),
+            room_linked(street, "the village of Cysaegir", &[shop]),
+        ])
+        .expect("no duplicate ids");
+
+        let rooms = layout_rooms(&[shop], &map);
+        let ids: Vec<RoomId> = rooms.iter().map(|r| r.id).collect();
+        assert!(ids.contains(&shop));
+        assert!(
+            ids.contains(&street),
+            "the shop was laid out without the street it opens onto"
+        );
+    }
+
+    /// An area that is already whole pulls nothing in: every room has a
+    /// neighbour of its own, so there is nothing for the boundary to have
+    /// broken.
+    #[test]
+    fn a_whole_area_pulls_nothing_in() {
+        let (a, b, outside) = (RoomId(1), RoomId(2), RoomId(3));
+        let map = Map::from_rooms(vec![
+            room_linked(a, "town", &[b, outside]),
+            room_linked(b, "town", &[a]),
+            room_linked(outside, "elsewhere", &[a]),
+        ])
+        .expect("no duplicate ids");
+
+        let ids: Vec<RoomId> = layout_rooms(&[a, b], &map).iter().map(|r| r.id).collect();
+        assert_eq!(ids.len(), 2, "pulled in a neighbour that was not needed");
+        assert!(!ids.contains(&outside));
+    }
+
+    /// A one-way door inward still attaches the room: a shop entered from
+    /// the street but leaving by another exit is still that street's shop.
+    #[test]
+    fn an_inbound_only_doorway_still_counts() {
+        let shop = RoomId(1);
+        let street = RoomId(2);
+        let map = Map::from_rooms(vec![
+            room_linked(shop, "shops", &[]),
+            room_linked(street, "streets", &[shop]),
+        ])
+        .expect("no duplicate ids");
+
+        let ids: Vec<RoomId> = layout_rooms(&[shop], &map).iter().map(|r| r.id).collect();
+        assert!(
+            ids.contains(&street),
+            "a room reachable only one way was left stranded"
+        );
+    }
+
+    /// A room with no exits at all has nothing to pull in -- 27 rooms of
+    /// `gs.map` are dead records, and inventing a neighbour for them would
+    /// be worse than leaving them alone.
+    #[test]
+    fn a_room_with_no_exits_pulls_nothing() {
+        let lone = RoomId(1);
+        let map = Map::from_rooms(vec![room_linked(lone, "nowhere", &[])]).expect("one room");
+        assert_eq!(layout_rooms(&[lone], &map).len(), 1);
+    }
+
+    /// A room with just enough filled in to carry an id, a location and
+    /// some exits.
+    fn room_linked(id: RoomId, location: &str, to: &[RoomId]) -> cena_map::Room {
+        let mut room = room_in(id, location);
+        room.exits = to
+            .iter()
+            .map(|&t| cena_map::Exit {
+                to: t,
+                kind: cena_map::ExitKind::Go,
+                crossing: cena_map::Crossing::Command("go door".to_owned()),
+                cost: Some(cena_map::Cost::Fixed(1.0)),
+            })
+            .collect();
+        room
     }
 }
