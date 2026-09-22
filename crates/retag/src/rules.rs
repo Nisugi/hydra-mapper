@@ -254,12 +254,28 @@ pub struct TagFile {
     pub conversions: BTreeMap<String, TagConversion>,
 }
 
+/// One tag spelling normalisation: every `from` becomes `to`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Rename {
+    pub to: String,
+    pub from: Vec<String>,
+    #[serde(default)]
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct SpellingFile {
+    #[serde(default, rename = "rename")]
+    pub renames: Vec<Rename>,
+}
+
 /// Everything the curation directory says.
 #[derive(Debug, Clone, Default)]
 pub struct Curation {
     pub locations: LocationFile,
     pub status: StatusFile,
     pub tags: TagFile,
+    pub spellings: SpellingFile,
 }
 
 impl Curation {
@@ -275,6 +291,7 @@ impl Curation {
         let locations: LocationFile = read_toml(&dir.join("locations.toml"))?;
         let status: StatusFile = read_toml(&dir.join("status.toml"))?;
         let tags: TagFile = read_toml(&dir.join("tags.toml"))?;
+        let spellings: SpellingFile = read_toml(&dir.join("spellings.toml"))?;
 
         for (i, rule) in status.rules.iter().enumerate() {
             if rule.location.is_none() && rule.title.is_none() && rule.ids.is_none() {
@@ -286,7 +303,17 @@ impl Curation {
                 return Err(LoadError::FixSelectsNothing(i + 1));
             }
         }
-        Ok(Curation { locations, status, tags })
+        for rename in &spellings.renames {
+            if rename.from.contains(&rename.to) {
+                return Err(LoadError::RenameToItself(rename.to.clone()));
+            }
+        }
+        Ok(Curation {
+            locations,
+            status,
+            tags,
+            spellings,
+        })
     }
 
     /// The corrected location of a room, as the rules should see it.
@@ -344,6 +371,8 @@ pub enum LoadError {
     RuleSelectsEverything(usize),
     /// A location fix naming neither a uid nor an id cannot reach a room.
     FixSelectsNothing(usize),
+    /// A rename listing its own target would loop.
+    RenameToItself(String),
 }
 
 impl std::fmt::Display for LoadError {
@@ -356,6 +385,9 @@ impl std::fmt::Display for LoadError {
             }
             LoadError::FixSelectsNothing(n) => {
                 write!(f, "locations.toml fix {n} names neither uids nor ids")
+            }
+            LoadError::RenameToItself(t) => {
+                write!(f, "spellings.toml: {t:?} lists itself as a source spelling")
             }
         }
     }

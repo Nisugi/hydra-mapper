@@ -1,0 +1,202 @@
+# Tag spellings to normalise: 44 families differing only by case, spacing
+# or a hyphen.
+#
+# `retag` rewrites each listed spelling to the canonical one and dedupes,
+# so a room carrying both `bardguild` and `bard guild` ends up with one.
+#
+# # What the split actually costs, which is less than it looks
+#
+# `docs/room-classification.md` says the guild tags are "the worst" --
+# "every guild is split almost exactly in half", so "any consumer
+# filtering on `bardguild` silently finds half the bard guilds".
+#
+# Measured, that is not what is happening. `bardguild` and `bard guild`
+# are on the SAME ten rooms, all ten, and so are both rogue guild
+# spellings, both locksmith pool spellings, and most of the rest. The
+# rooms are double-tagged, not divided. A consumer filtering on either
+# spelling finds every one.
+#
+# Only SIX of the 44 families are genuine splits, where each spelling
+# reaches rooms the other does not:
+#
+#   clericshop      `clericshop` 9 / `cleric shop` 4, only 3 shared
+#                   -> 6 rooms reachable by one spelling only
+#   pauperslocker   `paupers locker` 2 / `pauperslocker` 1
+#   aramund, mania, teashop, fwifestival   one room each
+#
+# So this pass is mostly hygiene: 1,976 distinct tags is hard to read and
+# invites the next person to invent a 45th spelling. `clericshop` is the
+# one that fixes a real lookup failure.
+#
+# # Choosing the canonical spelling
+#
+# The unspaced form wins, because it is the majority in every family that
+# has a majority (`gemshop` 20/1, `pawnshop` 21/2, `publiclockers` 89/2,
+# `node` 212/1) and because `;go2` destinations are typed as one word.
+# Where a family is an even split -- the guilds, all 9/9 or 10/10 -- the
+# unspaced form is chosen for consistency with those.
+
+# ---------------------------------------------------------- the guilds
+# All even splits on identical room sets. Redundant, not broken.
+[[rename]]
+to = "bardguild"
+from = ["bard guild"]
+
+[[rename]]
+to = "clericguild"
+from = ["cleric guild"]
+
+[[rename]]
+to = "empathguild"
+from = ["empath guild"]
+
+[[rename]]
+to = "rangerguild"
+from = ["ranger guild"]
+
+[[rename]]
+to = "rogueguild"
+from = ["rogue guild"]
+
+[[rename]]
+to = "sorcererguild"
+from = ["sorcerer guild", "Sorcerer Guild"]
+
+[[rename]]
+to = "warriorguild"
+from = ["warrior guild"]
+
+[[rename]]
+to = "wizardguild"
+from = ["wizard guild"]
+
+# ------------------------------------------------------------- services
+# `;go2` destinations. These are the ones a typo actually costs someone.
+[[rename]]
+to = "clericshop"
+from = ["cleric shop"]
+note = "A genuine split: 9 and 4 with only 3 shared, so six rooms are reachable by one spelling only."
+
+[[rename]]
+to = "gemshop"
+from = ["gem shop"]
+
+[[rename]]
+to = "pawnshop"
+from = ["pawn shop"]
+
+[[rename]]
+to = "teashop"
+from = ["tea shop"]
+
+[[rename]]
+to = "tackleshop"
+from = ["tackle shop"]
+
+[[rename]]
+to = "shipbroker"
+from = ["ship broker"]
+
+[[rename]]
+to = "debtcollector"
+from = ["debt collector"]
+
+[[rename]]
+to = "npclocksmith"
+from = ["npc locksmith"]
+
+[[rename]]
+to = "locksmithpool"
+from = ["locksmith pool", "locksmith-pool"]
+
+[[rename]]
+to = "coltaskmaster"
+from = ["col taskmaster"]
+
+[[rename]]
+to = "publiclockers"
+from = ["public lockers", "public locker"]
+note = """A spelling fix only. Which rooms are lockers, and the four overlapping schemes that answer it -- meta:locker:, meta:locker annex:, meta:che:<house>:locker and 20 more tags -- is a separate problem; this just stops one concept having three spellings before then."""
+
+# ---------------------------------------------------------------- case
+# One spelling differing only in capitalisation.
+[[rename]]
+to = "node"
+from = ["Node"]
+
+[[rename]]
+to = "sanctuary"
+from = ["Sanctuary"]
+
+[[rename]]
+to = "arkati"
+from = ["Arkati"]
+
+[[rename]]
+to = "conundrum"
+from = ["Conundrum"]
+
+# ------------------------------------------------------------ the rest
+[[rename]]
+to = "autoflarer"
+from = ["auto-flarer"]
+
+[[rename]]
+to = "cheapseats"
+from = ["cheap seats"]
+
+[[rename]]
+to = "livegames"
+from = ["live games"]
+
+[[rename]]
+to = "herbhunt"
+from = ["herb hunt"]
+
+[[rename]]
+to = "lumnisdonate"
+from = ["lumnis donate"]
+
+[[rename]]
+to = "fwifestival"
+from = ["fwi festival"]
+
+[[rename]]
+to = "mebloft"
+from = ["meb loft"]
+
+[[rename]]
+to = "mebnode"
+from = ["meb node"]
+
+[[rename]]
+to = "mscrypt"
+from = ["ms crypt"]
+
+[[rename]]
+to = "cleos"
+from = ["cleo's"]
+
+# ------------------------------------------------------------ NOT here
+#
+# Two kinds of near-duplicate are deliberately left alone.
+#
+# **The `=~` probes.** 99 tags begin `peer ...` or `set desc on; peer ...`
+# and hold a regular expression:
+#
+#   peer south =~ /Obvious exits: north, south/
+#   peer south =~ /^Obvious exits: north, south$/
+#
+# These are not tags. They are disambiguation probes telling a script how
+# to tell apart rooms sharing a title -- four `[Annex, Booth]`, six
+# `[Enemy Ship, Quarters]`, five `[The Rift]`. The two spellings above
+# differ by `^...$`, which is a different pattern, not a different
+# spelling of one: anchoring changes what matches. Merging them would
+# change behaviour. They want their own field eventually, not
+# normalisation.
+#
+# **Proper names.** `Whirlin`/`whirlin`, `Sadie`/`sadie`,
+# `Khylynnia`/`khylynnia`, `WillowHall`/`Willowhall`, `Gemaneen`,
+# `Aramund`, `Leya`, `Khy`, `Mania`. One room each, and capitalisation may
+# be carrying meaning -- a person's name against a common noun. Nothing
+# breaks by leaving them, and guessing wrong renames someone's house.

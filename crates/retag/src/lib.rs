@@ -221,6 +221,9 @@ pub fn plan(map: &Map, curation: &Curation) -> Plan {
     // Pass 2b: the disposition tags no area rule reached.
     convert_loose_tags(&mut plan, rooms, curation, &assigned, &reachable);
 
+    // Pass 2c: tag spellings.
+    normalise_spellings(&mut plan, rooms, curation);
+
     // `urchin-hideout` duplicates `meta:map:virtual room` exactly -- the
     // same 16 rooms, verified, not assumed.
     for room in rooms {
@@ -246,6 +249,29 @@ pub fn plan(map: &Map, curation: &Curation) -> Plan {
 
     plan.changes.sort_by_key(Change::id);
     plan
+}
+
+/// Rewrite tag spellings to one form per family.
+///
+/// Mostly hygiene: measured, most of the 44 families are the same rooms
+/// carrying both spellings rather than divided between them, so a
+/// consumer filtering on either already finds everything. `cleric shop`
+/// is the exception that fixes a real lookup failure -- six rooms carry
+/// one spelling only.
+fn normalise_spellings(plan: &mut Plan, rooms: &[Room], curation: &Curation) {
+    for rename in &curation.spellings.renames {
+        for room in rooms {
+            for from in &rename.from {
+                if room.tags.contains(from) {
+                    plan.changes.push(Change::RenameTag {
+                        id: room.id.0,
+                        from: from.clone(),
+                        to: rename.to.clone(),
+                    });
+                }
+            }
+        }
+    }
 }
 
 /// Fold the disposition tags no area rule reached into `meta:map:status`.
