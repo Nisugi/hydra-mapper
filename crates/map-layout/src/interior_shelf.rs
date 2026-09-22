@@ -1245,13 +1245,13 @@ mod tests {
 
         let mut rooms = Vec::new();
         // The hall: five rooms in a row, each with its own street door.
-        for (i, &street) in HALL_STREETS.iter().enumerate() {
-            let id = 500 + i as u32;
+        for (i, street) in (0u32..).zip(HALL_STREETS) {
+            let id = 500 + i;
             let mut exits = vec![door(street, "out")];
             if i > 0 {
                 exits.push(exit(id - 1, "west"));
             }
-            if i + 1 < HALL_STREETS.len() {
+            if usize::try_from(i + 1).is_ok_and(|n| n < HALL_STREETS.len()) {
                 exits.push(exit(id + 1, "east"));
             }
             rooms.push(room(id, "[Guild Hall]", IN, exits));
@@ -1261,8 +1261,8 @@ mod tests {
         for i in 0..STREETS {
             let id = 1000 + i;
             let mut exits = vec![door(2000 + i, "shop")];
-            if let Some(k) = HALL_STREETS.iter().position(|&s| s == id) {
-                exits.push(door(500 + k as u32, "hall"));
+            if let Some(k) = (0u32..).zip(HALL_STREETS).find(|&(_, s)| s == id) {
+                exits.push(door(500 + k.0, "hall"));
             }
             if i > 0 {
                 exits.push(exit(id - 1, "west"));
@@ -1289,13 +1289,13 @@ mod tests {
                 .expect("room is placed")
         };
         let apart = |a: Cell, b: Cell| (a.x - b.x).abs().max((a.y - b.y).abs());
-        for (i, &street) in HALL_STREETS.iter().enumerate() {
+        for (i, street) in (0u32..).zip(HALL_STREETS) {
             let echo = layout
                 .anchors
                 .iter()
                 .find(|a| a.room == RoomId(street))
                 .unwrap_or_else(|| panic!("street {street} is not echoed"));
-            let d = apart(cell_of(500 + i as u32), echo.cell);
+            let d = apart(cell_of(500 + i), echo.cell);
             assert!(
                 d <= 3,
                 "the hall's door onto street {street} is {d} cells long"
