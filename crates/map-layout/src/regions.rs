@@ -117,10 +117,20 @@ pub fn is_real_room(room: &Room) -> bool {
 /// that tag. It is the separate fact that there is nothing to draw.
 ///
 /// Measured on `gs.map`: 790 rooms, 784 of which were reaching an area.
-/// All 186 rooms of "the sewers of Bloodriven Village" are this, which
-/// is why that area laid out 2,944 cells wide -- `gather_the_unwalkable`
-/// collected them by shared location and the packer had no geometry to
-/// place them by.
+/// 186 of the 191 rooms of "the sewers of Bloodriven Village" are this,
+/// which is why that area laid out 2,944 cells wide --
+/// `gather_the_unwalkable` collected them by shared location and the
+/// packer had no geometry to place them by.
+///
+/// The sewers are worth naming because they are the extreme case and
+/// they are **not** a dead place: they are a paid event, entered from
+/// Gloam Pike, and the five rooms that do have exits stay. What the map
+/// holds for the rest is 186 room-instances with no recorded links at
+/// all -- an exit-count histogram of 186 zeroes and five small numbers.
+/// Whether that is because the place reconfigures, or because whatever
+/// recorded it was moved around by a script rather than walking, the map
+/// does not say, and this rule does not need to know: it drops rooms
+/// whose position is unknowable, not rooms it has judged dead.
 fn is_connected(room: &Room, pointed_at: &HashSet<RoomId>) -> bool {
     !room.exits.is_empty() || pointed_at.contains(&room.id)
 }
