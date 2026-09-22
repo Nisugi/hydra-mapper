@@ -218,66 +218,94 @@ fn direction_from_exit(kind: ExitKind, crossing: &Crossing) -> Option<Dir> {
     }
 }
 
-/// The bearing a ported script names, when its movement is a plain
-/// direction and nothing else.
+/// The bearing one movement command names, reading its **last** word.
+///
+/// `swim west` and `west` are the same bearing: the verb says how the
+/// walker crosses, the last word says which way. A command whose last
+/// word is not a bearing (`go oak door`) names none.
+fn movement_bearing(command: &str) -> Option<Dir> {
+    let cmd = lower_trim(command);
+    let last = cmd.split_whitespace().next_back()?;
+    Dir::from_exact(last).or_else(|| Dir::from_abbreviation(last))
+}
+
+/// The bearing every movement in a ported script agrees on, if they all
+/// name the same one.
 ///
 /// The old format flattened a string proc to an opaque blob, so every
 /// scripted exit was directionless by necessity. The ported steps carry
-/// the movement as text, and 396 edges of `gs.map` turn out to be an
-/// ordinary cardinal wearing a script's clothes -- `Move("southwest")`,
-/// sometimes behind a guard.
+/// their movement as text, and 946 edges of `gs.map` turn out to name an
+/// ordinary bearing.
 ///
-/// **The guard is ignored deliberately.** `if the gate is open: north`
-/// asks whether the exit can be *walked*, not which way it *points*; the
-/// room lies north whether or not the gate is shut. Walkability is the
-/// walker's question, and answering it here would throw away geometry
-/// that is not in doubt.
+/// **Several movements are usually one movement, branched.** The common
+/// shape is a pair guarded on opposite conditions:
 ///
-/// Only the **first** action is read, and only when it is a plain
-/// [`Action::Move`]. A `KeepMoving` or `MoveUntilThere` names a heading
-/// but no distance -- rowing a boat, or fog that turns the walker round --
-/// and a later step may move again, so neither says where the room sits.
-/// Whether an action can leave the room.
+/// ```text
+/// Move("west") [when ...]  |  Move("swim west") [when ...]
+/// ```
 ///
-/// Mirrors `cena_map::step::moves_whatever_is_known`'s list, but asks of
-/// one action and ignores its guard: a *guarded* second move still means
-/// the destination may be more than one bearing away, and a bearing that
-/// is only sometimes right is not one to place a room by.
-fn changes_rooms(action: &Action) -> bool {
-    matches!(
-        action,
-        Action::Move(_)
-            | Action::KeepMoving(_)
-            | Action::MoveUntilThere(_)
-            | Action::TryMove(_)
-            | Action::Moves(_)
-            | Action::KeepMovingAny(_)
-            | Action::CastAt(..)
-            | Action::MovesFromSetting(_)
-            | Action::MoveWhile(..)
-            | Action::MoveAnyWhile(..)
-            | Action::WanderWhile(_)
-            | Action::RoundWhile(..)
-            | Action::MoveByAnyExitBut(_)
-            | Action::AwaitArrival
-            | Action::AwaitAny(_)
-            | Action::Await(_)
-    )
+/// Walk west if you can, swim west if the water is up. Only one fires,
+/// and either way the room lies one step west -- so a script is read as
+/// directional when **every** movement it contains names the same
+/// bearing, however many there are and whatever guards they carry.
+///
+/// **Guards are ignored deliberately.** A guard asks whether the exit can
+/// be *walked*, not which way it *points*; the room lies west whether or
+/// not the tide is in. Walkability is the walker's question, and
+/// answering it here would throw away geometry that is not in doubt.
+///
+/// What still resolves to nothing:
+///
+/// - **Movements that disagree.** `[southwest, northwest, northwest]` is
+///   a walk through several rooms, not a bearing. 10 edges of `gs.map`.
+/// - **Any movement with no bearing at all** -- `go door`, or a
+///   `KeepMoving`/`MoveUntilThere` that names a heading but no distance
+///   (rowing a boat, or fog that turns the walker round). 1,766 edges.
+fn direction_from_steps(steps: &[Step]) -> Option<Dir> {
+    let mut agreed: Option<Dir> = None;
+    for step in steps {
+        let Some(command) = moves_by(&step.action) else {
+            continue;
+        };
+        // One movement that names no bearing makes the whole script
+        // unreadable: wherever it goes is not a direction away.
+        let dir = movement_bearing(command?)?;
+        match agreed {
+            None => agreed = Some(dir),
+            Some(seen) if seen == dir => {}
+            Some(_) => return None,
+        }
+    }
+    agreed
 }
 
-fn direction_from_steps(steps: &[Step]) -> Option<Dir> {
-    let first = steps.first()?;
-    let Action::Move(command) = &first.action else {
-        return None;
-    };
-    // Every later step must leave the room where the first one put it: a
-    // second movement of any kind means the destination is not one
-    // bearing away, whatever the first step said.
-    if steps[1..].iter().any(|s| changes_rooms(&s.action)) {
-        return None;
+/// The command a room-changing action sends, if it sends exactly one.
+///
+/// `Some(Some(cmd))` is a movement with a command to read; `Some(None)` is
+/// one that changes rooms without a single command to name -- several
+/// commands, a repeat, or a wait -- which no bearing can describe.
+/// `None` is an action that does not leave the room at all.
+///
+/// The room-changing set mirrors `cena_map::step::moves_whatever_is_known`.
+fn moves_by(action: &Action) -> Option<Option<&str>> {
+    match action {
+        Action::Move(c) | Action::TryMove(c) => Some(Some(c)),
+        Action::KeepMoving(_)
+        | Action::MoveUntilThere(_)
+        | Action::Moves(_)
+        | Action::KeepMovingAny(_)
+        | Action::CastAt(..)
+        | Action::MovesFromSetting(_)
+        | Action::MoveWhile(..)
+        | Action::MoveAnyWhile(..)
+        | Action::WanderWhile(_)
+        | Action::RoundWhile(..)
+        | Action::MoveByAnyExitBut(_)
+        | Action::AwaitArrival
+        | Action::AwaitAny(_)
+        | Action::Await(_) => Some(None),
+        _ => None,
     }
-    let cmd = lower_trim(command);
-    Dir::from_exact(&cmd).or_else(|| Dir::from_abbreviation(&cmd))
 }
 
 /// Every edge's resolved direction, computed once up front. Direction
@@ -421,6 +449,92 @@ mod tests {
             ]),
             None,
             "a two-step walk was read as a single bearing"
+        );
+    }
+
+    /// The commonest scripted shape by far: one movement, branched on
+    /// opposite conditions. Walk west if you can, swim west if the water
+    /// is up -- only one fires, and the room lies west either way. 702
+    /// edges of `gs.map` are this, and reading only the first step left
+    /// every one of them unplaced.
+    #[test]
+    fn branches_that_go_the_same_way_name_that_way() {
+        let branch = |cmd: &str| Step {
+            action: Action::Move(cmd.to_owned()),
+            when: Some(cena_map::cond::Cond::StillHere),
+        };
+        assert_eq!(
+            direction_from_steps(&[branch("west"), branch("swim west")]),
+            Some(Dir::West),
+            "a walk-or-swim pair was not read as one bearing"
+        );
+        assert_eq!(
+            direction_from_steps(&[branch("northeast"), branch("swim northeast")]),
+            Some(Dir::Northeast)
+        );
+    }
+
+    /// The bearing is the command's last word, so the verb a walker needs
+    /// does not change which way the room sits.
+    #[test]
+    fn the_verb_does_not_change_the_bearing() {
+        assert_eq!(movement_bearing("swim west"), Some(Dir::West));
+        assert_eq!(movement_bearing("climb up"), Some(Dir::Up));
+        assert_eq!(movement_bearing("west"), Some(Dir::West));
+        assert_eq!(movement_bearing("sw"), Some(Dir::Southwest));
+        // A door is not a bearing, however it is opened.
+        assert_eq!(movement_bearing("go oak door"), None);
+        assert_eq!(movement_bearing(""), None);
+    }
+
+    /// Movements that disagree are a walk through several rooms, not a
+    /// bearing -- 10 edges of `gs.map`, and placing by the first would put
+    /// the room somewhere it is not.
+    #[test]
+    fn movements_that_disagree_name_nothing() {
+        assert_eq!(
+            direction_from_steps(&[
+                step(Action::Move("southwest".to_owned())),
+                step(Action::Move("northwest".to_owned())),
+                step(Action::Move("northwest".to_owned())),
+            ]),
+            None,
+            "a multi-room walk was read as a single bearing"
+        );
+    }
+
+    /// One movement with no bearing makes the whole script unreadable,
+    /// even when the others agree: wherever `go door` leads is not a
+    /// direction away.
+    #[test]
+    fn one_bearingless_movement_spoils_the_script() {
+        assert_eq!(
+            direction_from_steps(&[
+                step(Action::Move("west".to_owned())),
+                step(Action::Move("go oak door".to_owned())),
+            ]),
+            None
+        );
+        assert_eq!(
+            direction_from_steps(&[
+                step(Action::Move("west".to_owned())),
+                step(Action::KeepMoving("west".to_owned())),
+            ]),
+            None,
+            "a repeat names a heading but no distance"
+        );
+    }
+
+    /// Steps that do not move the walker are not read at all: a pause or
+    /// a stance says nothing about geometry either way.
+    #[test]
+    fn steps_that_do_not_move_are_ignored() {
+        assert_eq!(
+            direction_from_steps(&[
+                step(Action::EmptyHands),
+                step(Action::Move("north".to_owned())),
+            ]),
+            Some(Dir::North)
         );
     }
 
