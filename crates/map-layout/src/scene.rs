@@ -151,8 +151,25 @@ pub struct SheetScene {
     pub rooms: Vec<SceneRoom>,
     pub edges: Vec<SceneEdge>,
     pub labels: Vec<GroupLabel>,
+    /// Street rooms echoed onto this sheet at the heart of their island of
+    /// buildings. Only the interiors sheet has any. Drawn distinctly: an
+    /// echo is a signpost saying "these doors open onto here", not a room
+    /// the sheet can walk to.
+    #[serde(default)]
+    pub anchors: Vec<SceneAnchor>,
     pub min: Cell,
     pub max: Cell,
+}
+
+/// A street room drawn a second time, among the buildings that open off
+/// it. The room's one true [`SceneRoom`] is on the outdoor sheet; this is
+/// where it is *also* drawn, so a door edge can be a line.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SceneAnchor {
+    pub id: RoomId,
+    pub cell: Cell,
+    /// First room title, for the label and hover text.
+    pub title: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -455,7 +472,73 @@ fn populate_labels(scene: &mut MapScene, layout: &Layout, map: &Map) {
     }
 }
 
-/// Each sheet's drawn bounds, from its placed rooms' cells.
+/// The street-room echoes on the interiors sheet, and the door edges they
+/// make drawable.
+///
+/// A shop's door edge used to have its two ends on different sheets, in
+/// different coordinate spaces, and so was never drawn -- 1,116 such edges
+/// in Wehnimer's Landing alone, which is why a shelved shop looked
+/// unrelated to anything. With the street room echoed beside its
+/// buildings, both ends share a sheet and the edge is an ordinary
+/// connector line.
+fn populate_anchors(scene: &mut MapScene, layout: &Layout, map: &Map) {
+    for anchor in &layout.anchors {
+        let Some(room) = map.room(anchor.room) else {
+            continue;
+        };
+        scene.interiors.anchors.push(SceneAnchor {
+            id: anchor.room,
+            cell: anchor.cell,
+            title: room.title.first().cloned().unwrap_or_default(),
+        });
+        // Every door from this street room to a room on the interiors
+        // sheet, read from both ends so a one-way door still draws.
+        let mut doors: Vec<RoomId> = room.exits.iter().map(|e| e.to).collect();
+        for other in map.rooms() {
+            if other.exits.iter().any(|e| e.to == anchor.room) {
+                doors.push(other.id);
+            }
+        }
+        doors.sort_unstable();
+        doors.dedup();
+        for door in doors {
+            let Some(&(Sheet::Interiors, at)) = scene.room_index.get(&door) else {
+                continue;
+            };
+            let target = &scene.interiors.rooms[at];
+            // A building with doors onto two street rooms sits by one of
+            // them; the other echo is on its own island, possibly across
+            // the sheet, and a line that long is clutter. The same cap the
+            // other interior connectors use.
+            let len = (anchor.cell.x - target.cell.x)
+                .abs()
+                .max((anchor.cell.y - target.cell.y).abs());
+            if len > INTERIOR_CONNECTOR_MAX_CELLS {
+                continue;
+            }
+            let cmd = room
+                .exits
+                .iter()
+                .find(|e| e.to == door)
+                .and_then(|e| match &e.crossing {
+                    cena_map::Crossing::Command(c) => Some(c.as_str()),
+                    _ => None,
+                })
+                .unwrap_or("");
+            scene.interiors.edges.push(SceneEdge {
+                a: anchor.cell,
+                b: target.cell,
+                a_room: anchor.room,
+                b_room: door,
+                group: target.group,
+                kind: SceneEdgeKind::Connector,
+                label: connector_label(cmd),
+            });
+        }
+    }
+}
+
+/// Each sheet's drawn bounds, from its placed rooms' cells and echoes.
 fn compute_sheet_bounds(scene: &mut MapScene) {
     for sheet in [&mut scene.outdoor, &mut scene.interiors] {
         let mut min = Cell {
@@ -466,13 +549,18 @@ fn compute_sheet_bounds(scene: &mut MapScene) {
             x: i32::MIN,
             y: i32::MIN,
         };
-        for room in &sheet.rooms {
-            min.x = min.x.min(room.cell.x);
-            min.y = min.y.min(room.cell.y);
-            max.x = max.x.max(room.cell.x);
-            max.y = max.y.max(room.cell.y);
+        for cell in sheet
+            .rooms
+            .iter()
+            .map(|r| r.cell)
+            .chain(sheet.anchors.iter().map(|a| a.cell))
+        {
+            min.x = min.x.min(cell.x);
+            min.y = min.y.min(cell.y);
+            max.x = max.x.max(cell.x);
+            max.y = max.y.max(cell.y);
         }
-        if sheet.rooms.is_empty() {
+        if sheet.rooms.is_empty() && sheet.anchors.is_empty() {
             min = Cell::default();
             max = Cell::default();
         }
@@ -496,6 +584,7 @@ pub fn build_scene(location: &str, layout: &Layout, map: &Map) -> MapScene {
 
     populate_rooms(&mut scene, layout, map, &sheet_of);
     populate_edges(&mut scene, layout, map, &dirs, &sheet_of);
+    populate_anchors(&mut scene, layout, map);
     populate_labels(&mut scene, layout, map);
     compute_sheet_bounds(&mut scene);
 
@@ -624,6 +713,93 @@ mod tests {
         assert_eq!(
             connector_label("go some extremely long movement command"),
             None
+        );
+    }
+
+    /// A street of enough corners to be a town, each with shops behind
+    /// doors. The door edge from a street room to its shop used to have
+    /// its ends on different sheets and was never drawn; with the street
+    /// room echoed among its shops, it is a connector line on the
+    /// interiors sheet, and the echo sits within the sheet's bounds.
+    #[test]
+    fn a_door_edge_is_drawn_on_the_interiors_sheet_beside_its_street_rooms_echo() {
+        const CORNERS: u32 = 12;
+        let shop = |id: u32, street: u32| Room {
+            id: RoomId(id),
+            uid: vec![cena_map::Uid(i64::from(id))],
+            title: vec![format!("[Shop {id}]")],
+            description: vec![],
+            paths: vec!["Obvious exits: out".to_owned()],
+            location: None,
+            location_unknowable: false,
+            check_location: false,
+            unique_loot: vec![],
+            climate: None,
+            terrain: None,
+            tags: vec![],
+            meta: vec![],
+            image: None,
+            exits: vec![Exit {
+                to: RoomId(street),
+                kind: ExitKind::Out,
+                crossing: cena_map::Crossing::Command("out".to_owned()),
+                cost: Some(Cost::Fixed(1.0)),
+            }],
+        };
+        let mut rooms = Vec::new();
+        for i in 0..CORNERS {
+            let street = 1000 + i;
+            rooms.push(shop(i * 2, street));
+            rooms.push(shop(i * 2 + 1, street));
+            let mut exits: Vec<(u32, &str)> = vec![(i * 2, "go shop"), (i * 2 + 1, "go shop")];
+            if i > 0 {
+                exits.push((street - 1, "west"));
+            }
+            if i + 1 < CORNERS {
+                exits.push((street + 1, "east"));
+            }
+            rooms.push(room(street, i64::from(street), &exits));
+        }
+        let map = Map::from_rooms(rooms).expect("no duplicate ids");
+        let layout = crate::generate_layout(&map);
+        assert!(!layout.interiors.is_empty(), "the shops did not shelve");
+        let scene = build_scene("street", &layout, &map);
+
+        // The first corner's echo is there, and both its shops' door
+        // edges reach it.
+        let echo = scene
+            .interiors
+            .anchors
+            .iter()
+            .find(|a| a.id == RoomId(1000))
+            .expect("street room 1000 is echoed on the interiors sheet");
+        for shop in [0u32, 1] {
+            let drawn = scene.interiors.edges.iter().any(|e| {
+                e.kind == SceneEdgeKind::Connector
+                    && ((e.a_room == RoomId(1000) && e.b_room == RoomId(shop))
+                        || (e.b_room == RoomId(1000) && e.a_room == RoomId(shop)))
+                    && (e.a == echo.cell || e.b == echo.cell)
+            });
+            assert!(
+                drawn,
+                "no door edge drawn from the echo of 1000 to shop {shop}"
+            );
+        }
+        // Still exactly one SceneRoom per room: the echo is not a room.
+        assert_eq!(
+            scene.outdoor.rooms.len() + scene.interiors.rooms.len(),
+            map.rooms().len()
+        );
+        assert!(scene.room_index.len() == map.rooms().len());
+        // And the echo lies inside the sheet's drawn bounds.
+        let b = &scene.interiors;
+        assert!(
+            (b.min.x..=b.max.x).contains(&echo.cell.x)
+                && (b.min.y..=b.max.y).contains(&echo.cell.y),
+            "echo at {:?} is outside bounds {:?}..{:?}",
+            echo.cell,
+            b.min,
+            b.max
         );
     }
 }

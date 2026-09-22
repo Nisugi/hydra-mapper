@@ -28,6 +28,10 @@ const ZOOM_PER_NOTCH: f32 = 1.0015;
 pub(crate) const ROOM_FILL: Color32 = Color32::from_rgb(60, 90, 130);
 pub(crate) const ROOM_STROKE: Color32 = Color32::from_rgb(140, 180, 220);
 pub(crate) const ENTRANCE_STROKE: Color32 = Color32::from_rgb(230, 170, 60);
+/// A street room echoed among its buildings on the interiors sheet: the
+/// entrance amber, on a dimmer fill, so it reads as a signpost to the
+/// street rather than a room of the building.
+pub(crate) const ECHO_FILL: Color32 = Color32::from_rgb(70, 60, 35);
 pub(crate) const DIRECTIONAL_LINE: Color32 = Color32::from_rgb(120, 150, 180);
 pub(crate) const CONNECTOR_LINE: Color32 = Color32::from_rgb(150, 120, 90);
 pub(crate) const LABEL_COLOR: Color32 = Color32::from_rgb(220, 220, 200);
@@ -107,6 +111,7 @@ pub fn scene(
     let painter = painter.with_clip_rect(canvas);
     draw_edges(&painter, sheet, *camera, canvas);
     draw_rooms(&painter, sheet, *camera, canvas, selected, hovered);
+    draw_echoes(&painter, sheet, *camera, canvas);
     if camera.scale >= LABEL_MIN_SCALE {
         draw_labels(&painter, sheet, *camera, canvas);
     }
@@ -160,15 +165,25 @@ fn room_at(pos: Pos2, sheet: &SheetScene, camera: Camera, canvas: Rect) -> Optio
     // Always at least a few pixels, so rooms stay clickable when zoomed
     // far out and the drawn square is tiny.
     let side = (ROOM_PX * camera.scale).max(6.0);
+    let hit = |cell: Cell| {
+        Rect::from_center_size(camera.to_screen(cell, canvas), Vec2::splat(side)).contains(pos)
+    };
+    // An echo answers with the street room it stands for: clicking the
+    // signpost inspects the real room, wherever that is drawn.
     sheet
         .rooms
         .iter()
         .rev()
-        .find(|room| {
-            Rect::from_center_size(camera.to_screen(room.cell, canvas), Vec2::splat(side))
-                .contains(pos)
-        })
+        .find(|room| hit(room.cell))
         .map(|room| room.id)
+        .or_else(|| {
+            sheet
+                .anchors
+                .iter()
+                .rev()
+                .find(|a| hit(a.cell))
+                .map(|a| a.id)
+        })
 }
 
 /// Title and id under the pointer, so a room identifies itself without a
@@ -267,6 +282,35 @@ fn draw_rooms(
                 2.0,
                 Stroke::new(1.0, SELECTED_STROKE),
                 StrokeKind::Outside,
+            );
+        }
+    }
+}
+
+/// Street rooms echoed among their buildings, drawn as signposts: the
+/// entrance amber on a dim fill, and the street's name beside it whenever
+/// the zoom leaves room for text.
+fn draw_echoes(painter: &egui::Painter, sheet: &SheetScene, camera: Camera, canvas: Rect) {
+    let side = (ROOM_PX * camera.scale).max(2.0);
+    for echo in &sheet.anchors {
+        let rect = Rect::from_center_size(camera.to_screen(echo.cell, canvas), Vec2::splat(side));
+        if !canvas.intersects(rect) {
+            continue;
+        }
+        painter.rect(
+            rect,
+            2.0 * camera.scale,
+            ECHO_FILL,
+            Stroke::new((camera.scale * 2.0).max(1.0), ENTRANCE_STROKE),
+            StrokeKind::Outside,
+        );
+        if camera.scale >= LABEL_MIN_SCALE && !echo.title.is_empty() {
+            painter.text(
+                rect.right_center() + Vec2::new(4.0, 0.0),
+                Align2::LEFT_CENTER,
+                &echo.title,
+                FontId::proportional(11.0_f32.max(11.0 * camera.scale)),
+                ENTRANCE_STROKE,
             );
         }
     }

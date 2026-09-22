@@ -31,6 +31,7 @@ const CANVAS_BG: &str = "#181a1e";
 const ROOM_FILL: &str = "#3c5a82";
 const ROOM_STROKE: &str = "#8cb4dc";
 const ENTRANCE_STROKE: &str = "#e6aa3c";
+const ECHO_FILL: &str = "#463c23";
 const DIRECTIONAL_LINE: &str = "#7896b4";
 const CONNECTOR_LINE: &str = "#96785a";
 const LABEL_COLOR: &str = "#dcdcc8";
@@ -152,6 +153,8 @@ pub fn sheet(scene: &SheetScene, title: &str) -> Result<String, NotDrawn> {
     }
     let _ = writeln!(svg, "</g>");
 
+    write_echoes(&mut svg, scene, &px, &py);
+
     if !scene.labels.is_empty() {
         let _ = writeln!(
             svg,
@@ -171,6 +174,47 @@ pub fn sheet(scene: &SheetScene, title: &str) -> Result<String, NotDrawn> {
 
     let _ = writeln!(svg, "</svg>");
     Ok(svg)
+}
+
+/// Street rooms echoed among their buildings: signposts, drawn as the
+/// canvas draws them, with the street's name beside each.
+fn write_echoes(
+    svg: &mut String,
+    scene: &SheetScene,
+    px: &dyn Fn(i32) -> f32,
+    py: &dyn Fn(i32) -> f32,
+) {
+    if scene.anchors.is_empty() {
+        return;
+    }
+    // Street rooms echoed among their buildings: signposts, drawn as the
+    // canvas draws them, with the street's name beside each.
+    let _ = writeln!(
+        svg,
+        r#"<g fill="{ECHO_FILL}" stroke="{ENTRANCE_STROKE}" stroke-width="2">"#
+    );
+    for echo in &scene.anchors {
+        let _ = writeln!(
+            svg,
+            concat!(
+                r#"<rect x="{x:.1}" y="{y:.1}" width="{side}" height="{side}" rx="2">"#,
+                r#"<title>{tip}</title></rect>"#,
+                "
+",
+                r#"<text x="{tx:.1}" y="{ty:.1}" fill="{color}" stroke="none" "#,
+                r#"font-family="sans-serif" font-size="11">{name}</text>"#
+            ),
+            x = px(echo.cell.x) - ROOM_PX / 2.0,
+            y = py(echo.cell.y) - ROOM_PX / 2.0,
+            side = ROOM_PX,
+            tip = escape(&format!("{} — {} (street)", echo.id.0, echo.title)),
+            tx = px(echo.cell.x) + ROOM_PX / 2.0 + 4.0,
+            ty = py(echo.cell.y) + 4.0,
+            color = ENTRANCE_STROKE,
+            name = escape(&echo.title),
+        );
+    }
+    let _ = writeln!(svg, "</g>");
 }
 
 /// The five characters that cannot appear as text in XML.
@@ -291,5 +335,6 @@ mod tests {
         assert_eq!(hex(crate::draw::CONNECTOR_LINE), CONNECTOR_LINE);
         assert_eq!(hex(crate::draw::LABEL_COLOR), LABEL_COLOR);
         assert_eq!(hex(crate::draw::CANVAS_BG), CANVAS_BG);
+        assert_eq!(hex(crate::draw::ECHO_FILL), ECHO_FILL);
     }
 }
