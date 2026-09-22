@@ -28,6 +28,10 @@ const ZOOM_PER_NOTCH: f32 = 1.0015;
 pub(crate) const ROOM_FILL: Color32 = Color32::from_rgb(60, 90, 130);
 pub(crate) const ROOM_STROKE: Color32 = Color32::from_rgb(140, 180, 220);
 pub(crate) const ENTRANCE_STROKE: Color32 = Color32::from_rgb(230, 170, 60);
+/// An echo's dot: the doorway amber, dimmed well below the rooms, so a
+/// town's worth of dots reads as road under the squares rather than as a
+/// field of bright points over them.
+pub(crate) const ECHO_DOT: Color32 = Color32::from_rgb(120, 90, 35);
 pub(crate) const DIRECTIONAL_LINE: Color32 = Color32::from_rgb(120, 150, 180);
 pub(crate) const CONNECTOR_LINE: Color32 = Color32::from_rgb(150, 120, 90);
 pub(crate) const LABEL_COLOR: Color32 = Color32::from_rgb(220, 220, 200);
@@ -320,7 +324,7 @@ fn draw_echoes(
         } else {
             (side * 0.18).max(1.5)
         };
-        painter.circle_filled(centre, r, ENTRANCE_STROKE);
+        painter.circle_filled(centre, r, ECHO_DOT);
         if echo.has_door && labels && camera.scale >= LABEL_MIN_SCALE && !echo.title.is_empty() {
             painter.text(
                 centre + Vec2::new(r + 4.0, 0.0),

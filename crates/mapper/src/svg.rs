@@ -31,6 +31,7 @@ const CANVAS_BG: &str = "#181a1e";
 const ROOM_FILL: &str = "#3c5a82";
 const ROOM_STROKE: &str = "#8cb4dc";
 const ENTRANCE_STROKE: &str = "#e6aa3c";
+const ECHO_DOT: &str = "#785a23";
 const DIRECTIONAL_LINE: &str = "#7896b4";
 const CONNECTOR_LINE: &str = "#96785a";
 const LABEL_COLOR: &str = "#dcdcc8";
@@ -193,7 +194,7 @@ fn write_echoes(
         let r = if echo.has_door { 5.4 } else { 3.2 };
         let _ = writeln!(
             svg,
-            r#"<circle cx="{:.1}" cy="{:.1}" r="{r}" fill="{ENTRANCE_STROKE}" stroke="none"><title>{}</title></circle>"#,
+            r#"<circle cx="{:.1}" cy="{:.1}" r="{r}" fill="{ECHO_DOT}" stroke="none"><title>{}</title></circle>"#,
             px(echo.cell.x),
             py(echo.cell.y),
             escape(&format!("{} — {}", echo.id.0, echo.title)),
@@ -325,6 +326,7 @@ mod tests {
         assert_eq!(hex(crate::draw::ROOM_FILL), ROOM_FILL);
         assert_eq!(hex(crate::draw::ROOM_STROKE), ROOM_STROKE);
         assert_eq!(hex(crate::draw::ENTRANCE_STROKE), ENTRANCE_STROKE);
+        assert_eq!(hex(crate::draw::ECHO_DOT), ECHO_DOT);
         assert_eq!(hex(crate::draw::DIRECTIONAL_LINE), DIRECTIONAL_LINE);
         assert_eq!(hex(crate::draw::CONNECTOR_LINE), CONNECTOR_LINE);
         assert_eq!(hex(crate::draw::LABEL_COLOR), LABEL_COLOR);
