@@ -106,6 +106,8 @@ enum EditAction {
     ResetLocation,
     /// Delete a plate, releasing its rooms back to their own areas.
     DeletePlate { plate: String },
+    /// Say which area a plate is a sheet of.
+    SetPlateArea { plate: String, area: String },
     /// Set, replace or clear the correction on one edge.
     SetEdge {
         a: RoomKey,
@@ -315,26 +317,77 @@ impl MapperApp {
         self.inspected = Some(next);
     }
 
-    /// Show a plate, from its key -- what the header's dropdown does.
+    /// The distinct areas the shown sheet's rooms belong to.
     ///
-    /// Selecting by name so the Plates tab's own index does not have to
-    /// be threaded through the header.
-    fn show_plate(&mut self, key: &str) {
-        let name = self.store.plate_name(key).to_owned();
-        let Some(index) = self
-            .areas
-            .list(AreaKind::Plates)
-            .iter()
-            .position(|a| a.name == name)
-        else {
-            return;
+    /// For a plate this is where its rooms came from, which is what makes
+    /// a sensible owner. Empty for anything else, since an area does not
+    /// need adopting.
+    fn areas_of_shown(&self) -> Vec<String> {
+        let Some(shown) = self.shown.as_ref() else {
+            return Vec::new();
         };
-        self.tab = AreaKind::Plates;
-        self.selected = Some(Selection {
-            kind: AreaKind::Plates,
-            index,
-        });
-        self.show_selected();
+        if self.store.owner_of(&shown.name).is_some() {
+            return Vec::new();
+        }
+        let mut found: Vec<String> = Vec::new();
+        let note = |name: &str, found: &mut Vec<String>| {
+            if !found.iter().any(|n| n == name) {
+                found.push(name.to_owned());
+            }
+        };
+        for room in shown.subset.rooms() {
+            for kind in [AreaKind::Official, AreaKind::Mapdb] {
+                if let Some(area) = self
+                    .areas
+                    .list(kind)
+                    .iter()
+                    .find(|a| a.rooms.contains(&room.id))
+                {
+                    note(&area.name, &mut found);
+                }
+            }
+            // The areas a room's own exits reach, too. A plate is usually
+            // made *from* somewhere -- the well behind a town square --
+            // and that somewhere is an official area which, by excluding
+            // its interiors, does not contain the plated room at all.
+            for exit in &room.exits {
+                for kind in [AreaKind::Official, AreaKind::Mapdb] {
+                    if let Some(area) = self
+                        .areas
+                        .list(kind)
+                        .iter()
+                        .find(|a| a.rooms.contains(&exit.to))
+                    {
+                        note(&area.name, &mut found);
+                    }
+                }
+            }
+        }
+        found.sort();
+        found
+    }
+
+    /// Show a sheet the header's dropdown offered: a plate, by its
+    /// key, or the area those plates hang off, by its name.
+    fn show_sheet(&mut self, key: &str) {
+        // A plate key resolves to its display name; an area's name is
+        // already the name, and `plate_name` passes it through.
+        let name = self.store.plate_name(key).to_owned();
+        self.show_named(&name);
+    }
+
+    /// Show whichever area or plate goes by `name`, wherever it is
+    /// listed. Plates are looked at first, since a plate's name is the
+    /// more specific thing.
+    fn show_named(&mut self, name: &str) {
+        for kind in [AreaKind::Plates, AreaKind::Official, AreaKind::Mapdb] {
+            if let Some(index) = self.areas.list(kind).iter().position(|a| a.name == name) {
+                self.tab = kind;
+                self.selected = Some(Selection { kind, index });
+                self.show_selected();
+                return;
+            }
+        }
     }
 
     /// Write the corrections out for the map combiner.
@@ -591,6 +644,13 @@ impl MapperApp {
     /// Apply an edit, save the store, and redraw whatever it changed.
     fn commit(&mut self, edit: EditAction) {
         let area = self.shown.as_ref().map(|shown| shown.name.clone());
+        // A plate made while looking at a plate belongs to that plate's
+        // own area, not to the plate: plates are sheets of an area, never
+        // of each other, and a plate owning itself is a dead end with no
+        // way back to the town it hangs off.
+        let owning_area = area
+            .as_deref()
+            .map(|name| self.store.owner_of(name).unwrap_or(name).to_owned());
         let mut membership_changed = false;
         match edit {
             EditAction::NudgeGroup { anchor, delta } => {
@@ -613,6 +673,9 @@ impl MapperApp {
                 self.store.delete_map(&plate);
                 membership_changed = true;
             }
+            EditAction::SetPlateArea { plate, area } => {
+                self.store.set_plate_area(&plate, Some(&area));
+            }
             EditAction::SetEdge { a, b, action } => {
                 let Some(area) = area else { return };
                 self.store.set_edge(&area, a, b, action);
@@ -624,7 +687,7 @@ impl MapperApp {
                 membership_changed = true;
             }
             EditAction::NewPlate { name, keys } => {
-                let plate = self.store.create_map(&name, area.as_deref());
+                let plate = self.store.create_map(&name, owning_area.as_deref());
                 for key in keys {
                     self.store.move_room(key, Some(&plate));
                 }
@@ -1301,6 +1364,9 @@ impl eframe::App for MapperApp {
 
         let mut edit: Option<EditAction> = None;
         let edit_out = &mut edit;
+        // The areas the shown sheet's rooms belong to -- the candidates
+        // for adopting an orphaned plate.
+        let areas_here = self.areas_of_shown();
         // A plate picked from the header's dropdown, jumped to after the
         // frame's panels have let go of their borrows.
         let mut jump: Option<String> = None;
@@ -1346,6 +1412,7 @@ impl eframe::App for MapperApp {
                 can_edit,
                 edit_out,
                 go_to_plate,
+                &areas_here,
             );
 
             // Fit on the first frame after a change, when the canvas size
@@ -1381,8 +1448,8 @@ impl eframe::App for MapperApp {
                 *edit_out = self.handle_drag(&hit);
             }
         });
-        if let Some(plate) = jump {
-            self.show_plate(&plate);
+        if let Some(sheet) = jump {
+            self.show_sheet(&sheet);
         }
         if let Some(edit) = edit {
             self.commit(edit);
@@ -1406,6 +1473,7 @@ fn canvas_header(
     can_edit: bool,
     edit_out: &mut Option<EditAction>,
     go_to_plate: &mut Option<String>,
+    areas_here: &[String],
 ) {
     ui.horizontal(|ui| {
         ui.heading(&shown.name);
@@ -1426,17 +1494,27 @@ fn canvas_header(
                 }
             });
         }
-        // This area's own plates, beside its other two sheets: a plate is
-        // a sheet of this area, so it belongs here rather than only in a
-        // separate tab.
-        let plates = store.plates_of(&shown.name);
-        if !plates.is_empty() {
-            egui::ComboBox::from_id_salt("area_plates")
-                .selected_text(format!("Plates ({})", plates.len()))
+        // The sheets of whichever area this belongs to, beside Outdoor and
+        // Interiors. Viewed from the area, that is its plates; viewed from
+        // one of those plates, it is the area itself and the plate's
+        // siblings -- otherwise a plate is a dead end with no way back to
+        // the town it hangs off.
+        let owner = store.owner_of(&shown.name).unwrap_or(&shown.name);
+        let mut family: Vec<(String, &str)> = vec![(owner.to_owned(), owner)];
+        family.extend(
+            store
+                .plates_of(owner)
+                .into_iter()
+                .map(|(key, name)| (key.to_owned(), name)),
+        );
+        if family.len() > 1 {
+            egui::ComboBox::from_id_salt("area_sheets")
+                .selected_text(format!("Sheets ({})", family.len()))
                 .show_ui(ui, |ui| {
-                    for (key, name) in plates {
-                        if ui.selectable_label(false, name).clicked() {
-                            *go_to_plate = Some(key.to_owned());
+                    for (key, name) in family {
+                        let here = name == shown.name;
+                        if ui.selectable_label(here, name).clicked() && !here {
+                            *go_to_plate = Some(key);
                         }
                     }
                 });
@@ -1460,12 +1538,34 @@ fn canvas_header(
             // town that merely lost rooms to one.
             if tab == AreaKind::Plates
                 && let Some(plate) = plate_key_of(store, &shown.name)
-                && ui
+            {
+                if ui
                     .button("Delete plate")
                     .on_hover_text("Release every room back to its own area")
                     .clicked()
-            {
-                *edit_out = Some(EditAction::DeletePlate { plate });
+                {
+                    *edit_out = Some(EditAction::DeletePlate {
+                        plate: plate.clone(),
+                    });
+                }
+                // An orphaned plate -- one whose area was never recorded,
+                // or was dropped as unusable on load -- has no route back
+                // to a town. Its own rooms know which areas they belong
+                // to, so those are the candidates worth offering.
+                if store.owner_of(&shown.name).is_none() && !areas_here.is_empty() {
+                    egui::ComboBox::from_id_salt("adopt_plate")
+                        .selected_text("Belongs to...")
+                        .show_ui(ui, |ui| {
+                            for area in areas_here {
+                                if ui.selectable_label(false, area.as_str()).clicked() {
+                                    *edit_out = Some(EditAction::SetPlateArea {
+                                        plate: plate.clone(),
+                                        area: area.clone(),
+                                    });
+                                }
+                            }
+                        });
+                }
             }
             let count = store
                 .location(&shown.name)
