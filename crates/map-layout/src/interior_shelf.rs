@@ -563,12 +563,11 @@ fn frames(
             .collect();
         members.sort_unstable();
         members.dedup();
-        let mut streets: Vec<RoomId> = frames
-            .iter()
-            .flat_map(|f| f.streets.iter().copied())
-            .collect();
+        // Every outdoor room, not only the streets the doors reach: the
+        // skeleton is the whole outdoor sheet, so the two sheets are one
+        // picture and a road on one is a road on the other.
+        let mut streets: Vec<RoomId> = outdoor_cell.keys().copied().collect();
         streets.sort_unstable();
-        streets.dedup();
         frames = vec![Frame { members, streets }];
     }
     (frames, claimed)
@@ -1158,7 +1157,7 @@ fn reserve_roads(
 }
 
 /// How many cells one outdoor cell becomes on the interiors sheet.
-const TOWN_SCALE: i32 = 4;
+pub const TOWN_SCALE: i32 = 4;
 
 /// The town laid down in its own shape, scaled so the buildings fit
 /// between its rooms. See the comments inside for how.

@@ -29,14 +29,14 @@ pub const LONG_EDGE_CELLS: i32 = 8;
 /// Connectors longer than this are not drawn at all.
 pub const CONNECTOR_MAX_CELLS: i32 = 30;
 
-/// The outdoor sheet is drawn at twice the solver's spacing, so every
-/// building's doorway can sit beside the street room it opens off.
-/// Measured on gs.map: at the solver's spacing a third of the Landing's
-/// 470 doorways have no free cell beside their street; at twice it, 442
-/// sit beside it and 6 have none within two cells; at three times, all
-/// 470 fit beside it, for a sheet nine times the area. Two, with the
-/// next ring out as the fallback, is the trade.
-pub const OUTDOOR_SCALE: i32 = 2;
+/// The outdoor sheet is drawn at the interiors sheet's scale, so the two
+/// are one picture: the same street is the same length on both, and a
+/// building's doorway dot on one sits where the building is on the
+/// other. Measured on gs.map for the doorway dots alone, twice the
+/// solver's spacing would do (442 of the Landing's 470 fit beside their
+/// street; at four times, all of them); the rest of the scale is for the
+/// match.
+pub const OUTDOOR_SCALE: i32 = crate::interior_shelf::TOWN_SCALE;
 /// On the interiors sheet, passages draw only when the rooms sit close
 /// together. Merged placement seats each component beside the room its
 /// anchoring passage connects to, so genuine doorways stay short; in huge
@@ -519,48 +519,29 @@ fn populate_labels(scene: &mut MapScene, layout: &Layout, map: &Map) {
 /// unrelated to anything. With the street room echoed beside its
 /// buildings, both ends share a sheet and the edge is an ordinary
 /// connector line.
-fn populate_anchors(scene: &mut MapScene, layout: &Layout, map: &Map, dirs: &DirectionMap) {
-    // The road itself: an edge between two echoes wherever their street
-    // rooms are joined outdoors, drawn as the outdoor sheet draws it --
-    // solid where the exit names a bearing, a connector where it does
-    // not. Without these the street rooms are dots among the buildings
-    // and nothing says which way the street runs.
+fn populate_anchors(scene: &mut MapScene, layout: &Layout, map: &Map) {
+    // The road itself: the outdoor sheet's own edges, each one drawn
+    // again between the echoes of its two rooms, the same kind and the
+    // same label. Not re-derived from the exits -- the two sheets are
+    // one picture, and a road that is solid on one is solid on the
+    // other. Ordinary outdoor edges are one cell long, so at the
+    // interiors' scale they are `TOWN_SCALE`; a stub stays a stub.
     let echo_cell: HashMap<RoomId, Cell> =
         layout.anchors.iter().map(|a| (a.room, a.cell)).collect();
-    let mut drawn: HashSet<(RoomId, RoomId)> = HashSet::new();
-    for anchor in &layout.anchors {
-        let Some(room) = map.room(anchor.room) else {
+    for edge in &scene.outdoor.edges {
+        let (Some(&a), Some(&b)) = (echo_cell.get(&edge.a_room), echo_cell.get(&edge.b_room))
+        else {
             continue;
         };
-        for exit in &room.exits {
-            let Some(&there) = echo_cell.get(&exit.to) else {
-                continue;
-            };
-            let key = (anchor.room.min(exit.to), anchor.room.max(exit.to));
-            if !drawn.insert(key) {
-                continue;
-            }
-            let len = (anchor.cell.x - there.x)
-                .abs()
-                .max((anchor.cell.y - there.y).abs());
-            if len > CONNECTOR_MAX_CELLS {
-                continue;
-            }
-            let kind = if dirs.get(anchor.room, exit.to).is_some() {
-                SceneEdgeKind::Directional
-            } else {
-                SceneEdgeKind::Connector
-            };
-            scene.interiors.edges.push(SceneEdge {
-                a: anchor.cell,
-                b: there,
-                a_room: anchor.room,
-                b_room: exit.to,
-                group: usize::MAX,
-                kind,
-                label: None,
-            });
-        }
+        scene.interiors.edges.push(SceneEdge {
+            a,
+            b,
+            a_room: edge.a_room,
+            b_room: edge.b_room,
+            group: usize::MAX,
+            kind: edge.kind,
+            label: edge.label.clone(),
+        });
     }
     for anchor in &layout.anchors {
         let Some(room) = map.room(anchor.room) else {
@@ -776,7 +757,7 @@ pub fn build_scene(location: &str, layout: &Layout, map: &Map) -> MapScene {
 
     populate_rooms(&mut scene, layout, map, &sheet_of);
     populate_edges(&mut scene, layout, map, &dirs, &sheet_of);
-    populate_anchors(&mut scene, layout, map, &dirs);
+    populate_anchors(&mut scene, layout, map);
     populate_labels(&mut scene, layout, map);
     scale_sheet(&mut scene.outdoor, OUTDOOR_SCALE);
     populate_doorways(&mut scene, layout, map);
