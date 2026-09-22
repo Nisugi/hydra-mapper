@@ -1724,12 +1724,17 @@ fn canvas_header(
         ui.separator();
         // What is in focus, and the way back. The rest of the area is
         // always there as dots; clicking one enters its unit.
-        {
-            let unit = shown.focus.current();
-            ui.label(format!("{} ({})", unit.name, unit.rooms.len()))
-                .on_hover_text(
-                    "In focus: drawn as squares. Click a dot to enter its building or area.",
-                );
+        match shown.focus.current() {
+            Some(unit) => {
+                ui.label(format!("{} ({})", unit.name, unit.rooms.len()))
+                    .on_hover_text(
+                        "In focus: drawn as squares. Click a dot to enter its building or area.",
+                    );
+            }
+            None => {
+                ui.weak("nothing in focus")
+                    .on_hover_text("Click a dot to bring its building or area into focus.");
+            }
         }
         ui.add_enabled_ui(shown.focus.can_go_back(), |ui| {
             if ui.button("Back").clicked() {

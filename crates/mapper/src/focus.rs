@@ -3,9 +3,10 @@
 //! An area is one continuous map -- every room has one cell, on one
 //! sheet -- and the part being looked at is a *unit*: the streets, one
 //! building, or a hunting area from the official layout. Everything else
-//! is a dot on the same roads. Clicking a dot enters the unit it belongs
-//! to; Back returns. Nothing is laid out again on a change of focus, and
-//! nothing moves.
+//! is a dot on the same roads. An area opens with nothing in focus -- the
+//! whole of it as skeleton -- and clicking a dot enters the unit it
+//! belongs to; Back returns. Nothing is laid out again on a change of
+//! focus, and nothing moves.
 //!
 //! The engine's units (`cena_map_layout::scene::Unit`: the streets, and
 //! one per building) come first, in its order, so an engine unit index is
@@ -39,8 +40,9 @@ pub struct FocusUnit {
 #[derive(Debug, Clone)]
 pub struct Focus {
     pub units: Vec<FocusUnit>,
-    current: usize,
-    stack: Vec<usize>,
+    /// `None`: nothing in focus, everything a dot.
+    current: Option<usize>,
+    stack: Vec<Option<usize>>,
     /// Rooms a door leads into, and street rooms hosting a doorway: the
     /// ways in, drawn larger when out of focus.
     doors: HashSet<RoomId>,
@@ -94,20 +96,23 @@ impl Focus {
         );
         Focus {
             units,
-            current: STREETS,
+            current: None,
             stack: Vec::new(),
             doors,
         }
     }
 
+    /// The unit in focus, if any.
     #[must_use]
-    pub fn current(&self) -> &FocusUnit {
-        &self.units[self.current]
+    pub fn current(&self) -> Option<&FocusUnit> {
+        self.current.map(|i| &self.units[i])
     }
 
+    /// The rooms in focus; none when nothing is.
     #[must_use]
     pub fn rooms(&self) -> &HashSet<RoomId> {
-        &self.units[self.current].rooms
+        static NONE: std::sync::LazyLock<HashSet<RoomId>> = std::sync::LazyLock::new(HashSet::new);
+        self.current().map_or(&NONE, |u| &u.rooms)
     }
 
     #[must_use]
@@ -149,11 +154,11 @@ impl Focus {
             return false;
         }
         let unit = self.unit_for(id);
-        if unit == self.current {
+        if Some(unit) == self.current {
             return false;
         }
         self.stack.push(self.current);
-        self.current = unit;
+        self.current = Some(unit);
         true
     }
 
@@ -172,18 +177,13 @@ impl Focus {
     /// edit re-solves the layout, and the building being looked at should
     /// still be the one being looked at afterwards.
     pub fn carry_over(&mut self, previous: &Focus) {
-        let by_name = |wanted: &FocusUnit| {
+        let by_name = |wanted: Option<usize>| -> Option<usize> {
+            let wanted = &previous.units[wanted?];
             self.units
                 .iter()
                 .position(|u| u.kind == wanted.kind && u.name == wanted.name)
         };
-        if let Some(unit) = by_name(previous.current()) {
-            self.current = unit;
-        }
-        self.stack = previous
-            .stack
-            .iter()
-            .filter_map(|&i| by_name(&previous.units[i]))
-            .collect();
+        self.current = by_name(previous.current);
+        self.stack = previous.stack.iter().map(|&i| by_name(i)).collect();
     }
 }
