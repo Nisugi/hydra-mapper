@@ -1,0 +1,422 @@
+room_id	want	title	near	reach_via	uid
+26891	verify-location	[Bloodriven Village, Pewter Road]	Bloodriven Village	from RoomId(26887) reverse of Command("north")	no-uid
+27621	verify-location	[Necropolis, Apse]	Caligos Isle	from RoomId(27620) reverse of Command("go passageway")	no-uid
+25549	verify-location	[Underground Temple, Sunken Tomb]	Duskruin Arena	from RoomId(25550) reverse of Command("north")	no-uid
+25550	verify-location	[Underground Temple, Sunken Tomb]	Duskruin Arena	from RoomId(25549) reverse of Command("south")	
+25551	verify-location	[Underground Temple, Sunken Tomb]	Duskruin Arena	from RoomId(25550) reverse of Command("east")	
+25552	verify-location	[Underground Temple, Sunken Tomb]	Duskruin Arena	from RoomId(25551) reverse of Command("northeast")	
+25553	verify-location	[Underground Temple, Sunken Tomb]	Duskruin Arena	from RoomId(25550) reverse of Command("west")	
+25554	verify-location	[Underground Temple, Sunken Tomb]	Duskruin Arena	from RoomId(25553) reverse of Command("southeast")	
+25561	verify-location	[Underground Temple, Sunken Tomb]	Duskruin Arena	from RoomId(25555) reverse of Command("southeast")	no-uid
+25562	verify-location	[Underground Temple, Sunken Tomb]	Duskruin Arena	from RoomId(25561) reverse of Command("southeast")	
+25563	verify-location	[Underground Temple, Sunken Tomb]	Duskruin Arena	from RoomId(25562) reverse of Command("southeast")	
+25564	verify-location	[Underground Temple, Sunken Tomb]	Duskruin Arena	from RoomId(25551) reverse of Command("south")	
+25565	verify-location	[Underground Temple, Sunken Tomb]	Duskruin Arena	from RoomId(25564) reverse of Command("east")	
+25566	verify-location	[Underground Temple, Sunken Tomb]	Duskruin Arena	from RoomId(25551) reverse of Command("southwest")	
+25567	verify-location	[Underground Temple, Sunken Tomb]	Duskruin Arena	from RoomId(25555) reverse of Command("east")	
+25568	verify-location	[Underground Temple, Sunken Tomb]	Duskruin Arena	from RoomId(25550) reverse of Command("south")	
+25569	verify-location	[Underground Temple, Sunken Tomb]	Duskruin Arena	from RoomId(25553) reverse of Command("northwest")	
+25570	verify-location	[Underground Temple, Sunken Tomb]	Duskruin Arena	from RoomId(25553) reverse of Command("south")	
+25571	verify-location	[Underground Temple, Sunken Tomb]	Duskruin Arena	from RoomId(25554) reverse of Command("south")	
+25572	verify-location	[Underground Temple, Sunken Tomb]	Duskruin Arena	from RoomId(25570) reverse of Command("west")	
+25573	verify-location	[Underground Temple, Sunken Tomb]	Duskruin Arena	from RoomId(25570) reverse of Command("south")	
+25574	verify-location	[Underground Temple, Sunken Tomb]	Duskruin Arena	from RoomId(25562) reverse of Command("west")	
+25575	verify-location	[Underground Temple, Sunken Tomb]	Duskruin Arena	from RoomId(25555) reverse of Command("south")	no-uid
+25576	verify-location	[Underground Temple, Sunken Tomb]	Duskruin Arena	from RoomId(25555) reverse of Command("southwest")	no-uid
+25577	verify-location	[Underground Temple, Sunken Tomb]	Duskruin Arena	from RoomId(25573) reverse of Command("southwest")	
+25578	verify-location	[Underground Temple, Sunken Tomb]	Duskruin Arena	from RoomId(25574) reverse of Command("south")	
+15621	location	[Kimbalkinnison's Magic Shoppe]	Icemule Trace	from RoomId(3444) reverse of Command("out")	no-uid
+15632	location	[Airend's Magic Shoppe]	Icemule Trace	from RoomId(15630) reverse of Command("west")	no-uid
+15635	location	[Sauthurdig's Magic Shoppe]	Icemule Trace	from RoomId(15634) reverse of Command("west")	no-uid
+15636	location	[Sauthurdig's Magic Shoppe]	Icemule Trace	from RoomId(15634) reverse of Command("southwest")	no-uid
+15637	location	[Xiandrena's Outfitting]	Icemule Trace	from RoomId(3446) reverse of Command("out")	no-uid
+15641	location	[Vrinmyst's General Store]	Icemule Trace	from RoomId(3447) reverse of Command("out")	no-uid
+15661	location	[Falcons' Combat Gear]	Icemule Trace	from RoomId(15659) reverse of Command("south")	no-uid
+15677	location	[Myrinnea's Weaponry]	Icemule Trace	from RoomId(3439) reverse of Command("out")	no-uid
+15681	location	[Rykana's General Store]	Icemule Trace	from RoomId(3440) reverse of Command("out")	no-uid
+15682	location	[Rhandi's Weaponry]	Icemule Trace	from RoomId(3440) reverse of Command("out")	no-uid
+15709	location	[Lyzzi's Outfitting]	Icemule Trace	from RoomId(2310) reverse of Command("out")	no-uid
+15715	location	[Gallaris' General Store]	Icemule Trace	from RoomId(2311) reverse of Command("out")	no-uid
+15719	location	[Lynarie's Outfitting]	Icemule Trace	from RoomId(2312) reverse of Command("out")	no-uid
+15725	location	[Moirsedai's Weaponry]	Icemule Trace	from RoomId(2314) reverse of Command("out")	no-uid
+15728	location	[Megaira's Outfitting]	Icemule Trace	from RoomId(2314) reverse of Command("out")	no-uid
+15731	location	[Ahvahna's Weaponry]	Icemule Trace	from RoomId(2315) reverse of Command("out")	no-uid
+15734	location	[Sacha's Magic Shoppe]	Icemule Trace	from RoomId(2315) reverse of Command("out")	no-uid
+15740	location	[Junarra's Magic Shoppe]	Icemule Trace	from RoomId(2316) reverse of Command("out")	no-uid
+15800	verify-location	[Bard Guild, Auditorium]	Icemule Trace	from RoomId(15696) reverse of Command("go doors")	
+15828	location	[Jerlon's Weaponry]	Icemule Trace	from RoomId(2379) reverse of Command("out")	no-uid
+15829	location	[Jesperus' Weaponry]	Icemule Trace	from RoomId(2379) reverse of Command("out")	no-uid
+15834	location	[Kenjutsu's Outfitting]	Icemule Trace	from RoomId(2377) reverse of Command("out")	no-uid
+15837	location	[Diablic's Magic Shoppe]	Icemule Trace	from RoomId(2377) reverse of Command("out")	no-uid
+15841	location	[Ashlily's Outfitting]	Icemule Trace	from RoomId(2376) reverse of Command("out")	no-uid
+15867	location	[Vistara's Outfitting]	Icemule Trace	from RoomId(2372) reverse of Command("out")	no-uid
+15868	location	[Glycn's Magic Shoppe]	Icemule Trace	from RoomId(2372) reverse of Command("out")	no-uid
+17693	verify-location	[A Derelict Hovel]	Icemule Trace	RoomId(3356) Command("go hovel")	no-uid
+18601	verify-location	[Cleric Guild, Training Annex]	Icemule Trace	from RoomId(18650) reverse of Command("east")	
+18618	verify-location	[Cleric Guild, Cauldrons]	Icemule Trace	from RoomId(18666) reverse of Command("south")	
+18726	verify-location	[Wizard Guild, Cauldron]	Icemule Trace	from RoomId(8929) reverse of Command("out")	
+18727	verify-location	[Cleric Guild, Cauldron]	Icemule Trace	from RoomId(18618) reverse of Command("out")	
+19431	verify-location	[Empath Guild, Cauldrons]	Icemule Trace	from RoomId(19429) reverse of Command("south")	
+19432	verify-location	[Empath Guild, Cauldron]	Icemule Trace	from RoomId(19431) reverse of Command("out")	
+2333	location	[House of Serenity]	Icemule Trace	from RoomId(2325) reverse of Command("go walk")	no-uid
+2453	location	[A Cozy Cottage]	Icemule Trace	from RoomId(2452) reverse of Command("go door")	no-uid
+2485	location	[Clovertooth Hall, Locker Booth]	Icemule Trace	from RoomId(2440) reverse of Steps([Step { action: TryMove("go curtain"), when: None }, Step { action: Put("close locker"), when: Some(StillHere) }, Step { action: Move("go curtain"), when: Some(StillHere) }, Step { action: Replan, when: None }])	no-uid
+3037	location	[Icemule Trace, Exterior]	Icemule Trace	from RoomId(3038) reverse of Command("south")	no-uid
+3548	location	[Aralynn's Outfitting]	Icemule Trace	from RoomId(3439) reverse of Command("out")	no-uid
+3634	location	[Tolli's Tree, Office]	Icemule Trace	from RoomId(2428) reverse of Command("out")	no-uid
+14734	location	[Phaythe's Weaponry]	Kharam-Dzu	from RoomId(1973) reverse of Command("out")	no-uid
+14742	location	[Durgrimst's General Store]	Kharam-Dzu	from RoomId(1974) reverse of Command("out")	no-uid
+14753	location	[Khistian's Magic Shoppe]	Kharam-Dzu	from RoomId(1975) reverse of Command("out")	no-uid
+14754	location	[Mumblz's Outfitting]	Kharam-Dzu	from RoomId(1975) reverse of Command("out")	no-uid
+14755	location	[Odysia's Outfitting]	Kharam-Dzu	from RoomId(1975) reverse of Command("out")	no-uid
+14761	location	[Sahreet's Outfitting]	Kharam-Dzu	from RoomId(1976) reverse of Command("out")	no-uid
+14763	location	[Sadrae's General Store]	Kharam-Dzu	from RoomId(1976) reverse of Command("out")	no-uid
+14770	location	[Orpius' Outfitting]	Kharam-Dzu	from RoomId(1977) reverse of Command("out")	no-uid
+17326	location	[Kyal's General Store]	Kharam-Dzu	from RoomId(1975) reverse of Command("out")	no-uid
+19015	verify-location	[Sorcerer Guild, Arcane Studies]	Kharam-Dzu	from RoomId(19013) reverse of Command("go door")	
+19017	verify-location	[Sorcerer Guild, Cauldrons]	Kharam-Dzu	from RoomId(19013) reverse of Command("north")	
+19018	verify-location	[Sorcerer Guild, Cauldron]	Kharam-Dzu	from RoomId(19017) reverse of Command("out")	
+20044	verify-location	[Cleric Guild, Cauldrons]	Kharam-Dzu	from RoomId(20042) reverse of Command("south")	
+20045	verify-location	[Cleric Guild, Cauldron]	Kharam-Dzu	from RoomId(20044) reverse of Command("out")	
+20883	verify-location	[Wizard Guild, Cauldron]	Kharam-Dzu	from RoomId(18082) reverse of Command("out")	
+22223	verify-location	[Officers' Prize Closet]	Maelstrom Bay	from RoomId(16202) reverse of Command("out")	no-uid
+16348	location	[Brimzstone's Outfitting]	Mist Harbor	from RoomId(12273) reverse of Command("out")	no-uid
+16362	location	[Terrangil's Outfitting]	Mist Harbor	from RoomId(12272) reverse of Command("out")	no-uid
+16384	location	[Gibreficul's General Store]	Mist Harbor	from RoomId(16539) reverse of Command("southeast")	no-uid
+16479	location	[Chellsie's Outfitting]	Mist Harbor	from RoomId(3869) reverse of Command("out")	no-uid
+16501	location	[Melisani's Outfitting]	Mist Harbor	from RoomId(3872) reverse of Command("out")	no-uid
+16503	location	[Joyau's Outfitting]	Mist Harbor	from RoomId(3872) reverse of Command("out")	no-uid
+16514	location	[Kaithairenne's General Store]	Mist Harbor	from RoomId(12264) reverse of Command("out")	no-uid
+16519	location	[Silverphenix's Magic Shoppe]	Mist Harbor	from RoomId(12263) reverse of Command("out")	no-uid
+16530	location	[Shazarian's Magic Shoppe]	Mist Harbor	from RoomId(12262) reverse of Command("out")	no-uid
+16535	location	[Shawne's Weaponry]	Mist Harbor	from RoomId(12267) reverse of Command("out")	no-uid
+16541	location	[Aevial's Outfitting]	Mist Harbor	from RoomId(12268) reverse of Command("out")	no-uid
+16544	location	[Rianon's Weaponry]	Mist Harbor	from RoomId(12268) reverse of Command("out")	no-uid
+16552	location	[Iluna's Weaponry]	Mist Harbor	from RoomId(12270) reverse of Command("out")	no-uid
+16556	location	[Jenieca's Magic Shoppe]	Mist Harbor	from RoomId(12270) reverse of Command("out")	no-uid
+16559	location	[Calypsia's Weaponry]	Mist Harbor	from RoomId(12271) reverse of Command("out")	no-uid
+16562	location	[Magora's Outfitting]	Mist Harbor	from RoomId(12271) reverse of Command("out")	no-uid
+16566	location	[Lyrsalla's Outfitting]	Mist Harbor	from RoomId(12272) reverse of Command("out")	no-uid
+16567	location	[Swilling's Weaponry]	Mist Harbor	from RoomId(12272) reverse of Command("out")	no-uid
+16568	location	[Tristriscia's Outfitting]	Mist Harbor	from RoomId(12272) reverse of Command("out")	no-uid
+16570	location	[Anire's Outfitting]	Mist Harbor	from RoomId(12273) reverse of Command("out")	no-uid
+16572	location	[Lunaryna's General Store]	Mist Harbor	from RoomId(12273) reverse of Command("out")	no-uid
+17523	location	[Jozeline's Outfitting]	Mist Harbor	from RoomId(12273) reverse of Command("out")	no-uid
+17525	location	[Dagleth's Outfitting]	Mist Harbor	from RoomId(3872) reverse of Command("out")	no-uid
+17528	location	[Leonidis' Outfitting]	Mist Harbor	from RoomId(12268) reverse of Command("out")	no-uid
+17532	location	[Fengers' Outfitting]	Mist Harbor	from RoomId(12268) reverse of Command("out")	no-uid
+17535	location	[Alyssea's Outfitting]	Mist Harbor	from RoomId(12267) reverse of Command("out")	no-uid
+25775	verify-location	[Turtle Island, Docks]	Mist Harbor	from RoomId(25774) reverse of Command("go pedal boats")	
+16031	location	[Emeralds's Magic Shoppe]	River's Rest	from RoomId(10873) reverse of Command("out")	no-uid
+16032	location	[Avelerin's Outfitting]	River's Rest	from RoomId(10873) reverse of Command("out")	no-uid
+16033	location	[Grimpl's Magic Shoppe]	River's Rest	from RoomId(10873) reverse of Command("out")	no-uid
+16036	location	[Merrelda's Weaponry]	River's Rest	from RoomId(10874) reverse of Command("out")	no-uid
+16037	location	[Jezria's Outfitting]	River's Rest	from RoomId(10874) reverse of Command("out")	no-uid
+16042	location	[Arkhaine's Outfitting]	River's Rest	from RoomId(10876) reverse of Command("out")	no-uid
+16043	location	[Katalinah's Magic Shoppe]	River's Rest	from RoomId(10876) reverse of Command("out")	no-uid
+16049	location	[Jersea's Magic Shoppe]	River's Rest	from RoomId(10877) reverse of Command("out")	no-uid
+16050	location	[Musiac's Magic Shoppe]	River's Rest	from RoomId(10877) reverse of Command("out")	no-uid
+16051	location	[Csilence's Magic Shoppe]	River's Rest	from RoomId(10877) reverse of Command("out")	no-uid
+16052	location	[Tholn's Weaponry]	River's Rest	from RoomId(10877) reverse of Command("out")	no-uid
+16053	location	[Frue's Outfitting]	River's Rest	from RoomId(10877) reverse of Command("out")	no-uid
+16066	location	[Basra's Magic Shoppe]	River's Rest	from RoomId(10875) reverse of Command("out")	no-uid
+16067	location	[Serre's Magic Shoppe]	River's Rest	from RoomId(10875) reverse of Command("out")	no-uid
+16068	location	[Ntere's Magic Shoppe]	River's Rest	from RoomId(10875) reverse of Command("out")	no-uid
+16069	location	[Alkera's Outfitting]	River's Rest	from RoomId(10875) reverse of Command("out")	no-uid
+17102	verify-location	[Sorcerer Guild, Arcane Studies]	River's Rest	from RoomId(15977) reverse of Command("go door")	
+17730	verify-location	[Empath Guild, Training Foyer]	River's Rest	from RoomId(17725) reverse of Command("out")	
+18125	verify-location	[Sorcerer Guild, Cauldron]	River's Rest	from RoomId(18919) reverse of Command("out")	
+19879	verify-location	[Wizard Guild, Cauldron]	River's Rest	from RoomId(17061) reverse of Command("out")	
+19886	verify-location	[Empath Guild, Master's Hall]	River's Rest	from RoomId(17730) reverse of Command("east")	
+19887	verify-location	[Empath Guild, Cauldrons]	River's Rest	from RoomId(19886) reverse of Command("south")	
+19888	verify-location	[Empath Guild, Cauldron]	River's Rest	from RoomId(19887) reverse of Command("out")	
+19889	verify-location	[Cleric Guild, Training Annex]	River's Rest	from RoomId(17722) reverse of Command("east")	
+19890	verify-location	[Cleric Guild, Training Foyer]	River's Rest	from RoomId(19889) reverse of Command("out")	
+19892	verify-location	[Cleric Guild, Master's Hall]	River's Rest	from RoomId(19890) reverse of Command("east")	
+19893	verify-location	[Cleric Guild, Cauldrons]	River's Rest	from RoomId(19892) reverse of Command("south")	
+19894	verify-location	[Cleric Guild, Cauldron]	River's Rest	from RoomId(19893) reverse of Command("out")	
+13523	location	[Bacl's Magic Shoppe]	Solhaven	from RoomId(9008) reverse of Command("out")	no-uid
+13545	location	[Dannyia's General Store]	Solhaven	from RoomId(9010) reverse of Command("out")	no-uid
+13548	location	[Alusa's Magic Shoppe]	Solhaven	from RoomId(9010) reverse of Command("out")	no-uid
+13629	location	[Zazian's Weaponry]	Solhaven	from RoomId(9012) reverse of Command("out")	no-uid
+13698	location	[Xolstice's General Store]	Solhaven	from RoomId(9012) reverse of Command("out")	no-uid
+13736	location	[Jalesia's Weaponry]	Solhaven	from RoomId(9013) reverse of Command("out")	no-uid
+13745	location	[Zantanya's Outfitting]	Solhaven	from RoomId(9016) reverse of Command("out")	no-uid
+13751	location	[Quentan's Magic Shoppe]	Solhaven	from RoomId(9015) reverse of Command("out")	no-uid
+13771	location	[Kelesia's Weaponry]	Solhaven	from RoomId(9018) reverse of Command("out")	no-uid
+13776	location	[Mrunk's Outfitting]	Solhaven	from RoomId(9017) reverse of Command("out")	no-uid
+13795	location	[Veisus's Weaponry]	Solhaven	from RoomId(9019) reverse of Command("out")	no-uid
+13797	location	[Solkivain's Magic Shoppe]	Solhaven	from RoomId(9019) reverse of Command("out")	no-uid
+13799	location	[Lyson's Outfitting]	Solhaven	from RoomId(9021) reverse of Command("out")	no-uid
+13805	location	[Vionne's Outfitting]	Solhaven	from RoomId(9021) reverse of Command("out")	no-uid
+13806	location	[Arlia's Outfitting]	Solhaven	from RoomId(9020) reverse of Command("out")	no-uid
+13834	location	[Futtilo's Magic Shoppe]	Solhaven	from RoomId(9021) reverse of Command("out")	no-uid
+13840	location	[Kizun's Armory]	Solhaven	from RoomId(9022) reverse of Command("out")	no-uid
+17129	location	[Karamilla's Outfitting]	Solhaven	from RoomId(9021) reverse of Command("out")	no-uid
+17131	location	[Crayaligus's Weaponry]	Solhaven	from RoomId(9022) reverse of Command("out")	no-uid
+17392	location	[Aydan's Weaponry]	Solhaven	from RoomId(9013) reverse of Command("out")	no-uid
+17393	location	[Heust's Magic Shoppe]	Solhaven	from RoomId(9014) reverse of Command("out")	no-uid
+17400	location	[Mrunk's Combat Gear]	Solhaven	from RoomId(9017) reverse of Command("out")	no-uid
+17401	location	[Baelog's Weaponry]	Solhaven	from RoomId(9017) reverse of Command("out")	no-uid
+17406	location	[Tlandro's General Store]	Solhaven	from RoomId(9021) reverse of Command("out")	no-uid
+17411	location	[Kizun's Weaponry]	Solhaven	from RoomId(9022) reverse of Command("out")	no-uid
+18631	verify-location	[Cleric Guild, Training Foyer]	Solhaven	from RoomId(18625) reverse of Steps([Step { action: Move("out"), when: None }, Step { action: Move("east"), when: None }])	
+18731	verify-location	[Cleric Guild, Training Annex]	Solhaven	from RoomId(18625) reverse of Command("east")	
+18732	verify-location	[Cleric Guild, Master's Hall]	Solhaven	from RoomId(18631) reverse of Command("east")	
+18739	verify-location	[Cleric Guild, Cauldrons]	Solhaven	from RoomId(18732) reverse of Command("south")	
+18934	verify-location	[Sorcerer Guild, Arcane Studies]	Solhaven	from RoomId(18932) reverse of Command("go door")	
+18951	verify-location	[Sorcerer Guild, Cauldron]	Solhaven	from RoomId(18950) reverse of Command("out")	
+19744	verify-location	[Empath Guild, Training Foyer]	Solhaven	from RoomId(19742) reverse of Command("out")	
+19747	verify-location	[Empath Guild, Master's Hall]	Solhaven	from RoomId(19744) reverse of Command("east")	
+19754	verify-location	[Empath Guild, Cauldrons]	Solhaven	from RoomId(19747) reverse of Command("south")	
+19755	verify-location	[Empath Guild, Cauldron]	Solhaven	from RoomId(19754) reverse of Command("out")	
+28111	verify-location	[Rumor Woods, Lodge]	Summit Academy	from RoomId(25932) reverse of Command("out")	
+10487	location	[Purgram's Weaponry]	Ta'Illistim	from RoomId(731) reverse of Command("out")	no-uid
+10672	location	[Anghosina's Weaponry]	Ta'Illistim	from RoomId(731) reverse of Command("out")	no-uid
+12	location	[Bank of Ta'Illistim, Lobby]	Ta'Illistim	from RoomId(9) reverse of Command("north")	no-uid
+13246	location	[Ta'Illistim, Tower of Light]	Ta'Illistim	from RoomId(713) reverse of Command("out")	no-uid
+13319	location	[Ta'Illistim, Tower of Fate]	Ta'Illistim	from RoomId(700) reverse of Command("out")	no-uid
+13364	location	[Ta'Illistim, Tower of Order]	Ta'Illistim	from RoomId(207) reverse of Command("out")	no-uid
+15575	location	[Ionxyx's Weaponry]	Ta'Illistim	from RoomId(730) reverse of Command("out")	no-uid
+15578	location	[Sayokia's Outfitting]	Ta'Illistim	from RoomId(731) reverse of Command("out")	no-uid
+15582	location	[Mellindya's Outfitting]	Ta'Illistim	from RoomId(733) reverse of Command("out")	no-uid
+15584	location	[Marmidoc's Weaponry]	Ta'Illistim	from RoomId(732) reverse of Command("out")	no-uid
+15589	location	[Bolissia's General Store]	Ta'Illistim	from RoomId(736) reverse of Command("out")	no-uid
+15906	verify-location	[Wizard Guild, Cauldron]	Ta'Illistim	from RoomId(16941) reverse of Command("out")	
+16397	location	[Slark's Outfitting]	Ta'Illistim	from RoomId(737) reverse of Command("out")	no-uid
+16935	location	[Aelfwine's Magic Shoppe]	Ta'Illistim	from RoomId(737) reverse of Command("out")	no-uid
+16936	location	[Maxiel's Magic Shoppe]	Ta'Illistim	from RoomId(736) reverse of Command("out")	no-uid
+18768	location	[Ornim's General Store]	Ta'Illistim	from RoomId(733) reverse of Command("out")	no-uid
+18770	location	[Velvette's General Store]	Ta'Illistim	from RoomId(732) reverse of Command("out")	no-uid
+18777	location	[Sasanach's Weaponry]	Ta'Illistim	from RoomId(16405) reverse of Command("out")	no-uid
+19002	verify-location	[Sorcerer Guild, Arcane Studies]	Ta'Illistim	from RoomId(18161) reverse of Command("go door")	
+19003	verify-location	[Sorcerer Guild, Cauldrons]	Ta'Illistim	from RoomId(18161) reverse of Command("north")	
+19004	verify-location	[Sorcerer Guild, Cauldron]	Ta'Illistim	from RoomId(19003) reverse of Command("out")	
+19512	verify-location	[Empath Guild, Training Foyer]	Ta'Illistim	from RoomId(19511) reverse of Command("out")	
+19534	verify-location	[Empath Guild, Master's Hall]	Ta'Illistim	from RoomId(19512) reverse of Command("east")	
+19535	verify-location	[Empath Guild, Cauldrons]	Ta'Illistim	from RoomId(19534) reverse of Command("south")	
+19536	verify-location	[Empath Guild, Cauldron]	Ta'Illistim	from RoomId(19535) reverse of Command("out")	
+28591	verify-location	[Villa, Black Drake Table]	Ta'Illistim	from RoomId(20704) reverse of Command("out")	
+3849	location	[Teeah's Magic Shoppe]	Ta'Illistim	from RoomId(641) reverse of Command("out")	no-uid
+3876	location	[Crystelfyra's Outfitting]	Ta'Illistim	from RoomId(641) reverse of Command("out")	no-uid
+4014	location	[Ta'Illistim Keep, Lobby]	Ta'Illistim	from RoomId(623) reverse of Command("out")	no-uid
+4016	location	[Ta'Illistim Keep, Lobby]	Ta'Illistim	from RoomId(742) reverse of Command("out")	no-uid
+5687	location	[Treeva's Outfitting]	Ta'Illistim	from RoomId(735) reverse of Command("out")	no-uid
+5694	location	[Kiyya's Magic Shoppe]	Ta'Illistim	from RoomId(730) reverse of Command("out")	no-uid
+5696	location	[Jedhan's General Store]	Ta'Illistim	from RoomId(730) reverse of Command("out")	no-uid
+643	location	[Tamarkk's Weaponry]	Ta'Illistim	from RoomId(642) reverse of Command("out")	no-uid
+8771	location	[Velvette's Outfitting]	Ta'Illistim	from RoomId(732) reverse of Command("out")	no-uid
+9307	location	[Wierdling's Magic Shoppe]	Ta'Illistim	from RoomId(737) reverse of Command("out")	no-uid
+9309	location	[Aelfwine's Outfitting]	Ta'Illistim	from RoomId(737) reverse of Command("out")	no-uid
+9401	location	[Fethilryn's Weaponry]	Ta'Illistim	from RoomId(736) reverse of Command("out")	no-uid
+13559	location	[Vengral's Weaponry]	Ta'Vaalor	from RoomId(10457) reverse of Command("out")	no-uid
+13562	location	[Galiphein's Armory]	Ta'Vaalor	from RoomId(10460) reverse of Command("out")	no-uid
+13564	location	[Limley's Weaponry]	Ta'Vaalor	from RoomId(10460) reverse of Command("out")	no-uid
+13570	location	[Briietta's Outfitting]	Ta'Vaalor	from RoomId(10462) reverse of Command("out")	no-uid
+13574	location	[Siatrie's Outfitting]	Ta'Vaalor	from RoomId(10459) reverse of Command("out")	no-uid
+13581	location	[Scarlotte's Magic Shoppe]	Ta'Vaalor	from RoomId(10456) reverse of Command("out")	no-uid
+13582	location	[Mhairaid's Magic Shoppe]	Ta'Vaalor	from RoomId(10456) reverse of Command("out")	no-uid
+13583	location	[Aurany's Lockpicks]	Ta'Vaalor	from RoomId(10456) reverse of Command("out")	no-uid
+13584	location	[Narcissiia's Outfitting]	Ta'Vaalor	from RoomId(10456) reverse of Command("out")	no-uid
+13586	location	[Laeser's Weaponry]	Ta'Vaalor	from RoomId(10450) reverse of Command("out")	no-uid
+13587	location	[Poemme's Outfitting]	Ta'Vaalor	from RoomId(10450) reverse of Command("out")	no-uid
+13588	location	[Hamioukatou's Weaponry]	Ta'Vaalor	from RoomId(10450) reverse of Command("out")	no-uid
+13599	location	[Terren's Outfitting]	Ta'Vaalor	from RoomId(10461) reverse of Command("out")	no-uid
+13606	location	[Serlisce's Outfitting]	Ta'Vaalor	from RoomId(10464) reverse of Command("out")	no-uid
+13613	location	[Nalatia's Magic Shoppe]	Ta'Vaalor	from RoomId(10453) reverse of Command("out")	no-uid
+13615	location	[Chauncie's Outfitting]	Ta'Vaalor	from RoomId(10453) reverse of Command("out")	no-uid
+13617	location	[Kathralynn's Outfitting]	Ta'Vaalor	from RoomId(10452) reverse of Command("out")	no-uid
+13620	location	[Chene's Magic Shoppe]	Ta'Vaalor	from RoomId(10449) reverse of Command("out")	no-uid
+13623	location	[Sasanach's Weaponry]	Ta'Vaalor	from RoomId(10451) reverse of Command("out")	no-uid
+13628	location	[Varrordum's Magic Shoppe]	Ta'Vaalor	from RoomId(10451) reverse of Command("out")	no-uid
+13630	location	[Lilokia's Armory]	Ta'Vaalor	from RoomId(10448) reverse of Command("out")	no-uid
+13635	location	[Kezhia's Outfitting]	Ta'Vaalor	from RoomId(10445) reverse of Command("out")	no-uid
+13645	location	[Astrallea's Outfitting]	Ta'Vaalor	from RoomId(10446) reverse of Command("out")	no-uid
+13646	location	[Olcan's Weaponry]	Ta'Vaalor	from RoomId(10446) reverse of Command("out")	no-uid
+13677	location	[Lisera's Outfitting]	Ta'Vaalor	from RoomId(13577) reverse of Command("west")	no-uid
+15528	location	[Gweniveer's Combat Gear]	Ta'Vaalor	from RoomId(10443) reverse of Command("out")	no-uid
+15529	location	[Meekia's Outfitting]	Ta'Vaalor	from RoomId(10453) reverse of Command("out")	no-uid
+15537	location	[Lylistraee's Outfitting]	Ta'Vaalor	from RoomId(10449) reverse of Command("out")	no-uid
+15542	location	[Milque's Magic Shoppe]	Ta'Vaalor	from RoomId(10448) reverse of Command("out")	no-uid
+16697	location	[Haether's General Store]	Ta'Vaalor	from RoomId(10459) reverse of Command("out")	no-uid
+16699	location	[Troisia's Combat Gear]	Ta'Vaalor	from RoomId(10448) reverse of Command("out")	no-uid
+16715	location	[Coraxe's Weaponry]	Ta'Vaalor	from RoomId(10453) reverse of Command("out")	no-uid
+17289	location	[Ariasha's Outfitting]	Ta'Vaalor	from RoomId(10463) reverse of Command("out")	no-uid
+17300	location	[Kakoon's Weaponry]	Ta'Vaalor	from RoomId(10460) reverse of Command("out")	no-uid
+17333	location	[Quille's Outfitting]	Ta'Vaalor	from RoomId(10463) reverse of Command("out")	no-uid
+17336	location	[Dorukan's General Store]	Ta'Vaalor	from RoomId(10464) reverse of Command("out")	no-uid
+17340	location	[Ambreale's Magic Shoppe]	Ta'Vaalor	from RoomId(10452) reverse of Command("out")	no-uid
+18047	location	[Quando's Weaponry]	Ta'Vaalor	from RoomId(10457) reverse of Command("out")	no-uid
+18050	location	[Euthea's Outfitting]	Ta'Vaalor	from RoomId(10463) reverse of Command("out")	no-uid
+18055	location	[Dolchai's Magic Shoppe]	Ta'Vaalor	from RoomId(10455) reverse of Command("out")	no-uid
+18060	location	[Ettore's General Store]	Ta'Vaalor	from RoomId(10452) reverse of Command("out")	no-uid
+18066	location	[Phadayls' Magic Shoppe]	Ta'Vaalor	from RoomId(10447) reverse of Command("out")	no-uid
+18077	location	[Wynterr's General Store]	Ta'Vaalor	from RoomId(18057) reverse of Command("west")	no-uid
+18078	location	[Wynterr's General Store]	Ta'Vaalor	from RoomId(18057) reverse of Command("south")	no-uid
+19812	verify-location	[Cleric Guild, Training Foyer]	Ta'Vaalor	from RoomId(19811) reverse of Command("out")	
+19827	verify-location	[Cleric Guild, Master's Hall]	Ta'Vaalor	from RoomId(19812) reverse of Command("east")	
+19830	verify-location	[Cleric Guild, Cauldron]	Ta'Vaalor	from RoomId(19828) reverse of Command("out")	
+23601	verify-location	[Catacombs, Passageway]	Ta'Vaalor	from RoomId(23561) reverse of Command("go hallway")	
+24029	verify-location	[Coliseum, Southwest Corridor]	Ta'Vaalor	from RoomId(24016) reverse of Command("northeast")	no-uid
+24031	verify-location	[Coliseum, Southwest Corridor]	Ta'Vaalor	from RoomId(24030) reverse of Command("go arch")	no-uid
+28592	verify-location	[Villa, Black Drake Table]	Ta'Vaalor	RoomId(20711) Command("go table")	
+21871	verify-location	[The Motion Of The Potion]	Talador	from RoomId(21870) reverse of Command("out")	no-uid
+22016	verify-location	[Fitzwobbin's Figures, Arena]	Talador	from RoomId(22015) reverse of Command("go hatch")	no-uid
+25636	verify-location	[A Weathered Shack]	Timmorain Road	from RoomId(25637) reverse of Command("out")	
+14566	location	[Aloreain's Weaponry]	Wehnimer's Landing	from RoomId(337) reverse of Command("out")	no-uid
+14658	location	[Museum Gallery, East Wing]	Wehnimer's Landing	from RoomId(14655) reverse of Command("west")	no-uid
+14988	location	[Kearivon's Magic Shoppe]	Wehnimer's Landing	from RoomId(375) reverse of Command("out")	no-uid
+15011	location	[Neokume's Magic Shoppe]	Wehnimer's Landing	from RoomId(338) reverse of Command("out")	no-uid
+15013	location	[Turambor's Outfitting]	Wehnimer's Landing	from RoomId(338) reverse of Command("out")	no-uid
+15014	location	[Sefifoot's Magic Shoppe]	Wehnimer's Landing	from RoomId(338) reverse of Command("out")	no-uid
+15015	location	[Zzentar's Magic Shoppe]	Wehnimer's Landing	from RoomId(338) reverse of Command("out")	no-uid
+15016	location	[Naora's Outfitting]	Wehnimer's Landing	from RoomId(370) reverse of Command("out")	no-uid
+15020	location	[Kelestra's Weaponry]	Wehnimer's Landing	from RoomId(370) reverse of Command("out")	no-uid
+15038	location	[Faiyth's Outfitting]	Wehnimer's Landing	from RoomId(3878) reverse of Command("out")	no-uid
+15042	location	[Tharken's Magic Shoppe]	Wehnimer's Landing	from RoomId(373) reverse of Command("out")	no-uid
+15046	location	[Tolwynn's Outfitting]	Wehnimer's Landing	from RoomId(373) reverse of Command("out")	no-uid
+15065	location	[Xandalf's Combat Gear]	Wehnimer's Landing	from RoomId(367) reverse of Command("out")	no-uid
+15067	location	[Ihston's Magic Shoppe]	Wehnimer's Landing	from RoomId(367) reverse of Command("out")	no-uid
+15083	location	[Laphrael's Outfitting]	Wehnimer's Landing	from RoomId(368) reverse of Command("out")	no-uid
+15084	location	[Thakirin's Magic Shoppe]	Wehnimer's Landing	from RoomId(368) reverse of Command("out")	no-uid
+15087	location	[Kristabel's Outfitting]	Wehnimer's Landing	from RoomId(368) reverse of Command("out")	no-uid
+15091	location	[Mertimus's Magic Shoppe]	Wehnimer's Landing	from RoomId(361) reverse of Command("out")	no-uid
+15092	location	[Zellyle's Outfitting]	Wehnimer's Landing	from RoomId(361) reverse of Command("out")	no-uid
+15093	location	[Celeerial's Magic Shoppe]	Wehnimer's Landing	from RoomId(363) reverse of Command("out")	no-uid
+15096	location	[Daluthas' Armory]	Wehnimer's Landing	from RoomId(363) reverse of Command("out")	no-uid
+15097	location	[Japhrimel's Outfitting]	Wehnimer's Landing	from RoomId(363) reverse of Command("out")	no-uid
+15109	location	[Fleurs' General Store]	Wehnimer's Landing	from RoomId(364) reverse of Command("out")	no-uid
+15111	location	[Cawen's General Store]	Wehnimer's Landing	from RoomId(364) reverse of Command("out")	no-uid
+15118	location	[Theia's General Store]	Wehnimer's Landing	from RoomId(359) reverse of Command("out")	no-uid
+15120	location	[Corlith's Weaponry]	Wehnimer's Landing	from RoomId(359) reverse of Command("out")	no-uid
+15123	location	[Fireblaze's Outfitting]	Wehnimer's Landing	from RoomId(358) reverse of Command("out")	no-uid
+15124	location	[Miaehia's Outfitting]	Wehnimer's Landing	from RoomId(358) reverse of Command("out")	no-uid
+15132	location	[Qitha's Weaponry]	Wehnimer's Landing	from RoomId(341) reverse of Command("out")	no-uid
+15141	location	[Lyraek's Armory]	Wehnimer's Landing	from RoomId(360) reverse of Command("out")	no-uid
+15145	location	[Jezbelle's Outfitting]	Wehnimer's Landing	from RoomId(353) reverse of Command("out")	no-uid
+15151	location	[Sorrowen's Weaponry]	Wehnimer's Landing	from RoomId(355) reverse of Command("out")	no-uid
+15157	location	[Krystala's Weaponry]	Wehnimer's Landing	from RoomId(354) reverse of Command("out")	no-uid
+15161	location	[Rogane's Combat Gear]	Wehnimer's Landing	from RoomId(354) reverse of Command("out")	no-uid
+15171	location	[Liagala's Outfitting]	Wehnimer's Landing	from RoomId(356) reverse of Command("out")	no-uid
+15177	location	[Pithy's Outfitting]	Wehnimer's Landing	from RoomId(351) reverse of Command("out")	no-uid
+15178	location	[Debia's Outfitting]	Wehnimer's Landing	from RoomId(351) reverse of Command("out")	no-uid
+15183	location	[Askip's General Store]	Wehnimer's Landing	from RoomId(350) reverse of Command("out")	no-uid
+15184	location	[Cairell's Weaponry]	Wehnimer's Landing	from RoomId(350) reverse of Command("out")	no-uid
+15188	location	[Jovana's Outfitting]	Wehnimer's Landing	from RoomId(343) reverse of Command("out")	no-uid
+15197	location	[Natook's Magic Shoppe]	Wehnimer's Landing	from RoomId(347) reverse of Command("out")	no-uid
+15203	location	[Of Flesh and Blood]	Wehnimer's Landing	from RoomId(346) reverse of Command("out")	no-uid
+15204	location	[Erindril's General Store]	Wehnimer's Landing	from RoomId(346) reverse of Command("out")	no-uid
+15206	location	[Vandele's Outfitting]	Wehnimer's Landing	from RoomId(346) reverse of Command("out")	
+15210	location	[Martaigne's Weaponry]	Wehnimer's Landing	from RoomId(345) reverse of Command("out")	no-uid
+15211	location	[Plando's Armory]	Wehnimer's Landing	from RoomId(345) reverse of Command("out")	no-uid
+15214	location	[Whistfylle's Outfitting]	Wehnimer's Landing	from RoomId(344) reverse of Command("out")	no-uid
+15215	location	[Peritta's Weaponry]	Wehnimer's Landing	from RoomId(344) reverse of Command("out")	no-uid
+15221	location	[Joscelyna's Armory]	Wehnimer's Landing	from RoomId(348) reverse of Command("out")	no-uid
+15255	location	[Belnia's Outfitting]	Wehnimer's Landing	from RoomId(15187) reverse of Command("east")	no-uid
+15256	location	[Belnia's Outfitting]	Wehnimer's Landing	from RoomId(15187) reverse of Command("west")	no-uid
+15489	verify-location	[Officers' Prize Closet]	Wehnimer's Landing	from RoomId(15481) reverse of Command("out")	no-uid
+15946	location	[Ondreian's Weaponry]	Wehnimer's Landing	from RoomId(338) reverse of Command("out")	no-uid
+15948	verify-location	[Paupers, Vault]	Wehnimer's Landing	from RoomId(7987) reverse of Steps([Step { action: TryMove("go opening"), when: None }, Step { action: Put("close locker"), when: Some(StillHere) }, Step { action: Move("go opening"), when: Some(StillHere) }])	
+15950	verify-location	[Paupers, Vault]	Wehnimer's Landing	from RoomId(7989) reverse of Steps([Step { action: TryMove("go opening"), when: None }, Step { action: Put("close locker"), when: Some(StillHere) }, Step { action: Move("go opening"), when: Some(StillHere) }, Step { action: Replan, when: None }])	
+15978	location	[Lalyia's Magic Shoppe]	Wehnimer's Landing	from RoomId(344) reverse of Command("out")	no-uid
+16574	verify-location	[Rogue Guild, Basement Workshop]	Wehnimer's Landing	from RoomId(16443) reverse of Command("north")	
+17734	verify-location	[Empath Guild, Master's Hall]	Wehnimer's Landing	from RoomId(17741) reverse of Command("north")	
+17741	verify-location	[Empath Guild, Cauldrons]	Wehnimer's Landing	from RoomId(17734) reverse of Command("south")	
+17742	verify-location	[Empath Guild, Cauldron]	Wehnimer's Landing	from RoomId(17741) reverse of Command("out")	
+18611	verify-location	[Cleric Guild, Master's Hall]	Wehnimer's Landing	from RoomId(18602) reverse of Command("east")	
+18728	verify-location	[Cleric Guild, Training Annex]	Wehnimer's Landing	from RoomId(17104) reverse of Command("east")	
+18729	verify-location	[Cleric Guild, Cauldrons]	Wehnimer's Landing	from RoomId(18611) reverse of Command("south")	
+18730	verify-location	[Cleric Guild, Cauldron]	Wehnimer's Landing	from RoomId(18729) reverse of Command("out")	
+19241	verify-location	[Empath Guild, Training Foyer]	Wehnimer's Landing	from RoomId(17734) reverse of Command("west")	
+26365	verify-location	[A Dark Corner]	Wehnimer's Landing	from RoomId(16540) reverse of Command("out")	
+26916	verify-location	[Paupers, Vault]	Wehnimer's Landing	from RoomId(7988) reverse of Steps([Step { action: TryMove("go opening"), when: None }, Step { action: Put("close locker"), when: Some(StillHere) }, Step { action: Move("go opening"), when: Some(StillHere) }])	
+26917	verify-location	[Paupers, Vault]	Wehnimer's Landing	from RoomId(15952) reverse of Steps([Step { action: TryMove("go opening"), when: None }, Step { action: Put("close locker"), when: Some(StillHere) }, Step { action: Move("go opening"), when: Some(StillHere) }])	
+26918	verify-location	[Paupers, Vault]	Wehnimer's Landing	from RoomId(15951) reverse of Steps([Step { action: TryMove("go opening"), when: None }, Step { action: Put("close locker"), when: Some(StillHere) }, Step { action: Move("go opening"), when: Some(StillHere) }])	
+26919	verify-location	[Paupers, Vault]	Wehnimer's Landing	from RoomId(24055) reverse of Steps([Step { action: TryMove("go opening"), when: None }, Step { action: Put("close locker"), when: Some(StillHere) }, Step { action: Move("go opening"), when: Some(StillHere) }, Step { action: Replan, when: None }])	
+18818	verify-location	[A Weathered Shack]	Whistler's Pass	from RoomId(54) reverse of Command("out")	
+21303	verify-location	[Officers' Prize Closet]	Willow Hall	from RoomId(21302) reverse of Command("out")	no-uid
+16866	location	[Dread's Outfitting]	Zul Logoth	from RoomId(9424) reverse of Command("out")	no-uid
+23403	verify-location	[A Dark Tunnel]	Zul Logoth	from RoomId(23402) reverse of Steps([Step { action: Cast("Sigil of Resolve"), when: Some(All([Not(Setting("ice_mode", "run")), SpellKnown("Sigil of Resolve"), SpellAffordable("Sigil of Resolve"), Not(SpellActive("Sigil of Resolve"))])) }, Step { action: Pause(4200), when: Some(Any([Setting("ice_mode", "wait"), All([Not(Setting("ice_mode", "run")), Any([EncumbranceOver(50), All([SkillUnder("survival", 50), Not(SpellActive("Haste"))])])])])) }, Step { action: Move("north"), when: None }])	
+23404	verify-location	[A Dark Tunnel]	Zul Logoth	from RoomId(23403) reverse of Steps([Step { action: Cast("Sigil of Resolve"), when: Some(All([Not(Setting("ice_mode", "run")), SpellKnown("Sigil of Resolve"), SpellAffordable("Sigil of Resolve"), Not(SpellActive("Sigil of Resolve"))])) }, Step { action: Pause(4200), when: Some(Any([Setting("ice_mode", "wait"), All([Not(Setting("ice_mode", "run")), Any([EncumbranceOver(50), All([SkillUnder("survival", 50), Not(SpellActive("Haste"))])])])])) }, Step { action: Move("north"), when: None }])	
+18115	verify-location	[Sorcerer Guild, Arcane Studies]	the Coastal Cliffs	from RoomId(18114) reverse of Command("go door")	
+18124	verify-location	[Sorcerer Guild, Cauldrons]	the Coastal Cliffs	from RoomId(18123) reverse of Command("north")	
+18927	verify-location	[Sorcerer Guild, Cauldron]	the Coastal Cliffs	from RoomId(18124) reverse of Command("out")	
+21378	verify-location	[Linen or Leather]	the Feywrot Mire	from RoomId(20143) reverse of Command("out")	no-uid
+21389	verify-location	[Delightful Diversions]	the Feywrot Mire	from RoomId(20164) reverse of Command("go door")	no-uid
+21398	verify-location	[The Evening's Heiress, Barroom]	the Feywrot Mire	from RoomId(20317) reverse of Command("out")	no-uid
+21439	verify-location	[Muck o' the Mire]	the Feywrot Mire	from RoomId(20263) reverse of Command("out")	no-uid
+21443	verify-location	[Booze and Brews, Mud]	the Feywrot Mire	from RoomId(20128) reverse of Command("out")	no-uid
+21445	verify-location	[On the Lighter Side]	the Feywrot Mire	from RoomId(20269) reverse of Command("out")	no-uid
+21457	verify-location	[A Fine Line Between]	the Feywrot Mire	from RoomId(20125) reverse of Command("out")	no-uid
+21458	verify-location	[The Blackshire Emporium]	the Feywrot Mire	from RoomId(20125) reverse of Command("out")	no-uid
+21464	verify-location	[Instrumentality]	the Feywrot Mire	from RoomId(20143) reverse of Command("out")	no-uid
+21472	verify-location	[The Painted Talon]	the Feywrot Mire	from RoomId(20184) reverse of Command("out")	no-uid
+21475	verify-location	[Like Nobody's Watching, Entry]	the Feywrot Mire	from RoomId(20192) reverse of Command("out")	no-uid
+21486	verify-location	[Friendly Necessities, Shop]	the Feywrot Mire	from RoomId(20213) reverse of Command("out")	no-uid
+21507	verify-location	[The Golden Rule]	the Feywrot Mire	from RoomId(20291) reverse of Command("out")	no-uid
+21508	verify-location	[Boil and Toil]	the Feywrot Mire	from RoomId(20288) reverse of Command("out")	no-uid
+21511	verify-location	[Futile Gestures]	the Feywrot Mire	from RoomId(20288) reverse of Command("out")	no-uid
+21514	verify-location	[Feywrot Mire, Dilapidated Yard]	the Feywrot Mire	from RoomId(20275) reverse of Command("out")	no-uid
+21523	verify-location	[Monumental Mementos]	the Feywrot Mire	from RoomId(20300) reverse of Command("out")	no-uid
+21601	verify-location	[Fen Furnishings]	the Feywrot Mire	from RoomId(20323) reverse of Command("go entrance")	no-uid
+21865	verify-location	[Caravan Consignments]	the Feywrot Mire	from RoomId(20264) reverse of Command("go door")	no-uid
+22476	verify-location	[Line in the Sand]	the Feywrot Mire	from RoomId(20266) reverse of Command("out")	no-uid
+22485	verify-location	[Off the Beaten Trail]	the Feywrot Mire	from RoomId(20143) reverse of Command("out")	no-uid
+22494	verify-location	[Get A Grip]	the Feywrot Mire	from RoomId(20291) reverse of Command("out")	no-uid
+22495	verify-location	[Quiver And Despair]	the Feywrot Mire	from RoomId(20291) reverse of Command("out")	no-uid
+22501	verify-location	[Pelil's Costumery]	the Feywrot Mire	from RoomId(20255) reverse of Command("out")	no-uid
+22505	verify-location	[Clepsydra]	the Feywrot Mire	from RoomId(20303) reverse of Command("out")	no-uid
+22513	verify-location	[Come To Heel, Showroom]	the Feywrot Mire	from RoomId(20307) reverse of Command("out")	no-uid
+22523	verify-location	[Pucker Up]	the Feywrot Mire	from RoomId(20189) reverse of Command("out")	no-uid
+22530	verify-location	[Playing Dead, Showroom]	the Feywrot Mire	from RoomId(20151) reverse of Command("out")	no-uid
+22546	verify-location	[Cache Cabin]	the Feywrot Mire	from RoomId(20325) reverse of Command("out")	no-uid
+22553	verify-location	[Sing Me an Epithet]	the Feywrot Mire	from RoomId(20336) reverse of Command("out")	no-uid
+22557	verify-location	[Blacksmith's Stall]	the Feywrot Mire	from RoomId(20339) reverse of Command("out")	no-uid
+22568	verify-location	[Ruined Office]	the Feywrot Mire	from RoomId(20353) reverse of Command("out")	no-uid
+22569	verify-location	[A Teak Shack, Pole Party]	the Feywrot Mire	from RoomId(20353) reverse of Command("out")	no-uid
+22571	verify-location	[Smuggling Tunnels, Passage]	the Feywrot Mire	from RoomId(20122) reverse of Command("go indentations")	no-uid
+22572	verify-location	[A Haphazard Wooden Shack]	the Feywrot Mire	from RoomId(20122) reverse of Command("out")	no-uid
+22573	verify-location	[Let It Burn]	the Feywrot Mire	from RoomId(20111) reverse of Command("go door")	no-uid
+23159	verify-location	[Treasure Trove]	the Feywrot Mire	from RoomId(20348) reverse of Command("go cave opening")	no-uid
+24321	verify-location	[Fen Furnishings]	the Feywrot Mire	from RoomId(20323) reverse of Steps([Step { action: Move("go entrance"), when: None }])	no-uid
+24324	verify-location	[Necropolis, Apse]	the Feywrot Mire	from RoomId(24323) reverse of Command("go passageway")	no-uid
+25340	verify-location	[Let It Burn]	the Feywrot Mire	from RoomId(20111) reverse of Command("go door")	no-uid
+25347	verify-location	[Smuggling Tunnels, Passage]	the Feywrot Mire	from RoomId(20122) reverse of Command("go indentations")	no-uid
+25431	verify-location	[Caravan Consignments]	the Feywrot Mire	from RoomId(20264) reverse of Command("go narrow door")	no-uid
+25471	verify-location	[Treasure Trove]	the Feywrot Mire	from RoomId(20348) reverse of Command("go opening")	no-uid
+5837	verify-location	[Glaise Cnoc, Cemetery]	the Glaise Cnoc Cemetery	from RoomId(5836) reverse of Command("southwest")	
+5838	verify-location	[Glaise Cnoc, Cemetery]	the Glaise Cnoc Cemetery	from RoomId(5837) reverse of Command("southwest")	
+3644	location	[Sea Breeze Tavern, Front Steps]	the Isle of Four Winds	from RoomId(3643) reverse of Command("south")	no-uid
+23186	verify-location	[A Weathered Shack]	the Lower Dragonsclaw	from RoomId(426) reverse of Command("out")	
+7907	location	[A Tree-Lined Walkway]	the Lower Dragonsclaw	from RoomId(418) reverse of Command("go walkway")	no-uid
+2927	verify-location	[Northward Trail, Snow Plains]	the Sleeping Lady Mountains	from RoomId(2926) reverse of Command("east")	
+23529	verify-location	[A Weathered Shack]	the South River Road	from RoomId(11013) reverse of Command("out")	
+8548	verify-location	[Mountain Path, Ledge]	the Upper Trollfang	from RoomId(8547) reverse of Command("down")	
+23606	verify-location	[Catacombs, Fetid Alcove]	the catacombs	from RoomId(5924) reverse of Steps([Step { action: Put("search"), when: None }, Step { action: Move("go crevice"), when: None }])	
+13253	location	[Massive Tower, Nexus]	the free port of Solhaven	from RoomId(1599) reverse of Command("out")	no-uid
+25677	verify-location	[A Derelict Hovel]	the free port of Solhaven	RoomId(1467) Command("go hovel")	no-uid
+13173	verify-location	[A Weathered Shack]	the holdings of Vornavis	from RoomId(4618) reverse of Command("out")	
+12567	verify-location	[Glade]	the old Logging Road	from RoomId(12566) reverse of Command("north")	
+1497	location	[Solhaven, Grebe and Eider]	the southern part of Solhaven	from RoomId(1496) reverse of Command("northwest")	no-uid
+1498	location	[Solhaven, Grebe and Eastending]	the southern part of Solhaven	from RoomId(1532) reverse of Command("east")	no-uid
+1499	location	[Solhaven, Eastbridge End]	the southern part of Solhaven	from RoomId(1500) reverse of Command("north")	no-uid
+1537	location	[Solhaven, Baron's Bridge Road]	the southern part of Solhaven	from RoomId(1491) reverse of Command("north")	no-uid
+1555	location	[Solhaven, No Name Road]	the southern part of Solhaven	from RoomId(1554) reverse of Command("south")	no-uid
+1558	location	[Solhaven, Murre and Grebe]	the southern part of Solhaven	from RoomId(1536) reverse of Command("north")	no-uid
+1570	location	[Solhaven, Beacon Circle South]	the southern part of Solhaven	from RoomId(1565) reverse of Command("north")	no-uid
+1583	location	[Solhaven, South Market Pier]	the southern part of Solhaven	from RoomId(1547) reverse of Command("west")	no-uid
+1591	location	[Solhaven, Scaup and Limpet]	the southern part of Solhaven	from RoomId(1594) reverse of Command("northwest")	no-uid
+1593	location	[Solhaven, Scaup Road]	the southern part of Solhaven	from RoomId(1500) reverse of Command("east")	no-uid
+20749	verify-location	[A Weathered Shack]	the southern snowfields	from RoomId(2491) reverse of Command("out")	
+3056	location	[A Snow-covered Path]	the southern snowfields	from RoomId(2490) reverse of Command("south")	no-uid
+18964	verify-location	[Sorcerer Guild, Arcane Studies]	the town of Icemule Trace	from RoomId(18963) reverse of Command("go door")	
+18967	verify-location	[Sorcerer Guild, Cauldrons]	the town of Icemule Trace	from RoomId(18965) reverse of Command("north")	
+18968	verify-location	[Sorcerer Guild, Cauldron]	the town of Icemule Trace	from RoomId(18967) reverse of Command("out")	
+3348	location	[The Heart of the Art, Icemule]	the town of Icemule Trace	from RoomId(2363) reverse of Command("go portal")	no-uid
+18012	location	[Marble Tunnel]	the town of Kharam-Dzu	from RoomId(1921) reverse of Command("go door")	no-uid
+19506	verify-location	[A Derelict Hovel]	the town of Kharam-Dzu	from RoomId(1931) reverse of Command("out")	
+26237	verify-location	[The Motion Of The Potion]	the town of Kharam-Dzu	from RoomId(12392) reverse of Command("out")	no-uid
+24241	verify-location	[Feywrot Caverns, Gnarled Roots]	the town of Wehnimer's Landing	from RoomId(313) reverse of Steps([Step { action: KeepMoving("climb root"), when: None }, Step { action: AwaitArrival, when: None }])	no-uid
+3725	location	[Dragon Bones Tent]	the town of Wehnimer's Landing	from RoomId(263) reverse of Command("out")	no-uid
+8678	location	[Cholgar's Bathhouse, Entryway]	the town of Wehnimer's Landing	from RoomId(226) reverse of Command("out")	no-uid
+3357	verify-location	[A Derelict Hovel]	the tunnels and caverns of Zul Logoth	RoomId(1000) Command("go hovel")	no-uid
