@@ -53,6 +53,42 @@ pub const CONTESTED_SHARE: usize = 40;
 /// rooms of road with their own label -- and joins whatever it opens onto.
 pub const TINY_ROOMS: usize = 6;
 
+/// The tag on a room that is a menu rather than a place.
+///
+/// An urchin hideout has no geography: all 16 of them are a single room
+/// whose exits are `urchin guide <somewhere>` commands -- 60 of them from
+/// the Landing's, reaching every shop and gate in town. Drawing it puts a
+/// room on the sheet that nobody can walk to and lines across the map
+/// that nobody can walk along.
+///
+/// The premium halls' `premium:transport`, `premium supernode` and
+/// `premium teleportation jewelry` rooms are **not** this: Zephyr Hall's
+/// Common Room and Seamist Hall's Central Lounge are places, with
+/// ordinary doors to the rest of their building. They carry a
+/// [`Crossing::PassThrough`] to a hideout as well, which
+/// [`is_passage`] already declines to follow. The room stays; the
+/// teleport does not.
+pub const VIRTUAL_ROOM_TAG: &str = "urchin-hideout";
+
+/// Whether a room is a place at all, or a menu wearing a room's clothes.
+#[must_use]
+pub fn is_real_room(room: &Room) -> bool {
+    !room.tags.iter().any(|t| t == VIRTUAL_ROOM_TAG)
+}
+
+/// Whether an exit is something a person can walk along, and so whether
+/// it says anything about where two rooms are in relation to each other.
+///
+/// Routines (the Elemental Confluence, the Rift -- travel puzzles whose
+/// destinations shuffle) and urchin pass-throughs are not walks, and an
+/// unported or unknown crossing cannot be walked at all. None of them is
+/// a passage, for grouping *or* for drawing: a line on the map is a claim
+/// that you can get there that way.
+#[must_use]
+pub fn is_passage(exit: &cena_map::Exit) -> bool {
+    matches!(exit.crossing, Crossing::Command(_) | Crossing::Steps(_))
+}
+
 /// One derived area.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DerivedArea {
@@ -116,7 +152,15 @@ pub fn region_of(location: &str) -> &str {
 /// Every area the map's rooms fall into, largest first.
 #[must_use]
 pub fn derive_areas(map: &Map) -> Vec<DerivedArea> {
-    let rooms = map.rooms();
+    // A menu is not a place: the hideouts never reach an area at all, so
+    // no consumer downstream has to know they exist.
+    let rooms: Vec<Room> = map
+        .rooms()
+        .iter()
+        .filter(|r| is_real_room(r))
+        .cloned()
+        .collect();
+    let rooms = rooms.as_slice();
     let sense: Vec<Sense> = rooms.iter().map(room_sense).collect();
     let adj = adjacency(rooms);
 
@@ -326,8 +370,7 @@ fn adjacency(rooms: &[Room]) -> Vec<Vec<usize>> {
         .iter()
         .map(|r| r.location.as_deref().map(region_of))
         .collect();
-    let passage =
-        |exit: &cena_map::Exit| matches!(exit.crossing, Crossing::Command(_) | Crossing::Steps(_));
+    let passage = |exit: &cena_map::Exit| is_passage(exit);
     let is_hub: Vec<bool> = rooms
         .iter()
         .enumerate()
@@ -531,6 +574,13 @@ mod tests {
     const OUT: &str = "Obvious paths: north";
     const IN: &str = "Obvious exits: out";
 
+    fn tagged(id: u32, title: &str, location: Option<&str>, tag: &str, to: &[u32]) -> Room {
+        Room {
+            tags: vec![tag.to_owned()],
+            ..room(id, title, location, IN, to)
+        }
+    }
+
     fn room(id: u32, title: &str, location: Option<&str>, paths: &str, to: &[u32]) -> Room {
         Room {
             id: RoomId(id),
@@ -670,11 +720,11 @@ mod tests {
 
     /// The Landing's urchin hideout has an exit to a hideout in each of
     /// three other towns; each town's street has an exit into its own
-    /// hideout. Those hops are not passages: the hideout is a room of the
-    /// Landing, and the towns stay apart.
+    /// hideout. A hideout is a menu, not a place: it lands in no area at
+    /// all, and the towns it reaches stay apart.
     #[test]
     #[allow(clippy::cast_possible_truncation)] // fixture ids
-    fn a_hideout_joins_its_town_and_fuses_nothing() {
+    fn a_hideout_is_no_place_and_fuses_nothing() {
         let mut rooms = Vec::new();
         for (t, town) in ["Wehn", "Sol", "Ice", "Riv"].iter().enumerate() {
             let base = 100 * (t as u32 + 1);
@@ -696,11 +746,11 @@ mod tests {
             // The hideout: back to its street, and on to the others'.
             let mut to: Vec<u32> = vec![base];
             to.extend((1..=4u32).map(|o| o * 100 + 50).filter(|&h| h != base + 50));
-            rooms.push(room(
+            rooms.push(tagged(
                 base + 50,
                 &format!("[{town} - Urchin Hideout]"),
                 Some(town),
-                IN,
+                VIRTUAL_ROOM_TAG,
                 &to,
             ));
         }
@@ -717,11 +767,12 @@ mod tests {
                 pair[0].name
             );
         }
-        assert_eq!(
-            area_of(&areas, 150).rooms,
-            area_of(&areas, 100).rooms,
-            "the hideout left its town"
-        );
+        for base in [100, 200, 300, 400] {
+            assert!(
+                !areas.iter().any(|a| a.rooms.contains(&RoomId(base + 50))),
+                "a hideout reached an area"
+            );
+        }
     }
 
     #[test]
