@@ -264,12 +264,14 @@ fn movement_bearing(command: &str) -> Option<Dir> {
 fn direction_from_steps(steps: &[Step]) -> Option<Dir> {
     let mut agreed: Option<Dir> = None;
     for step in steps {
-        let Some(command) = moves_by(&step.action) else {
-            continue;
+        let command = match moves_by(&step.action) {
+            Moves::By(command) => command,
+            // One movement that names no bearing makes the whole script
+            // unreadable: wherever it goes is not a direction away.
+            Moves::Somehow => return None,
+            Moves::Not => continue,
         };
-        // One movement that names no bearing makes the whole script
-        // unreadable: wherever it goes is not a direction away.
-        let dir = movement_bearing(command?)?;
+        let dir = movement_bearing(command)?;
         match agreed {
             None => agreed = Some(dir),
             Some(seen) if seen == dir => {}
@@ -279,17 +281,23 @@ fn direction_from_steps(steps: &[Step]) -> Option<Dir> {
     agreed
 }
 
-/// The command a room-changing action sends, if it sends exactly one.
-///
-/// `Some(Some(cmd))` is a movement with a command to read; `Some(None)` is
-/// one that changes rooms without a single command to name -- several
-/// commands, a repeat, or a wait -- which no bearing can describe.
-/// `None` is an action that does not leave the room at all.
+/// What one step does to the walker's room.
+enum Moves<'a> {
+    /// Leaves the room by sending this one command.
+    By(&'a str),
+    /// Leaves the room, but by no single command a bearing could read:
+    /// several commands, a repeat, or a wait.
+    Somehow,
+    /// Stays put -- a pause, a stance, a thing put down.
+    Not,
+}
+
+/// Whether a step leaves the room, and by what.
 ///
 /// The room-changing set mirrors `cena_map::step::moves_whatever_is_known`.
-fn moves_by(action: &Action) -> Option<Option<&str>> {
+fn moves_by(action: &Action) -> Moves<'_> {
     match action {
-        Action::Move(c) | Action::TryMove(c) => Some(Some(c)),
+        Action::Move(c) | Action::TryMove(c) => Moves::By(c),
         Action::KeepMoving(_)
         | Action::MoveUntilThere(_)
         | Action::Moves(_)
@@ -303,8 +311,8 @@ fn moves_by(action: &Action) -> Option<Option<&str>> {
         | Action::MoveByAnyExitBut(_)
         | Action::AwaitArrival
         | Action::AwaitAny(_)
-        | Action::Await(_) => Some(None),
-        _ => None,
+        | Action::Await(_) => Moves::Somehow,
+        _ => Moves::Not,
     }
 }
 
