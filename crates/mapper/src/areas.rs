@@ -1,15 +1,28 @@
 //! The two area lists a person can browse the map by.
 //!
-//! A room belongs to **two** different groupings at once, and neither one
-//! contains the other. `research/jev-trial/areas.py` measured the overlap
-//! and found it genuinely cross-cutting: *"66 official areas span several
-//! locations and 53 locations span several official areas."* So the window
-//! offers both lists rather than picking a winner:
+//! Two lists, from two sources, over one map -- and **no room appears in
+//! both**:
 //!
 //! - **Official** -- Simutronics' own layout areas, the unit their
 //!   hand-drawn artwork is positioned in. Only some of the map has them.
 //! - **Mapdb** -- what the game's `location` verb answers, carried on
-//!   [`cena_map::Room::location`]. Covers the rest.
+//!   [`cena_map::Room::location`]. Covers everything the official layout
+//!   does not.
+//!
+//! **Official layout is truth.** Where it covers a room, it wins, and that
+//! room is not listed again under its mapdb location. The reason is
+//! curation: the official areas are clean, deliberate splits, whereas
+//! mapdb `location` routinely cuts a building into areas of one or two
+//! rooms, so browsing by it alone buries a town under its own shopfronts.
+//! `research/jev-trial/areas.py` applies exactly this precedence when it
+//! assigns each room a single area.
+//!
+//! The two groupings genuinely cross-cut -- `areas.py` measured it: *"66
+//! official areas span several locations and 53 locations span several
+//! official areas."* That is why the split is done per room rather than
+//! per name: a location partly inside an official area keeps only its
+//! unclaimed rooms, and one wholly inside it drops out of the mapdb list
+//! altogether.
 //!
 //! Only the official list needs a data file. `gs.map` cannot supply it:
 //! the map carries `image.file`, but those are raw artwork filenames, both
@@ -19,7 +32,7 @@
 //! that pipeline at runtime, its output ships with this crate, so the
 //! explorer stays standalone as `plan/26` requires.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use cena_map::{Map, RoomId};
 
@@ -68,15 +81,28 @@ pub struct Areas {
 impl Areas {
     /// Build both lists for `map`.
     ///
+    /// **Official layout is truth, and the two lists do not overlap.** A
+    /// room an official area claims is not listed a second time under its
+    /// mapdb location: the official layout is the curated split, whereas
+    /// mapdb `location` frequently cuts a building into areas of one or
+    /// two rooms. So the official list is taken first and the mapdb list
+    /// covers only what is left -- the same precedence `areas.py` applies
+    /// when it assigns each room exactly one area.
+    ///
     /// The official list is intersected with the rooms actually present:
     /// `areas.tsv` was generated against one map file, and a room it names
     /// that this map does not have would otherwise produce an area that
     /// draws as a hole.
     #[must_use]
     pub fn build(map: &Map) -> Areas {
+        let official = official_areas(map);
+        let claimed: HashSet<RoomId> = official
+            .iter()
+            .flat_map(|a| a.rooms.iter().copied())
+            .collect();
         Areas {
-            official: official_areas(map),
-            mapdb: mapdb_areas(map),
+            mapdb: mapdb_areas(map, &claimed),
+            official,
         }
     }
 
@@ -138,12 +164,21 @@ fn official_areas(map: &Map) -> Vec<Area> {
     areas
 }
 
-/// Every distinct [`cena_map::Room::location`], with its rooms. Rooms with
-/// no location group under one bucket rather than vanishing -- a third of
-/// the map has none, and it is still worth being able to look at.
-fn mapdb_areas(map: &Map) -> Vec<Area> {
+/// Every distinct [`cena_map::Room::location`] among the rooms no official
+/// area `claimed`, with its rooms. Rooms with no location group under one
+/// bucket rather than vanishing -- a good part of the map has none, and it
+/// is still worth being able to look at.
+///
+/// A location whose rooms are *all* claimed disappears from this list
+/// entirely, which is the point: the official layout already shows those
+/// rooms under a curated name, and mapdb would re-list them split into
+/// ones and twos.
+fn mapdb_areas(map: &Map, claimed: &HashSet<RoomId>) -> Vec<Area> {
     let mut by_location: BTreeMap<&str, Vec<RoomId>> = BTreeMap::new();
     for room in map.rooms() {
+        if claimed.contains(&room.id) {
+            continue;
+        }
         by_location
             .entry(room.location.as_deref().unwrap_or(""))
             .or_default()
@@ -192,5 +227,61 @@ mod tests {
     fn official_areas_are_filtered_to_the_map() {
         let map = Map::from_rooms(Vec::new()).expect("an empty map is a map");
         assert!(official_areas(&map).is_empty());
+    }
+
+    /// The rule the lists exist to keep: official layout is truth, so a
+    /// room it claims is never listed again under its mapdb location.
+    #[test]
+    fn a_claimed_room_is_not_listed_twice() {
+        let claimed = RoomId(7);
+        let rooms = vec![
+            room_in(claimed, "Some Shop"),
+            room_in(RoomId(8), "Some Shop"),
+            room_in(RoomId(9), "Elsewhere"),
+        ];
+        let map = Map::from_rooms(rooms).expect("no duplicate ids");
+
+        let mapdb = mapdb_areas(&map, &std::iter::once(claimed).collect());
+        let listed: Vec<RoomId> = mapdb.iter().flat_map(|a| a.rooms.iter().copied()).collect();
+
+        assert!(
+            !listed.contains(&claimed),
+            "a claimed room was listed again"
+        );
+        // Its unclaimed neighbour still appears, under the same name: the
+        // split is per room, not per location.
+        assert!(listed.contains(&RoomId(8)));
+        assert!(listed.contains(&RoomId(9)));
+    }
+
+    /// A location every one of whose rooms is claimed drops out of the
+    /// mapdb list rather than lingering as an empty name.
+    #[test]
+    fn a_wholly_claimed_location_disappears() {
+        let rooms = vec![room_in(RoomId(1), "Inside An Official Area")];
+        let map = Map::from_rooms(rooms).expect("no duplicate ids");
+        let claimed = std::iter::once(RoomId(1)).collect();
+        assert!(mapdb_areas(&map, &claimed).is_empty());
+    }
+
+    /// A room with just enough filled in to carry an id and a location.
+    fn room_in(id: RoomId, location: &str) -> cena_map::Room {
+        cena_map::Room {
+            id,
+            uid: vec![],
+            title: vec![],
+            description: vec![],
+            paths: vec![],
+            location: Some(location.to_owned()),
+            location_unknowable: false,
+            check_location: false,
+            unique_loot: vec![],
+            climate: None,
+            terrain: None,
+            tags: vec![],
+            meta: vec![],
+            image: None,
+            exits: vec![],
+        }
     }
 }

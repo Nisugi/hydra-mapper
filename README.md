@@ -55,13 +55,23 @@ where no artist ever drew one.
   classification flips) is the reference for what that becomes later; it
   is not ported.
 
-  **Two area lists**, because a room belongs to two groupings at once and
-  neither contains the other — `research/jev-trial/areas.py` measured it:
-  *"66 official areas span several locations and 53 locations span several
-  official areas."* The **Official** tab holds Simutronics' own layout
-  areas (117 of them, the unit their artwork is positioned in); the
-  **Mapdb** tab holds what the game's `location` verb answers (343,
-  covering every room). Either is filterable by name. The official list
+  **Two area lists, and no room is in both.** The **Official** tab holds
+  Simutronics' own layout areas (117, the unit their artwork is positioned
+  in); the **Mapdb** tab holds what the game's `location` verb answers,
+  for everything the official layout does not cover (239). Either is
+  filterable by name.
+
+  **Official layout is truth**: where it covers a room, that room is not
+  listed again under its mapdb location. The official areas are curated
+  splits, whereas mapdb `location` routinely cuts a building into areas of
+  one or two rooms, so browsing by it alone buries a town under its own
+  shopfronts. The two groupings genuinely cross-cut —
+  `research/jev-trial/areas.py` measured it: *"66 official areas span
+  several locations and 53 locations span several official areas"* — so
+  the split is applied per room, not per name. A location partly inside an
+  official area keeps its unclaimed rooms; one wholly inside it drops out.
+  Against the real map that is 13,689 official + 23,149 mapdb rooms: zero
+  overlap, and all 36,838 still reachable. The official list
   ships as `crates/mapper/data/areas.tsv`, a copy of that research
   output — `.map` files cannot supply it, since their `image.file` entries
   are raw artwork names, inconsistently spelled (`JourneysEnd.jpg` beside
