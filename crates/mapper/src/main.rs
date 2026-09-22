@@ -16,6 +16,7 @@ mod draw;
 mod export;
 mod inspect;
 mod overrides;
+mod placement;
 
 use std::path::PathBuf;
 

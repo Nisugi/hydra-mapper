@@ -43,6 +43,7 @@ use cena_map_layout::EdgeAction;
 use serde::{Deserialize, Serialize};
 
 use crate::overrides::{MapOverrides, RoomKey};
+use crate::placement::{self, Placement, Resolved};
 
 /// The suffix an area's interiors shelf takes as its own map slug.
 pub const INTERIORS_SUFFIX: &str = ".interiors";
@@ -50,17 +51,22 @@ pub const INTERIORS_SUFFIX: &str = ".interiors";
 /// The correction format's current version.
 ///
 /// A consumer that does not know this number should refuse the file rather
-/// than guess at it. Version 1 is: uid-keyed `dirto`, `map_membership`,
-/// `maps` and `area`, with no positional data of any kind.
-pub const FORMAT_VERSION: u32 = 1;
+/// than guess at it.
+///
+/// Version 1 was: uid-keyed `dirto`, `map_membership`, `maps` and `area`.
+/// Version 2 adds `placement`, and bumped the number although the field is
+/// optional -- a v1 reader would ignore it and silently drop corrections a
+/// person made, which is worse than refusing the file outright.
+pub const FORMAT_VERSION: u32 = 2;
 
 /// What a file with no `version` is assumed to be.
 ///
 /// The pilot exports written before the field existed are version 1 in
 /// every respect but saying so, so reading them as 1 is correct rather
-/// than merely convenient.
+/// than merely convenient -- and is **not** the current version, which
+/// carries a field those files could not have had.
 const fn default_version() -> u32 {
-    FORMAT_VERSION
+    1
 }
 
 /// What the combiner is given.
@@ -75,9 +81,10 @@ pub struct Export {
     /// The format's version, so a consumer can refuse what it does not
     /// understand rather than half-reading it.
     ///
-    /// Bumped when a field changes meaning or a required one is added;
-    /// adding an optional field is not a bump, because every field here is
-    /// `#[serde(default)]` and an older reader simply ignores it.
+    /// Bumped when a field changes meaning, when a required one is added,
+    /// or when an optional one carries corrections an older reader would
+    /// drop rather than merely not understand -- silently losing an edit
+    /// is worse than refusing the file.
     #[serde(default = "default_version")]
     pub version: u32,
     /// What produced this, so a file found later explains itself.
@@ -113,6 +120,14 @@ pub struct Export {
     /// `plan/21` §3f keeps the same pair apart, as `location` and `map`.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub area: BTreeMap<i64, String>,
+    /// Room uid -> where it sits relative to a room that did not move.
+    ///
+    /// A drag, stated as a relationship rather than as the cell it was
+    /// recorded in. The editor works the offset out against the solve in
+    /// front of it; a consumer applies it after its own solve, exactly as
+    /// the editor does, which is why no coordinate ever travels.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub placement: BTreeMap<i64, Placement>,
 }
 
 /// Written by hand rather than derived, because a derived `Default` would
@@ -127,6 +142,7 @@ impl Default for Export {
             map_membership: BTreeMap::new(),
             maps: BTreeMap::new(),
             area: BTreeMap::new(),
+            placement: BTreeMap::new(),
         }
     }
 }
@@ -163,6 +179,7 @@ pub fn build(
     source_map: Option<String>,
     interiors: &[(String, Vec<RoomId>)],
     area_of: &dyn Fn(RoomId) -> Option<String>,
+    placements: &[Resolved],
 ) -> (Export, Vec<Skipped>) {
     let mut export = Export {
         version: FORMAT_VERSION,
@@ -229,6 +246,15 @@ pub fn build(
                 .entry(uid)
                 .or_insert_with(|| slug.clone());
         }
+    }
+
+    let (placed, unnameable) = placement::for_export(placements, map);
+    export.placement = placed;
+    for r in unnameable {
+        skipped.push(Skipped {
+            what: format!("placement of room {} from {}", r.room.0, r.anchor.0),
+            why: NO_UID,
+        });
     }
 
     // Only the plates the export actually references, so a plate that was
@@ -319,13 +345,15 @@ impl Export {
     /// Whether there is anything to write.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.dirto.is_empty() && self.map_membership.is_empty()
+        self.dirto.is_empty() && self.map_membership.is_empty() && self.placement.is_empty()
     }
 
     /// How many corrections this carries, for the button's label.
     #[must_use]
     pub fn len(&self) -> usize {
-        self.dirto.values().map(BTreeMap::len).sum::<usize>() + self.map_membership.len()
+        self.dirto.values().map(BTreeMap::len).sum::<usize>()
+            + self.map_membership.len()
+            + self.placement.len()
     }
 }
 
@@ -381,7 +409,7 @@ mod tests {
             Some(EdgeAction::Direction(Dir::East)),
         );
 
-        let (export, skipped) = build(&store, &map, None, &[], &|_| None);
+        let (export, skipped) = build(&store, &map, None, &[], &|_| None, &[]);
         assert!(skipped.is_empty());
         assert_eq!(export.dirto[&7_000_001][&7_000_002], "east");
         assert_eq!(
@@ -404,7 +432,7 @@ mod tests {
             Some(EdgeAction::Connector),
         );
 
-        let (export, _) = build(&store, &map, None, &[], &|_| None);
+        let (export, _) = build(&store, &map, None, &[], &|_| None, &[]);
         assert_eq!(export.dirto[&7_000_001][&7_000_002], "cross-group");
         assert_eq!(export.dirto[&7_000_002][&7_000_001], "cross-group");
     }
@@ -423,7 +451,7 @@ mod tests {
             Some(EdgeAction::Connector),
         );
 
-        let (export, skipped) = build(&store, &map, None, &[], &|_| None);
+        let (export, skipped) = build(&store, &map, None, &[], &|_| None, &[]);
         assert!(export.dirto.is_empty(), "exported an unusable key");
         assert_eq!(skipped.len(), 1);
         assert_eq!(skipped[0].why, NO_UID);
@@ -438,7 +466,7 @@ mod tests {
         store.move_room(RoomKey::Uid(7120), Some(&key));
         store.create_map("landing.empty", None);
 
-        let (export, _) = build(&store, &map, None, &[], &|_| None);
+        let (export, _) = build(&store, &map, None, &[], &|_| None, &[]);
         assert_eq!(export.map_membership[&7120], "landing.well");
         assert_eq!(export.maps.len(), 1, "an empty plate travelled anyway");
         assert!(export.maps.contains_key("landing.well"));
@@ -458,7 +486,14 @@ mod tests {
     fn shelved_rooms_export_onto_their_own_slug() {
         let map = Map::from_rooms(vec![room(1, Some(7120)), room(2, Some(7121))]).expect("rooms");
         let interiors = vec![("town".to_owned(), vec![RoomId(2)])];
-        let (export, _) = build(&MapOverrides::default(), &map, None, &interiors, &|_| None);
+        let (export, _) = build(
+            &MapOverrides::default(),
+            &map,
+            None,
+            &interiors,
+            &|_| None,
+            &[],
+        );
         assert_eq!(export.map_membership[&7121], "town.interiors");
         assert!(
             !export.map_membership.contains_key(&7120),
@@ -475,9 +510,14 @@ mod tests {
         let key = store.create_map("landing.well", Some("the town of Wehnimer's Landing"));
         store.move_room(RoomKey::Uid(7122), Some(&key));
 
-        let (export, _) = build(&store, &map, None, &[], &|_| {
-            Some("the town of Wehnimer's Landing".to_owned())
-        });
+        let (export, _) = build(
+            &store,
+            &map,
+            None,
+            &[],
+            &|_| Some("the town of Wehnimer's Landing".to_owned()),
+            &[],
+        );
         assert_eq!(export.map_membership[&7122], "landing.well");
         assert_eq!(
             export.area[&7122], "the town of Wehnimer's Landing",
@@ -490,12 +530,12 @@ mod tests {
     #[test]
     fn an_export_states_its_format_version() {
         let map = Map::from_rooms(vec![room(1, Some(7120))]).expect("one room");
-        let (export, _) = build(&MapOverrides::default(), &map, None, &[], &|_| None);
+        let (export, _) = build(&MapOverrides::default(), &map, None, &[], &|_| None, &[]);
         assert_eq!(export.version, FORMAT_VERSION);
 
         let json = serde_json::to_string(&export).expect("serializes");
         assert!(
-            json.contains("\"version\":1"),
+            json.contains(&format!("\"version\":{FORMAT_VERSION}")),
             "the version did not reach the file: {json}"
         );
     }
@@ -508,6 +548,66 @@ mod tests {
         let export: Export = serde_json::from_str(json).expect("parses");
         assert_eq!(export.version, 1);
         assert_eq!(export.map_membership[&4_124_007], "pilot");
+    }
+
+    /// A drag travels as an offset from a room that did not move, with
+    /// both ends named by uid.
+    #[test]
+    fn a_placement_exports_against_its_anchor() {
+        let map = Map::from_rooms(vec![room(1, Some(7_000_001)), room(2, Some(7_000_002))])
+            .expect("two rooms");
+        let placements = vec![Resolved {
+            room: RoomId(2),
+            anchor: RoomId(1),
+            dx: 3,
+            dy: -2,
+        }];
+
+        let (export, skipped) = build(
+            &MapOverrides::default(),
+            &map,
+            None,
+            &[],
+            &|_| None,
+            &placements,
+        );
+        assert!(skipped.is_empty());
+        assert_eq!(export.placement[&7_000_002].anchor, 7_000_001);
+        assert_eq!(
+            (
+                export.placement[&7_000_002].dx,
+                export.placement[&7_000_002].dy
+            ),
+            (3, -2)
+        );
+        assert!(!export.is_empty(), "a placement alone is still an export");
+        assert_eq!(export.len(), 1);
+    }
+
+    /// A placement whose anchor has no uid is reported, not written under
+    /// a room id that means something else after a rebuild.
+    #[test]
+    fn a_placement_with_an_unnameable_anchor_is_reported() {
+        let map =
+            Map::from_rooms(vec![room(1, None), room(2, Some(7_000_002))]).expect("two rooms");
+        let placements = vec![Resolved {
+            room: RoomId(2),
+            anchor: RoomId(1),
+            dx: 1,
+            dy: 0,
+        }];
+
+        let (export, skipped) = build(
+            &MapOverrides::default(),
+            &map,
+            None,
+            &[],
+            &|_| None,
+            &placements,
+        );
+        assert!(export.placement.is_empty());
+        assert_eq!(skipped.len(), 1);
+        assert_eq!(skipped[0].why, NO_UID);
     }
 
     /// A default-constructed export is never version 0: that number means
@@ -527,7 +627,7 @@ mod tests {
         store.move_room(RoomKey::Uid(7120), Some(&key));
         let interiors = vec![("town".to_owned(), vec![RoomId(1)])];
 
-        let (export, _) = build(&store, &map, None, &interiors, &|_| None);
+        let (export, _) = build(&store, &map, None, &interiors, &|_| None, &[]);
         assert_eq!(export.map_membership[&7120], "landing.well");
     }
 }

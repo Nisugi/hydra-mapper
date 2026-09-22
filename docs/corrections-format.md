@@ -4,7 +4,7 @@ What `hydra-mapper` exports, what it means, and what a consumer should
 accept or refuse. This is the contract between the mapper and anything
 that merges its output — principally the `hydra-mapdb` submission flow.
 
-**Current version: 1.**
+**Current version: 2.**
 
 ## What this is, and what it deliberately is not
 
@@ -17,10 +17,10 @@ positions are derived downstream, fresh, every time.
 
 Consequences worth stating plainly:
 
-- **No coordinates appear in this format.** Not cells, not pixels, not
-  offsets. A room pin or a group offset made in the mapper is editor
-  state and does not export. That is a deliberate boundary, not an
-  oversight; see *Placement* below.
+- **No absolute coordinates appear in this format.** A drag is recorded
+  in the mapper as a cell, which means nothing outside the solve it was
+  measured in; what travels is that drag restated as an offset from a
+  room that did *not* move. See *Placement* below.
 - **Everything is keyed by uid**, the game's own room number, because the
   combiner assigns its own room ids on every build. A correction on a
   room with no uid cannot be named in a way that survives a rebuild, so
@@ -34,7 +34,7 @@ Consequences worth stating plainly:
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "generator": "hydra-mapper 0.1.0",
   "source_map": "hydra.map",
   "dirto": { "7000001": { "7000002": "east" } },
@@ -45,7 +45,8 @@ Consequences worth stating plainly:
       "area": "icemule-trace-south-gate-wilds"
     }
   },
-  "area": { "4124007": "icemule-trace-south-gate-wilds" }
+  "area": { "4124007": "icemule-trace-south-gate-wilds" },
+  "placement": { "4124007": { "anchor": 4124001, "dx": 3, "dy": -2 } }
 }
 ```
 
@@ -63,9 +64,14 @@ A file with **no** `version` is version 1. Exports written before the field
 existed (the September 2026 pilot among them) are version 1 in every
 respect but saying so.
 
-The number bumps when a field changes meaning or a required field is
-added. Adding an optional field is not a bump: every field is
-`serde(default)`, so an older reader ignores what it does not know.
+The number bumps when a field changes meaning, when a required field is
+added, or when an optional field carries corrections an older reader would
+**drop** rather than merely not understand. Version 2 added `placement` for
+that reason: a v1 reader ignoring it would silently lose a person's edits,
+and refusing the file is the better failure.
+
+**Version history:** 1 — `dirto`, `map_membership`, `maps`, `area`.
+2 — adds `placement`.
 
 ### `generator` (string, required)
 
@@ -154,24 +160,42 @@ left its area — losing the one fact travel, hunting-ground grouping and
 every area-keyed lookup depend on. `plan/21` §3f keeps the same pair apart,
 as `location` (the place) and `map` (the grid).
 
-## Placement, and why it is not here
+### `placement` (object, optional) — the drags
 
-Room pins and group offsets — dragging a room or a building in the mapper
-— are **editor state**, held in `<map>.overrides.json` and not exported.
+`room uid → { anchor, dx, dy }`. Where a moved room sits relative to a
+room that did not move.
 
-They are applied *after* the solver runs, to one particular solve of one
-particular map with one particular set of edge corrections. A cell number
-is only meaningful relative to that run. Change the inputs and it may name
-a different place, or nowhere.
+- `anchor` (integer) — the uid the offset is measured from.
+- `dx` (integer) — cells east; negative is west.
+- `dy` (integer) — cells south; negative is north. The grid's y axis grows
+  downward, which is the opposite of the intuition a compass gives, so a
+  reader that gets this backwards will mirror every correction.
 
-This is a real limitation, not a claim that dragging is worthless. A drag
-usually encodes something true — it is just expressed as a coordinate
-instead of a relationship. The intended direction is for the mapper to
-capture the *relationship* at edit time (this room is east of that one;
-this connector spans three cells; this component anchors northeast of
-that), so it can travel as `dirto` or as fields yet to be designed. Until
-that exists, **approved manual positions do not reach Hydra**, and a
-submission flow should not attempt to infer them from a sidecar.
+**Why an anchor rather than a cell.** The mapper records a drag as a cell,
+because that is what redraws it. A cell only means something in the solve
+it was measured against, so it cannot travel. The same drag stated as
+"3 east and 2 north of room 4124001" is a fact about two rooms, and both
+ends are uids, so it survives a rebuild that renumbers every room id.
+
+**Why the anchor never moved.** It is the nearest room outside the moved
+set, by Chebyshev distance, ties broken on room id so the choice is stable
+between runs. If the anchor could itself be a dragged room, the two
+corrections would compound: a consumer applies the anchor's offset, then
+measures from where it now is, and lands somewhere neither correction
+asked for. An unmoved anchor sits at the same cell before and after, so the
+offset means the same thing against a corrected layout or a fresh one.
+
+**How a consumer applies it.** After its own solve, exactly as the mapper
+does: find the anchor's cell, place the room at `anchor + (dx, dy)`. The
+layout engine is deterministic, so the same map with the same corrections
+gives the same cells the person was looking at when they dragged.
+
+**What does not travel.** A moved room with no unmoved room in its area
+yields nothing — there is no relationship to state. That includes dragging
+a whole area, which is why moving everything is not the same as moving
+something. The mapper's inspector shows each room's computed offset
+("Exports as: 3 east, 2 north from room 4124001") so the arithmetic can be
+checked by eye before it travels.
 
 ## Validating a submission
 
@@ -196,8 +220,16 @@ For the `hydra-mapdb` issue form, a reasonable bar:
 - a plate has no `area`;
 - the file carries a `maps` entry no room references.
 
-**Never** accept coordinates in a corrections file. No version of this
-format has a field for them, and something offering one is not this format.
+For `placement` specifically:
+
+- both `anchor` and the room key must resolve to rooms in the current map;
+- a room must not be its own anchor;
+- an anchor that is itself a `placement` key is a **bug in the producer**,
+  not something to resolve by ordering — refuse it, because the offsets
+  would compound.
+
+**Never** accept an absolute cell or pixel coordinate. No version of this
+format has a field for one, and something offering it is not this format.
 
 ## Where accepted corrections live
 

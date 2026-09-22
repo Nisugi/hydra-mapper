@@ -16,6 +16,7 @@ use crate::draw;
 use crate::export;
 use crate::inspect::{Crossed, RoomFacts, bearing};
 use crate::overrides::{self, MapOverrides, RoomKey};
+use crate::placement;
 
 /// What went wrong loading the map file, said to the player in the window
 /// rather than only on stderr -- a tool that cannot show a map should say
@@ -236,6 +237,43 @@ impl MapperApp {
     ///
     /// Recomputed here rather than cached: exporting is rare, and a stale
     /// answer would put rooms on the wrong grid.
+    /// Every dragged room's placement, across every area that has one.
+    ///
+    /// Each area is re-solved and its corrections applied, because an
+    /// offset is measured against the cells the person was looking at --
+    /// the corrected layout, not the solver's first answer. Areas with no
+    /// drags are skipped rather than solved for nothing.
+    fn placements_across_areas(&self, map: &Map) -> Vec<placement::Resolved> {
+        let mut out = Vec::new();
+        for kind in [AreaKind::Official, AreaKind::Mapdb, AreaKind::Plates] {
+            for area in self.areas.list(kind) {
+                let Some(location) = self.store.location(&area.name) else {
+                    continue;
+                };
+                if location.group_offsets.is_empty() && location.room_pins.is_empty() {
+                    continue;
+                }
+                let rooms: Vec<cena_map::Room> = area
+                    .rooms
+                    .iter()
+                    .filter_map(|&id| map.room(id).cloned())
+                    .collect();
+                let Ok(subset) = Map::from_rooms(rooms) else {
+                    continue;
+                };
+                let edges = location.edge_overrides(&subset);
+                let mut layout = if edges.is_empty() {
+                    generate_layout(&subset)
+                } else {
+                    generate_layout_with(&subset, &edges)
+                };
+                overrides::apply(&mut layout, &subset, location);
+                out.extend(placement::resolve(&layout, &subset, location));
+            }
+        }
+        out
+    }
+
     fn interiors_by_area(&self, map: &Map) -> Vec<(String, Vec<RoomId>)> {
         let mut out = Vec::new();
         for kind in [AreaKind::Official, AreaKind::Mapdb, AreaKind::Plates] {
@@ -418,7 +456,13 @@ impl MapperApp {
             }
             None
         };
-        let (export, skipped) = export::build(&self.store, map, source, &interiors, &area_of);
+        // Drags, stated as offsets from a room that did not move. Each area
+        // is solved on its own, so each is re-solved here to measure
+        // against the same cells the person was looking at when they
+        // dragged.
+        let placements = self.placements_across_areas(map);
+        let (export, skipped) =
+            export::build(&self.store, map, source, &interiors, &area_of, &placements);
         if export.is_empty() {
             self.export_note = Some("Nothing to export yet.".to_owned());
             return;
@@ -768,7 +812,14 @@ impl MapperApp {
                 }
                 return;
             }
-            inspector(ui, shown, id, whole, &mut follow);
+            inspector(
+                ui,
+                shown,
+                id,
+                whole,
+                store.location(&shown.name),
+                &mut follow,
+            );
             if !edit_mode {
                 return;
             }
@@ -914,6 +965,7 @@ fn inspector(
     shown: &Shown,
     id: RoomId,
     whole: Option<&Map>,
+    location: Option<&crate::overrides::LocationOverrides>,
     follow: &mut Option<RoomId>,
 ) {
     let Some(facts) = RoomFacts::gather_in(id, &shown.subset, &shown.layout, whole) else {
@@ -979,6 +1031,22 @@ fn inspector(
         });
         if let Some(packing) = facts.packing {
             ui.label(format!("Packed by: {packing:?}"));
+        }
+
+        // What a drag on this room will travel as. Shown so the arithmetic
+        // can be checked by eye here, rather than trusted blind until
+        // something downstream reads the export.
+        if let Some(location) = location
+            && let Some(placed) = placement::resolve(&shown.layout, &shown.subset, location)
+                .into_iter()
+                .find(|p| p.room == id)
+        {
+            ui.add_space(4.0);
+            ui.label(format!(
+                "Exports as: {} from room {}",
+                offset_phrase(placed.dx, placed.dy),
+                placed.anchor.0
+            ));
         }
 
         if facts.violations.is_empty() {
@@ -1605,6 +1673,34 @@ fn walk(trail: &mut Vec<RoomId>, at: Option<RoomId>, next: RoomId) {
     }
 }
 
+/// A cell offset in words: "3 east, 2 north".
+///
+/// y grows downward on the grid, so a negative `dy` is north. Said in
+/// compass terms because that is how a person reads a map, and the raw
+/// signs invite exactly the wrong guess.
+fn offset_phrase(dx: i32, dy: i32) -> String {
+    let mut parts = Vec::new();
+    if dx != 0 {
+        parts.push(format!(
+            "{} {}",
+            dx.abs(),
+            if dx > 0 { "east" } else { "west" }
+        ));
+    }
+    if dy != 0 {
+        parts.push(format!(
+            "{} {}",
+            dy.abs(),
+            if dy > 0 { "south" } else { "north" }
+        ));
+    }
+    if parts.is_empty() {
+        "same cell".to_owned()
+    } else {
+        parts.join(", ")
+    }
+}
+
 /// A drag's pixel travel as whole grid cells, rounded, so a move snaps to
 /// the grid the layout is drawn on.
 #[allow(clippy::cast_possible_truncation)]
@@ -1637,6 +1733,18 @@ fn load_map(path: Option<&Path>) -> Result<Map, LoadProblem> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// y grows downward on the grid, so a negative dy is **north**. The
+    /// panel says this out loud to a person reading a map, and getting the
+    /// sign backwards would be invisible in the numbers.
+    #[test]
+    fn an_offset_reads_in_compass_terms() {
+        assert_eq!(offset_phrase(3, -2), "3 east, 2 north");
+        assert_eq!(offset_phrase(-1, 4), "1 west, 4 south");
+        assert_eq!(offset_phrase(0, -1), "1 north");
+        assert_eq!(offset_phrase(2, 0), "2 east");
+        assert_eq!(offset_phrase(0, 0), "same cell");
+    }
 
     /// `needs_fit` is what re-fits the camera on the next frame, and
     /// `rebuild_shown` sets it from its `Fit`. Only a switch may ask for
