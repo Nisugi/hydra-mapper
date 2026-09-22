@@ -48,12 +48,32 @@ where no artist ever drew one.
   its own doorway.
 - **`cena-mapper`** — the standalone window (`egui`/`eframe`, the same
   fork Cena's future GUI is expected to use). Loads a `.map` file
-  (`CENA_MAP` env var, or a path as the first argument), lists every
-  distinct location, and draws the outdoor sheet for whichever one you
-  pick. Read-only: this is an explorer, not an editor — no write-back, no
-  way to hand-correct a bad layout yet. Vellum's own override system
-  (position pins, edge overrides, classification flips) is the reference
-  for what that becomes later; it is not ported.
+  (`CENA_MAP` env var, or a path as the first argument) and draws the
+  layout for whichever area you pick. Read-only: this is an explorer, not
+  an editor — no write-back, no way to hand-correct a bad layout yet.
+  Vellum's own override system (position pins, edge overrides,
+  classification flips) is the reference for what that becomes later; it
+  is not ported.
+
+  **Two area lists**, because a room belongs to two groupings at once and
+  neither contains the other — `research/jev-trial/areas.py` measured it:
+  *"66 official areas span several locations and 53 locations span several
+  official areas."* The **Official** tab holds Simutronics' own layout
+  areas (117 of them, the unit their artwork is positioned in); the
+  **Mapdb** tab holds what the game's `location` verb answers (343,
+  covering every room). Either is filterable by name. The official list
+  ships as `crates/mapper/data/areas.tsv`, a copy of that research
+  output — `.map` files cannot supply it, since their `image.file` entries
+  are raw artwork names, inconsistently spelled (`JourneysEnd.jpg` beside
+  `Journeys_End.jpg`) and not area names at all. It is a frozen snapshot;
+  refreshing it is a file copy.
+
+  **The canvas is a camera**, not a scroll pane: drag to pan, wheel to
+  zoom about the pointer, and a newly picked area starts centred and
+  fitted rather than in the top-left corner. **Outdoor** and **Interiors**
+  sheets both draw, toggled in the header — the interiors shelf is often
+  the larger half (Wehnimer's Landing: 827 outdoor rooms against 2,402
+  interior ones).
 
 ## Running it
 
@@ -70,9 +90,16 @@ cargo run --release -p cena-mapper -- path\to\hydra.map
 
 ## Status
 
-Verified against a hand-built fixture town (12 tests: BFS placement,
-indoor/outdoor classification, cluster packing, image-anchor seating, and
-the scene the window draws), not yet against the full real map at scale —
-reproducing VellumFE's own statistical targets (zone-by-zone room counts,
-violation counts, connector lengths) against a converted `hydra.map` is
-the next real check, named but not yet run.
+Verified against a hand-built fixture town (20 tests: BFS placement,
+indoor/outdoor classification, cluster packing, image-anchor seating, the
+scene the window draws, and the camera's transform and fit).
+
+**Layout cost is measured**, against the real 36,838-room map: the worst
+case, Wehnimer's Landing at 3,229 rooms, lays out and builds its scene in
+~102ms (release). Recomputing on every selection change is therefore
+fine, which the code previously only assumed.
+
+Still open: reproducing VellumFE's own statistical *quality* targets
+(zone-by-zone violation counts, connector lengths) against the real map.
+Timing says the pipeline is fast enough; it does not say the layouts it
+produces are good.

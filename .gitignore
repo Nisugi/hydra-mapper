@@ -1,1 +1,5 @@
 /target
+
+# Map files: large binaries, supplied by the person running the tool
+# (CENA_MAP or a path argument), never part of the repo.
+*.map

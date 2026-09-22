@@ -10,6 +10,8 @@
 //! panel can depend on that crate directly and never need this one.
 
 mod app;
+mod areas;
+mod camera;
 mod draw;
 
 use std::path::PathBuf;
