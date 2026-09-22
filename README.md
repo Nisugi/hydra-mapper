@@ -131,14 +131,22 @@ where no artist ever drew one.
   are 667 violations across the real map, and nothing showed them before —
   a layout that had gone wrong looked exactly like one that had not.
 
-  **Most of them are the solver's fault, not the data's.** An earlier
-  version of this README claimed the opposite, and it was wrong.
-  Classifying all 667: only **102** are edges whose two ends genuinely
-  contradict each other, of the kind no 2D placement can satisfy (two
-  rooms in Old Ta'Faendryl joined by exits claiming *both* east and west).
-  The other **565** are edges that agree with each other perfectly, where
-  the placement and repair passes simply failed to find an arrangement
-  that exists.
+  **More than half are the solver's fault, not the data's.** An earlier
+  version of this README claimed they were all data conflicts, and it was
+  wrong.
+
+  `cena_map_layout::satisfiable` answers the question properly. Every
+  compass direction is a pair of strict inequalities — *b northeast of a*
+  is `x_a < x_b` and `y_b < y_a` — the two axes are independent, and such
+  a set is satisfiable exactly when its constraint graph holds no cycle.
+  Nothing there cares how far, so a stretched edge satisfies what a unit
+  one does. Two cycle detections, O(V+E), no search.
+
+  Against the real map: of 667 violations, **358 sit in components whose
+  directions are entirely satisfiable** — an arrangement exists and the
+  solver did not find it — and **309** are in the 25 groups that close a
+  genuine contradictory loop, like the two Old Ta'Faendryl rooms joined
+  by exits claiming *both* east and west.
 
   That is reproducible in four rooms. Given exits
   `0: 1 ne, 2 ne, 3 n / 1: 0 sw, 2 se / 2: 0 sw, 1 nw / 3: 0 s`, the
@@ -172,7 +180,7 @@ where no artist ever drew one.
   violation counts all follow from it.
 
   This is what answers a violation of the **contradictory** kind — the
-  102 above, not the 565 the solver is responsible for, which no
+  309 above, not the 358 the solver is responsible for, which no
   correction should have to paper over. In
   `elven-nations-old-tafaendryl-west`, rooms 11988 and 11989 are joined by
   exits claiming *both* east and west; one correction takes that area from
@@ -267,9 +275,13 @@ does not say the layouts are good, and on the evidence above they are
 not as good as the violation count was taken to mean. The open work, in
 the order it matters:
 
-- **The placement and repair passes fail on satisfiable input** — ~565 of
-  the 667 violations, reproducible in four rooms. Establishing
-  satisfiability before compacting is the lead.
+- **The placement and repair passes fail on satisfiable input** — 358 of
+  the 667 violations, reproducible in four rooms. Both repair passes are
+  local: the hill climb moves one room among its neighbours, and the
+  reweld cascades outward but refuses to move the anchor, so neither can
+  make the coordinated shift a fix sometimes needs. Placing by
+  topological order, which the satisfiability check already computes,
+  would satisfy every constraint by construction.
 - Reproducing VellumFE's own statistical quality targets (zone-by-zone
   violation counts, connector lengths) against the real map.
 - **35% of edges still resolve no direction at all** — 29,798 of 84,867,
