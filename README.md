@@ -85,6 +85,26 @@ where no artist ever drew one.
   the larger half (Wehnimer's Landing: 827 outdoor rooms against 2,402
   interior ones).
 
+  **Hover names a room; clicking one opens the inspector**, which reads
+  all three sources at once:
+
+  - the **room record** — title (and its day/night and seasonal variants),
+    id, uids, location, terrain, climate, tags, description, paths;
+  - its **exits** — where each goes, the command, and *how* it is crossed.
+    7,400 of the map's 84,867 exits are scripted rather than plain
+    commands, and unported ones are impassable; the canvas draws them all
+    identically, so the panel says which is which;
+  - the **layout** — the room's cell, its group and building name, how
+    that group was packed, and **any direction violations naming it**:
+    what the exit claimed against where the room actually landed.
+
+  That last part is the reason the panel reads the layout at all. There
+  are 955 violations across the real map, in 108 of 356 areas, and nothing
+  showed them before — a layout that had gone wrong looked exactly like
+  one that had not. They are genuine data conflicts, not layout bugs: two
+  rooms in Old Ta'Faendryl are joined by exits claiming *both* east and
+  west, which no 2D placement can satisfy.
+
 ## Running it
 
 ```powershell

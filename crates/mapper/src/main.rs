@@ -13,6 +13,7 @@ mod app;
 mod areas;
 mod camera;
 mod draw;
+mod inspect;
 
 use std::path::PathBuf;
 
