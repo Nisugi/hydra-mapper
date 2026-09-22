@@ -221,6 +221,7 @@ impl MapperApp {
             Err(_) => Areas {
                 official: Vec::new(),
                 mapdb: Vec::new(),
+                derived: Vec::new(),
                 plates: Vec::new(),
             },
         };
@@ -400,7 +401,7 @@ impl MapperApp {
         let mut drawn: BTreeMap<String, String> = BTreeMap::new();
         let mut problems: Vec<String> = Vec::new();
         for name in &wanted {
-            let Some(area) = [AreaKind::Official, AreaKind::Mapdb, AreaKind::Plates]
+            let Some(area) = AreaKind::ALL
                 .iter()
                 .find_map(|&kind| self.areas.list(kind).iter().find(|a| &a.name == name))
             else {
@@ -522,7 +523,12 @@ impl MapperApp {
     /// listed. Plates are looked at first, since a plate's name is the
     /// more specific thing.
     fn show_named(&mut self, name: &str) {
-        for kind in [AreaKind::Plates, AreaKind::Official, AreaKind::Mapdb] {
+        for kind in [
+            AreaKind::Plates,
+            AreaKind::Official,
+            AreaKind::Mapdb,
+            AreaKind::Derived,
+        ] {
             if let Some(index) = self.areas.list(kind).iter().position(|a| a.name == name) {
                 self.tab = kind;
                 self.selected = Some(Selection { kind, index });
@@ -708,7 +714,13 @@ impl MapperApp {
             return;
         };
         let name = area.name.clone();
-        let location = self.store.location(&name);
+        // A derived area takes no corrections: its name is often a mapdb
+        // area's, and those corrections describe a different set of rooms.
+        let location = area
+            .kind
+            .editable()
+            .then(|| self.store.location(&name))
+            .flatten();
         // Edge corrections go IN to the solve: they change what the solver
         // does, so the rooms are placed by the corrected geometry. Moves
         // and pins come after, as a diff on its result.
@@ -993,7 +1005,7 @@ impl MapperApp {
 
         ui.heading("Areas");
         ui.horizontal(|ui| {
-            for kind in [AreaKind::Official, AreaKind::Mapdb, AreaKind::Plates] {
+            for kind in AreaKind::ALL {
                 let label = format!("{} ({})", kind.title(), self.areas.list(kind).len());
                 if ui.selectable_label(self.tab == kind, label).clicked() {
                     self.tab = kind;
@@ -1585,7 +1597,9 @@ impl eframe::App for MapperApp {
         // frame's panels have let go of their borrows.
         let mut jump: Option<String> = None;
         let go_to_plate = &mut jump;
-        let can_edit = self.store_path.is_some() && self.store_problem.is_none();
+        let can_edit = self.store_path.is_some()
+            && self.store_problem.is_none()
+            && self.selected.is_none_or(|s| s.kind.editable());
 
         if self.corrections_bar(ui, can_edit) {
             self.export_corrections();

@@ -54,19 +54,41 @@ pub enum AreaKind {
     Official,
     /// The game's `location` verb (`source` = `mapdb location`).
     Mapdb,
+    /// Areas read off the room graph, with mapdb's names as labels. See
+    /// [`cena_map_layout::regions`]. An experiment beside the other two,
+    /// not a replacement yet: no corrections are keyed to these, and
+    /// none can be made on them.
+    Derived,
     /// Plates a person made, and moved rooms onto, to keep satellites off
     /// a town's own sheet. See [`crate::overrides`].
     Plates,
 }
 
 impl AreaKind {
+    /// Every list, in tab order.
+    pub const ALL: [AreaKind; 4] = [
+        AreaKind::Official,
+        AreaKind::Mapdb,
+        AreaKind::Derived,
+        AreaKind::Plates,
+    ];
+
     /// The tab label, and the word for a count beneath it.
     pub const fn title(self) -> &'static str {
         match self {
             AreaKind::Official => "Official",
             AreaKind::Mapdb => "Mapdb",
+            AreaKind::Derived => "Derived",
             AreaKind::Plates => "Plates",
         }
+    }
+
+    /// Whether corrections can be made while looking at this list. A
+    /// derived area often shares a mapdb area's name with a different
+    /// set of rooms, and a correction keyed to the name would land on
+    /// the wrong grid.
+    pub const fn editable(self) -> bool {
+        !matches!(self, AreaKind::Derived)
     }
 }
 
@@ -87,6 +109,7 @@ pub struct Area {
 pub struct Areas {
     pub official: Vec<Area>,
     pub mapdb: Vec<Area>,
+    pub derived: Vec<Area>,
     pub plates: Vec<Area>,
 }
 
@@ -123,6 +146,7 @@ impl Areas {
         Areas {
             official,
             mapdb: mapdb_areas(map, &claimed),
+            derived: derived_areas(map),
             plates: plate_areas(map, store),
         }
     }
@@ -134,9 +158,26 @@ impl Areas {
         match kind {
             AreaKind::Official => &self.official,
             AreaKind::Mapdb => &self.mapdb,
+            AreaKind::Derived => &self.derived,
             AreaKind::Plates => &self.plates,
         }
     }
+}
+
+/// The graph's own grouping, by name. Rooms with no exits at all are left
+/// out: there is nothing to draw and nothing to group them by.
+fn derived_areas(map: &Map) -> Vec<Area> {
+    let mut areas: Vec<Area> = cena_map_layout::regions::derive_areas(map)
+        .into_iter()
+        .filter(|a| a.kind != cena_map_layout::regions::AreaKind::Isolated)
+        .map(|a| Area {
+            name: a.name,
+            kind: AreaKind::Derived,
+            rooms: a.rooms,
+        })
+        .collect();
+    areas.sort_by(|a, b| a.name.cmp(&b.name));
+    areas
 }
 
 /// One area per plate that has rooms on it, named as the person named it.

@@ -1249,6 +1249,7 @@ fn straggler_offset(
 mod tests {
     use cena_map::{Cost, Crossing, Exit, ExitKind, Map, Room, RoomId};
 
+    use super::TOWN_SCALE;
     use crate::generate_layout;
     use crate::positioner::Cell;
 

@@ -40,6 +40,7 @@ pub mod overrides;
 pub mod packer;
 pub mod pipeline;
 pub mod positioner;
+pub mod regions;
 pub mod satisfiable;
 #[cfg(test)]
 mod satisfiable_tests;
