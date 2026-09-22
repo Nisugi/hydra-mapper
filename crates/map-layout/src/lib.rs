@@ -4,7 +4,8 @@
 //! Generates a 2D grid layout for one *location* of the map: direction
 //! analysis -> BFS component placement with grid rips -> per-component
 //! hill-climb + compaction -> interior classification -> cluster packing
-//! (outdoor sheet) + interior shelf. The pipeline itself is `pipeline`
+//! of the outdoor groups + the buildings hung beside their streets, all on
+//! one sheet. The pipeline itself is `pipeline`
 //! (`plan/05` Rule 4.4: this file re-exports and wires, it does not
 //! implement).
 //!
@@ -54,5 +55,5 @@ pub use packer::PackInfo;
 pub use pipeline::{Layout, generate_layout, generate_layout_reference, generate_layout_with};
 pub use positioner::{Cell, Group, PackMethod, Violation};
 pub use satisfiable::{Axis, Problem, is_satisfiable, place_by_order, problems};
-pub use scene::{MapScene, Sheet, SheetScene, build_scene};
+pub use scene::{MapScene, SheetScene, Unit, UnitKind, build_scene};
 pub use stats::LayoutStats;

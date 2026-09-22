@@ -14,6 +14,7 @@ mod areas;
 mod camera;
 mod draw;
 mod export;
+mod focus;
 mod inspect;
 mod overrides;
 mod placement;

@@ -164,14 +164,12 @@ fn the_bank_is_one_building_with_one_doorway() {
         .find(|g| g.room_ids.contains(&RoomId(4)))
         .expect("vault was placed");
 
-    let classified_interior = layout
-        .classification
-        .interior_groups
-        .contains(&lobby_group.index);
-    let seated_inline = layout.inlined.contains(&lobby_group.index);
     assert!(
-        classified_interior || seated_inline,
-        "the bank lobby must be interior or seated by the try-inline pass, not left outdoors"
+        layout
+            .classification
+            .interior_groups
+            .contains(&lobby_group.index),
+        "the bank lobby is interior, not left outdoors"
     );
 
     // Room 3 and room 4 share a directional edge (up/down), so BFS places
@@ -181,28 +179,15 @@ fn the_bank_is_one_building_with_one_doorway() {
         "up/down keeps the lobby and vault in one component"
     );
 
-    // A try-inlined building is, by definition, no longer counted as
-    // "interior" (`recompute_entrances` runs after the inline pass moves
-    // it), so a doorway marker only exists when the bank stayed on the
-    // shelf. Either outcome is a correct pipeline result for a two-room
-    // building this small and this close to open ground; assert whichever
-    // one actually happened, not one specific outcome.
-    if classified_interior {
-        assert_eq!(
-            layout.classification.entrance_room_ids.len(),
-            1,
-            "exactly one outdoor room hosts the bank's doorway"
-        );
-        assert!(
-            layout.classification.entrance_room_ids.contains(&RoomId(1)),
-            "room 1's door is the bank's only entrance"
-        );
-    } else {
-        assert!(
-            layout.classification.entrance_room_ids.is_empty(),
-            "an inlined building has no doorway marker left to report"
-        );
-    }
+    assert_eq!(
+        layout.classification.entrance_room_ids.len(),
+        1,
+        "exactly one outdoor room hosts the bank's doorway"
+    );
+    assert!(
+        layout.classification.entrance_room_ids.contains(&RoomId(1)),
+        "room 1's door is the bank's only entrance"
+    );
 }
 
 /// A one-way "go arch" with no return leg still gets a room and does not
@@ -221,28 +206,29 @@ fn a_one_way_exit_with_no_return_still_places() {
     );
 }
 
-/// The generated scene draws every room once, keeps the bank on one sheet
-/// (whichever the try-inline pass chose), and gives it a name from its
-/// title's bracketed prefix.
+/// The generated scene draws every room once, makes the bank a unit of
+/// its own, and gives it a name from its title's bracketed prefix.
 #[test]
 fn the_scene_draws_every_room_and_names_the_bank() {
     let map = town();
     let layout = generate_layout(&map);
     let scene = cena_map_layout::build_scene("Test Town", &layout, &map);
 
-    let total_rooms = scene.outdoor.rooms.len() + scene.interiors.rooms.len();
     assert_eq!(
-        total_rooms, 7,
+        scene.sheet.rooms.len(),
+        7,
         "every room in the fixture is drawn exactly once"
     );
 
-    let (sheet, lobby) = scene.room(RoomId(3)).expect("the lobby is in the scene");
-    let labels = scene.sheet(sheet).labels.clone();
+    let lobby = scene.room(RoomId(3)).expect("the lobby is in the scene");
+    let labels = scene.sheet.labels.clone();
     assert!(
         labels.iter().any(|l| l.text == "Trader's Bank"),
         "the bank's building name comes from its bracketed title prefix: {labels:?}"
     );
     assert_eq!(lobby.title, "[Trader's Bank, Lobby]");
+    assert_eq!(scene.units[lobby.unit].name, "Trader's Bank");
+    assert!(scene.units[lobby.unit].door_rooms.contains(&RoomId(3)));
 }
 
 /// A room with an `Image` anchor is not required by this fixture (no

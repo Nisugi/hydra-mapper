@@ -1,12 +1,11 @@
 //! The window's state and its `eframe::App` implementation.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use cena_map::{Map, RoomId};
 use cena_map_layout::Cell;
-use cena_map_layout::scene::Sheet;
 use cena_map_layout::{
     Dir, EdgeAction, Layout, MapScene, build_scene, generate_layout, generate_layout_with,
 };
@@ -15,6 +14,7 @@ use crate::areas::{self, AreaKind, Areas};
 use crate::camera::Camera;
 use crate::draw;
 use crate::export;
+use crate::focus::Focus;
 use crate::inspect::{Crossed, RoomFacts, bearing};
 use crate::overrides::{self, MapOverrides, RoomKey};
 use crate::placement;
@@ -55,6 +55,8 @@ impl std::fmt::Display for LoadProblem {
 /// switching areas does not require holding every area's scene at once.
 struct Shown {
     name: String,
+    /// What is drawn as squares. See [`crate::focus`].
+    focus: Focus,
     /// Where this area's corrections live in the store. See
     /// [`Area::store_key`].
     store_key: String,
@@ -144,9 +146,6 @@ pub struct MapperApp {
     /// hundreds of entries, which is more than a person scrolls through.
     filter: String,
     selected: Option<Selection>,
-    /// Outdoor sheet or the interiors shelf. Both are computed; v1 drew
-    /// only the outdoor one because there was no way to ask for the other.
-    sheet: Sheet,
     camera: Camera,
     /// The room the inspector panel is describing, if any.
     inspected: Option<RoomId>,
@@ -234,7 +233,6 @@ impl MapperApp {
             tab: AreaKind::Mapdb,
             filter: String::new(),
             selected: None,
-            sheet: Sheet::Outdoor,
             camera: Camera::default(),
             inspected: None,
             shown: None,
@@ -285,36 +283,6 @@ impl MapperApp {
                 };
                 overrides::apply(&mut layout, &subset, location);
                 out.extend(placement::resolve(&layout, &subset, location));
-            }
-        }
-        out
-    }
-
-    fn interiors_by_area(&self, map: &Map) -> Vec<(String, Vec<RoomId>)> {
-        let mut out = Vec::new();
-        for kind in [AreaKind::Official, AreaKind::Mapdb, AreaKind::Plates] {
-            for area in self.areas.list(kind) {
-                let rooms = areas::layout_rooms(&area.rooms, map);
-                let Ok(subset) = Map::from_rooms(rooms) else {
-                    continue;
-                };
-                let location = self.store.location(&area.store_key());
-                let edges = location
-                    .map(|l| l.edge_overrides(&subset))
-                    .unwrap_or_default();
-                let layout = if edges.is_empty() {
-                    generate_layout(&subset)
-                } else {
-                    generate_layout_with(&subset, &edges)
-                };
-                let shelved: Vec<RoomId> = layout
-                    .interiors
-                    .iter()
-                    .flat_map(|&i| layout.groups[i].room_ids.iter().copied())
-                    .collect();
-                if !shelved.is_empty() {
-                    out.push((area.name.clone(), shelved));
-                }
             }
         }
         out
@@ -428,15 +396,24 @@ impl MapperApp {
             }
             let scene = build_scene(name, &layout, &subset);
 
-            // Both sheets, each its own file: they are packed as separate
-            // grids and drawing them together would put rooms on top of
-            // one another.
-            for (sheet, suffix) in [
-                (&scene.outdoor, ""),
-                (&scene.interiors, export::INTERIORS_SUFFIX),
-            ] {
+            // Two pictures of the one sheet: the streets in focus, and
+            // every building in focus. Same names as when they were two
+            // sheets, so the issue form's readers need not change.
+            let focus = Focus::build(&scene, self.areas.list(AreaKind::Official));
+            let streets = focus.units[cena_map_layout::scene::STREETS].rooms.clone();
+            let buildings: HashSet<RoomId> = scene
+                .sheet
+                .rooms
+                .iter()
+                .map(|r| r.id)
+                .filter(|id| !streets.contains(id))
+                .collect();
+            for (rooms, suffix) in [(&streets, ""), (&buildings, export::INTERIORS_SUFFIX)] {
+                if rooms.is_empty() {
+                    continue;
+                }
                 let slug = format!("{name}{suffix}");
-                match svg::sheet(sheet, &slug) {
+                match svg::sheet(&scene.sheet, rooms, focus.doors(), &slug) {
                     Ok(doc) => {
                         drawn.insert(slug, doc);
                     }
@@ -558,7 +535,6 @@ impl MapperApp {
         // Every area's interiors shelf, so the export can give it its own
         // grid slug: the two sheets are packed independently and merging
         // them puts 632 rooms of the real map on another room's cell.
-        let interiors = self.interiors_by_area(map);
         // Which area each room belongs to, so a plated room's place
         // travels alongside the grid it is drawn on.
         let area_of = |id: RoomId| -> Option<String> {
@@ -577,15 +553,8 @@ impl MapperApp {
         // Pictures of the ticked areas, carried inside the file so the
         // whole submission is one attachment.
         let (pictures, picture_problems) = self.draw_ticked_areas(map);
-        let (export, skipped) = export::build(
-            &self.store,
-            map,
-            source,
-            &interiors,
-            &area_of,
-            &placements,
-            pictures,
-        );
+        let (export, skipped) =
+            export::build(&self.store, map, source, &area_of, &placements, pictures);
         if export.is_empty() {
             self.export_note = Some("Nothing to export yet.".to_owned());
             return;
@@ -734,6 +703,12 @@ impl MapperApp {
             overrides::apply(&mut layout, &subset, location);
         }
         let scene = build_scene(&name, &layout, &subset);
+        let mut focus = Focus::build(&scene, self.areas.list(AreaKind::Official));
+        if fit == Fit::Keep
+            && let Some(previous) = self.shown.as_ref().filter(|s| s.name == name)
+        {
+            focus.carry_over(&previous.focus);
+        }
         if fit == Fit::Reset {
             // A new area's selection does not carry over: the room is not
             // in it, and a stale inspector panel would describe nothing
@@ -755,6 +730,7 @@ impl MapperApp {
         }
         self.shown = Some(Shown {
             name,
+            focus,
             store_key,
             layout,
             subset,
@@ -763,23 +739,23 @@ impl MapperApp {
         });
     }
 
-    /// A click on a room: inspect it, or close the panel if it was the
-    /// inspected one already. A click on an echo -- a doorway beside a
-    /// street, a street among its buildings -- goes to the room's own
-    /// sheet, with it in the middle of the view.
+    /// A click on a room in focus: inspect it, or close the panel if it
+    /// was the inspected one already. A click on a dot -- a room out of
+    /// focus -- enters the unit it belongs to, a building or a hunting
+    /// area or the streets, with the room inspected and in the middle of
+    /// the view.
     fn clicked(&mut self, id: RoomId) {
-        self.inspected = (self.inspected != Some(id)).then_some(id);
-        let Some(shown) = &self.shown else {
+        let Some(shown) = &mut self.shown else {
             return;
         };
-        if let Some(&(sheet, index)) = shown.scene.room_index.get(&id)
-            && sheet != self.sheet
-        {
-            self.sheet = sheet;
-            self.camera
-                .center_on(shown.scene.sheet(sheet).rooms[index].cell);
+        if shown.focus.enter(id) {
+            if let Some(room) = shown.scene.room(id) {
+                self.camera.center_on(room.cell);
+            }
             self.inspected = Some(id);
+            return;
         }
+        self.inspected = (self.inspected != Some(id)).then_some(id);
     }
 
     /// Track a drag across frames and turn a finished one into an edit.
@@ -792,7 +768,7 @@ impl MapperApp {
             let group = self
                 .shown
                 .as_ref()
-                .and_then(|shown| shown.scene.room(id).map(|(_, room)| room.group));
+                .and_then(|shown| shown.scene.room(id).map(|room| room.group));
             self.drag = group.map(|group| DragState {
                 group,
                 room: alt.then_some(id),
@@ -810,7 +786,7 @@ impl MapperApp {
         let scale = self
             .shown
             .as_ref()
-            .map_or(1, |shown| shown.scene.sheet(self.sheet).scale);
+            .map_or(1, |shown| shown.scene.scale_of(drag.group));
         let delta = cells_dragged(drag, self.camera, scale);
         if delta.x == 0 && delta.y == 0 {
             return None;
@@ -821,18 +797,20 @@ impl MapperApp {
             // One room: pinned at its position within the group's own
             // frame, which is its drawn cell less the group's offset.
             Some(id) => {
-                let room = shown.scene.room(id)?.1;
+                let room = shown.scene.room(id)?;
                 let offset = shown
                     .scene
                     .group_offsets
                     .get(&drag.group)
                     .copied()
                     .unwrap_or_default();
+                // The drawn cell is the solver's times the group's scale;
+                // the pin is in the solver's.
                 Some(EditAction::PinRoom {
                     key: RoomKey::of(id, &shown.subset),
                     pin: Cell {
-                        x: room.cell.x - offset.x + delta.x,
-                        y: room.cell.y - offset.y + delta.y,
+                        x: room.cell.x / scale - offset.x + delta.x,
+                        y: room.cell.y / scale - offset.y + delta.y,
                     },
                 })
             }
@@ -1525,7 +1503,7 @@ fn membership(
             })
             .unwrap_or_default()
     };
-    let group = shown.scene.room(id).map(|(_, room)| room.group);
+    let group = shown.scene.room(id).map(|room| room.group);
 
     ui.add_space(8.0);
     ui.strong("Plate");
@@ -1660,7 +1638,6 @@ impl eframe::App for MapperApp {
                 shown,
                 &self.store,
                 self.tab,
-                &mut self.sheet,
                 &mut self.edit_mode,
                 &mut self.show_labels,
                 can_edit,
@@ -1672,7 +1649,7 @@ impl eframe::App for MapperApp {
             // Fit on the first frame after a change, when the canvas size
             // is finally known -- `load` has no window to measure.
             if shown.needs_fit {
-                let sheet = shown.scene.sheet(self.sheet);
+                let sheet = &shown.scene.sheet;
                 let canvas = ui.available_rect_before_wrap();
                 if canvas.width() > 0.0 && canvas.height() > 0.0 {
                     self.camera.fit(sheet.min, sheet.max, canvas);
@@ -1681,10 +1658,10 @@ impl eframe::App for MapperApp {
             }
 
             // The in-flight drag, in whole cells, for the ghost preview.
-            let scale = shown.scene.sheet(self.sheet).scale;
             let ghost = self.drag.map(|drag| {
+                let scale = shown.scene.scale_of(drag.group);
                 let d = cells_dragged(drag, self.camera, scale);
-                // Drawn back at the sheet's spacing.
+                // Drawn back at the group's spacing.
                 (
                     drag.group,
                     drag.room,
@@ -1694,10 +1671,14 @@ impl eframe::App for MapperApp {
                     },
                 )
             });
+            let focus = draw::Focus {
+                rooms: shown.focus.rooms(),
+                doors: shown.focus.doors(),
+            };
             let hit = draw::scene(
                 ui,
                 &shown.scene,
-                self.sheet,
+                &focus,
                 &mut self.camera,
                 self.inspected,
                 draw::View {
@@ -1733,7 +1714,6 @@ fn canvas_header(
     shown: &mut Shown,
     store: &MapOverrides,
     tab: AreaKind,
-    sheet: &mut Sheet,
     edit_mode: &mut bool,
     show_labels: &mut bool,
     can_edit: bool,
@@ -1744,22 +1724,20 @@ fn canvas_header(
     ui.horizontal(|ui| {
         ui.heading(&shown.name);
         ui.separator();
-        for (which, label) in [(Sheet::Outdoor, "Outdoor"), (Sheet::Interiors, "Interiors")] {
-            let count = shown.scene.sheet(which).rooms.len();
-            let chosen = *sheet == which;
-            // An empty sheet stays visible but unclickable, so it
-            // is clear the location simply has no interiors rather
-            // than the toggle having gone missing.
-            ui.add_enabled_ui(count > 0, |ui| {
-                if ui
-                    .selectable_label(chosen, format!("{label} ({count})"))
-                    .clicked()
-                {
-                    *sheet = which;
-                    shown.needs_fit = true;
-                }
-            });
+        // What is in focus, and the way back. The rest of the area is
+        // always there as dots; clicking one enters its unit.
+        {
+            let unit = shown.focus.current();
+            ui.label(format!("{} ({})", unit.name, unit.rooms.len()))
+                .on_hover_text(
+                    "In focus: drawn as squares. Click a dot to enter its building or area.",
+                );
         }
+        ui.add_enabled_ui(shown.focus.can_go_back(), |ui| {
+            if ui.button("Back").clicked() {
+                shown.focus.back();
+            }
+        });
         // The sheets of whichever area this belongs to, beside Outdoor and
         // Interiors. Viewed from the area, that is its plates; viewed from
         // one of those plates, it is the area itself and the plate's

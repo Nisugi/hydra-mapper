@@ -37,27 +37,6 @@ pub(crate) const CONNECTOR_COMMIT_CAP: i32 = 30; // committed connector max leng
 pub(crate) const DIRECTIONAL_COMMIT_CAP: i32 = 8; // committed intra-group edge max length
 const BRIDGED_CONTACT_CAP: usize = 10; // contact pairs per excluded component
 const UID_DELTA_MISSING: u64 = u64::MAX;
-// Try-inline budget: an interior building joins the outdoor sheet only when
-// its best placement scores at or under this many points per doorway
-// (connector cells + crossing/courtyard penalties, so any crossing is an
-// automatic rejection), and no single doorway stretches past the cell cap.
-// Dense shop districts fail the budget and keep the shelf; a lone grotto
-// with open ground beside its entrance inlines.
-pub(crate) const INLINE_BUDGET_PER_DOOR: i64 = 6;
-pub(crate) const INLINE_DOOR_MAX_CELLS: i32 = 8;
-// Crowding gate: a building only inlines onto genuinely open ground. Count
-// distinct outdoor rooms within this Chebyshev ring of any seated cell
-// (doorway hosts excluded); more than the cap means the seat is inside
-// someone's neighborhood -- a town block between streets -- not open
-// ground, even when the exact cells are free.
-pub(crate) const INLINE_CROWD_RADIUS: i32 = 3;
-pub(crate) const INLINE_CROWD_MAX: usize = 8;
-// Location-scale gate: a place with many interior buildings is a town --
-// its shelf is organization, and even its geometrically open seats (edge
-// huts, dockside shops) stay shelved for a uniform town look. A place with
-// few buildings is a hunting ground whose shelf is a hiding place; those
-// buildings get the seat test.
-pub(crate) const INLINE_MAX_BUILDINGS: usize = 10;
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Edge {

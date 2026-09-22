@@ -31,9 +31,9 @@ show at all.
 `cena-map-layout` is the algorithmic fallback: given a location's rooms
 and their exits, it derives a 2D grid layout automatically — placing
 rooms by their stated compass directions, packing separate buildings and
-areas together by their connecting passages, and splitting indoor
-buildings onto their own shelf sheet — so a reasonable diagram exists even
-where no artist ever drew one.
+areas together by their connecting passages, and hanging each indoor
+building beside the street it opens off — so a reasonable diagram exists
+even where no artist ever drew one.
 
 ## The two crates
 
@@ -43,9 +43,19 @@ where no artist ever drew one.
   (`src/core/layout_engine/`), restructured to Cena's own code standard
   rather than kept as a straight port. Pipeline: direction analysis → BFS
   placement with grid rips → per-component hill-climb and compaction →
-  indoor/outdoor classification → cluster packing onto a shared outdoor
-  sheet, plus a shelf for whatever interior doesn't seat cleanly beside
-  its own doorway.
+  indoor/outdoor classification → cluster packing of the outdoor groups
+  → the buildings hung beside their streets, on the same sheet at four
+  times the outdoor spacing.
+
+  **One sheet, and a focus.** Every room of an area has one cell, in one
+  frame; what a renderer draws as squares is a *unit* — the streets, or
+  one building — and everything else is a dot on the same roads. So the
+  area is one continuous map whichever part of it is being looked at,
+  and changing focus lays nothing out again and moves nothing. The
+  scene names the units (`MapScene::units`: the streets first, then one
+  per building, each with its door rooms), which is the contract a
+  minimap draws from: squares for the unit the character is in, dots for
+  the rest.
 
   Two places it now diverges from the port, both because the new mapdb
   format carries what the old one flattened away:
@@ -60,14 +70,18 @@ where no artist ever drew one.
   disagree are a walk through several rooms (10 edges), and anything with
   no bearing at all still resolves to nothing.
 
-  **The interiors shelf follows the town.** It packed buildings in rows
-  ordered by group index, which put two shops whose doors open off the
-  *same* street room a median of 42 cells apart in Wehnimer's Landing —
-  reliably in different rows, for no reason but their ids. Ordering by
-  where each doorway sits on the outdoor sheet brings that to 8
-  (Solhaven 49 → 11, Mist Harbor 27 → 5), for about 10% more shelf area.
-  The indoor/outdoor split is unchanged: towns still shelve their
-  interiors, which is what keeps the streets uncluttered.
+  **The buildings follow the town.** They were once packed in rows on a
+  shelf of their own, ordered by group index, which put two shops whose
+  doors open off the *same* street room a median of 42 cells apart in
+  Wehnimer's Landing. Now the outdoor sheet is spread to four times its
+  spacing and each building is placed in the gap beside its own street
+  room: door edges are a median of one cell long across the real map's
+  towns, and a building with doors on two streets sits between them
+  because the streets are where they were. The one that cannot be placed
+  well is the complex with doors all over town — Ta'Illistim Keep, 123
+  rooms and 23 doors — which sits by one of them and reaches the rest
+  with long connectors; that is a case for a drawing of its own, not
+  yet built.
 - **`cena-mapper`** — the standalone window (`egui`/`eframe`, the same
   fork Cena's future GUI is expected to use). Loads a `.map` file
   (`CENA_MAP` env var, or a path as the first argument) and draws the
@@ -108,10 +122,12 @@ where no artist ever drew one.
 
   **The canvas is a camera**, not a scroll pane: drag to pan, wheel to
   zoom about the pointer, and a newly picked area starts centred and
-  fitted rather than in the top-left corner. **Outdoor** and **Interiors**
-  sheets both draw, toggled in the header — the interiors shelf is often
-  the larger half (Wehnimer's Landing: 827 outdoor rooms against 2,402
-  interior ones).
+  fitted rather than in the top-left corner. The header names what is
+  **in focus** — the streets, a building, or an official hunting area —
+  and **Back** returns to the previous focus. Clicking a dot enters the
+  unit it belongs to, with the room in the middle of the view; a
+  building wins over a hunting area that lists its rooms, because the
+  building is what a person standing in it is in.
 
   **Hover names a room; clicking one opens the inspector**, which reads
   all three sources at once:
@@ -214,10 +230,9 @@ where no artist ever drew one.
   command — a bearing for a forced direction, and upstream's own
   `cross-group` for a passage. Entries are written on both rooms, the far
   one carrying the opposite bearing. Plates export as `map_membership`
-  (the grid) plus `area` (the place). Each area's interiors shelf exports
-  as its own `<area>.interiors` slug, because the two sheets are packed as
-  independent grids and merging them puts 632 rooms of the real map on
-  another room's cell.
+  (the grid) plus `area` (the place). Pictures come in pairs: the area
+  with the streets in focus, and with every building in focus, under the
+  `<area>.interiors` name that was once a grid of its own.
 
   Everything in the export is keyed by **uid**: the combiner merges into a
   map whose room ids it assigns itself, so a room with no uid cannot be
