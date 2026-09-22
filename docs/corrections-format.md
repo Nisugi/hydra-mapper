@@ -46,7 +46,8 @@ Consequences worth stating plainly:
     }
   },
   "area": { "4124007": "icemule-trace-south-gate-wilds" },
-  "placement": { "4124007": { "anchor": 4124001, "dx": 3, "dy": -2 } }
+  "placement": { "4124007": { "anchor": 4124001, "dx": 3, "dy": -2 } },
+  "pictures": { "icemule.south.barn.pilot": "<svg xmlns=\"...\">...</svg>" }
 }
 ```
 
@@ -68,10 +69,11 @@ The number bumps when a field changes meaning, when a required field is
 added, or when an optional field carries corrections an older reader would
 **drop** rather than merely not understand. Version 2 added `placement` for
 that reason: a v1 reader ignoring it would silently lose a person's edits,
-and refusing the file is the better failure.
+and refusing the file is the better failure. (It also added `pictures`,
+which a reader may ignore freely — those are evidence, not corrections.)
 
 **Version history:** 1 — `dirto`, `map_membership`, `maps`, `area`.
-2 — adds `placement`.
+2 — adds `placement` and `pictures`.
 
 ### `generator` (string, required)
 
@@ -197,6 +199,40 @@ something. The mapper's inspector shows each room's computed offset
 ("Exports as: 3 east, 2 north from room 4124001") so the arithmetic can be
 checked by eye before it travels.
 
+### `pictures` (object, optional) — review evidence
+
+`map slug → SVG document`. A drawing of each ticked area's sheet, and of
+every plate hanging off one.
+
+A corrections file says where rooms go; it does not show it. These let a
+reviewer see the layout in a browser without building the mapper. They
+travel **inside the file** because the submission form takes one
+attachment — a person should not have to gather a folder of loose
+pictures, and an extractor writing each value out under `<slug>.svg` is a
+loop rather than an archive format.
+
+The values are plain SVG text, not base64 and not compressed, so a diff of
+the file is readable and an extractor needs no decoding step.
+
+Each sheet is a separate entry (`<slug>`, and `<slug>.interiors`), because
+the two are packed as independent grids and drawing them together would
+put rooms on another room's cell. A plate is drawn alongside the area it
+was carved out of, since judging "should these rooms be on their own
+sheet?" needs both halves of the question. Room number and title are
+`<title>` tooltips rather than drawn text, which keeps a dense sheet
+readable.
+
+**This is evidence, not correction.** Nothing here is merged into a map, a
+submission is complete without it, and pictures alone do not make a file
+worth submitting — an export carrying only pictures reports itself as
+empty. A validator should ignore this field when deciding what to merge,
+and may drop it entirely once a submission is accepted.
+
+A sheet past 1500 rooms is not drawn: an interiors shelf can run to
+thousands, and that SVG is one nobody opens in a browser twice. The
+mapper says which areas were skipped rather than writing something
+unusable.
+
 ## Validating a submission
 
 For the `hydra-mapdb` issue form, a reasonable bar:
@@ -230,26 +266,6 @@ For `placement` specifically:
 
 **Never** accept an absolute cell or pixel coordinate. No version of this
 format has a field for one, and something offering it is not this format.
-
-## Pictures for a review
-
-A corrections file says where rooms go; it does not show it. The mapper
-also draws the ticked areas, and every plate hanging off one, as SVG files
-in a `plates/` folder beside the map — so a pull request can carry the
-layout as something a reviewer opens in a browser rather than something
-they have to build this program to see.
-
-Each sheet is its own file (`<slug>.svg`, and `<slug>.interiors.svg`),
-because the two are packed as independent grids and drawing them together
-would put rooms on top of one another. A plate is drawn alongside the area
-it was carved out of, since judging "should these rooms be on their own
-sheet?" needs both halves of the question. Room number and title are
-`<title>` tooltips rather than drawn text, which keeps a dense sheet
-readable.
-
-These are review evidence, not part of the format: nothing in a
-corrections file references them, and a submission is complete without
-them.
 
 ## Where accepted corrections live
 

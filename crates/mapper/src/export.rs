@@ -128,6 +128,18 @@ pub struct Export {
     /// the editor does, which is why no coordinate ever travels.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub placement: BTreeMap<i64, Placement>,
+    /// Map slug -> an SVG drawing of that sheet.
+    ///
+    /// Review evidence, not part of the correction: nothing here is
+    /// merged into a map, and a submission is complete without it. It
+    /// rides inside the file because the issue form takes one
+    /// attachment, and gathering a folder of loose pictures to submit
+    /// alongside is work a person should not have to do.
+    ///
+    /// A reader that wants the files back writes each value out under
+    /// its slug; they are plain SVG text, not encoded.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub pictures: BTreeMap<String, String>,
 }
 
 /// Written by hand rather than derived, because a derived `Default` would
@@ -143,6 +155,7 @@ impl Default for Export {
             maps: BTreeMap::new(),
             area: BTreeMap::new(),
             placement: BTreeMap::new(),
+            pictures: BTreeMap::new(),
         }
     }
 }
@@ -180,11 +193,13 @@ pub fn build(
     interiors: &[(String, Vec<RoomId>)],
     area_of: &dyn Fn(RoomId) -> Option<String>,
     placements: &[Resolved],
+    pictures: BTreeMap<String, String>,
 ) -> (Export, Vec<Skipped>) {
     let mut export = Export {
         version: FORMAT_VERSION,
         generator: concat!("hydra-mapper ", env!("CARGO_PKG_VERSION")).to_owned(),
         source_map,
+        pictures,
         ..Export::default()
     };
     let mut skipped = Vec::new();
@@ -409,7 +424,7 @@ mod tests {
             Some(EdgeAction::Direction(Dir::East)),
         );
 
-        let (export, skipped) = build(&store, &map, None, &[], &|_| None, &[]);
+        let (export, skipped) = build(&store, &map, None, &[], &|_| None, &[], BTreeMap::new());
         assert!(skipped.is_empty());
         assert_eq!(export.dirto[&7_000_001][&7_000_002], "east");
         assert_eq!(
@@ -432,7 +447,7 @@ mod tests {
             Some(EdgeAction::Connector),
         );
 
-        let (export, _) = build(&store, &map, None, &[], &|_| None, &[]);
+        let (export, _) = build(&store, &map, None, &[], &|_| None, &[], BTreeMap::new());
         assert_eq!(export.dirto[&7_000_001][&7_000_002], "cross-group");
         assert_eq!(export.dirto[&7_000_002][&7_000_001], "cross-group");
     }
@@ -451,7 +466,7 @@ mod tests {
             Some(EdgeAction::Connector),
         );
 
-        let (export, skipped) = build(&store, &map, None, &[], &|_| None, &[]);
+        let (export, skipped) = build(&store, &map, None, &[], &|_| None, &[], BTreeMap::new());
         assert!(export.dirto.is_empty(), "exported an unusable key");
         assert_eq!(skipped.len(), 1);
         assert_eq!(skipped[0].why, NO_UID);
@@ -466,7 +481,7 @@ mod tests {
         store.move_room(RoomKey::Uid(7120), Some(&key));
         store.create_map("landing.empty", None);
 
-        let (export, _) = build(&store, &map, None, &[], &|_| None, &[]);
+        let (export, _) = build(&store, &map, None, &[], &|_| None, &[], BTreeMap::new());
         assert_eq!(export.map_membership[&7120], "landing.well");
         assert_eq!(export.maps.len(), 1, "an empty plate travelled anyway");
         assert!(export.maps.contains_key("landing.well"));
@@ -493,6 +508,7 @@ mod tests {
             &interiors,
             &|_| None,
             &[],
+            BTreeMap::new(),
         );
         assert_eq!(export.map_membership[&7121], "town.interiors");
         assert!(
@@ -517,6 +533,7 @@ mod tests {
             &[],
             &|_| Some("the town of Wehnimer's Landing".to_owned()),
             &[],
+            BTreeMap::new(),
         );
         assert_eq!(export.map_membership[&7122], "landing.well");
         assert_eq!(
@@ -530,7 +547,15 @@ mod tests {
     #[test]
     fn an_export_states_its_format_version() {
         let map = Map::from_rooms(vec![room(1, Some(7120))]).expect("one room");
-        let (export, _) = build(&MapOverrides::default(), &map, None, &[], &|_| None, &[]);
+        let (export, _) = build(
+            &MapOverrides::default(),
+            &map,
+            None,
+            &[],
+            &|_| None,
+            &[],
+            BTreeMap::new(),
+        );
         assert_eq!(export.version, FORMAT_VERSION);
 
         let json = serde_json::to_string(&export).expect("serializes");
@@ -570,6 +595,7 @@ mod tests {
             &[],
             &|_| None,
             &placements,
+            BTreeMap::new(),
         );
         assert!(skipped.is_empty());
         assert_eq!(export.placement[&7_000_002].anchor, 7_000_001);
@@ -604,10 +630,55 @@ mod tests {
             &[],
             &|_| None,
             &placements,
+            BTreeMap::new(),
         );
         assert!(export.placement.is_empty());
         assert_eq!(skipped.len(), 1);
         assert_eq!(skipped[0].why, NO_UID);
+    }
+
+    /// Pictures ride inside the file and come back out intact, which is
+    /// the whole point of carrying them there: one attachment, and an
+    /// extractor writes each value straight out as a `.svg`.
+    #[test]
+    fn pictures_travel_inside_the_file() {
+        let map = Map::from_rooms(vec![room(1, Some(7120))]).expect("one room");
+        let mut store = MapOverrides::default();
+        let key = store.create_map("landing.well", Some("landing"));
+        store.move_room(RoomKey::Uid(7120), Some(&key));
+
+        let doc = "<svg xmlns=\"http://www.w3.org/2000/svg\"><title>a &amp; b</title></svg>";
+        let mut pictures = BTreeMap::new();
+        pictures.insert("landing.well".to_owned(), doc.to_owned());
+
+        let (export, _) = build(&store, &map, None, &[], &|_| None, &[], pictures);
+        let json = serde_json::to_string(&export).expect("serializes");
+        let back: Export = serde_json::from_str(&json).expect("parses");
+        assert_eq!(back.pictures["landing.well"], doc);
+    }
+
+    /// A picture is evidence, not a correction: it must not make an
+    /// otherwise-empty export look like it has something to merge.
+    #[test]
+    fn pictures_alone_are_not_an_export() {
+        let map = Map::from_rooms(vec![room(1, Some(7120))]).expect("one room");
+        let mut pictures = BTreeMap::new();
+        pictures.insert("town".to_owned(), "<svg/>".to_owned());
+
+        let (export, _) = build(
+            &MapOverrides::default(),
+            &map,
+            None,
+            &[],
+            &|_| None,
+            &[],
+            pictures,
+        );
+        assert!(
+            export.is_empty(),
+            "pictures alone were treated as corrections to merge"
+        );
+        assert_eq!(export.len(), 0);
     }
 
     /// A default-constructed export is never version 0: that number means
@@ -627,7 +698,15 @@ mod tests {
         store.move_room(RoomKey::Uid(7120), Some(&key));
         let interiors = vec![("town".to_owned(), vec![RoomId(1)])];
 
-        let (export, _) = build(&store, &map, None, &interiors, &|_| None, &[]);
+        let (export, _) = build(
+            &store,
+            &map,
+            None,
+            &interiors,
+            &|_| None,
+            &[],
+            BTreeMap::new(),
+        );
         assert_eq!(export.map_membership[&7120], "landing.well");
     }
 }

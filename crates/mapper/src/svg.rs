@@ -189,26 +189,6 @@ fn escape(s: &str) -> String {
     out
 }
 
-/// A filename for a sheet, safe on every filesystem this runs on.
-///
-/// Slugs come from plate names a person typed, so they can hold anything;
-/// anything outside the safe set becomes `-`.
-#[must_use]
-pub fn file_name(slug: &str) -> String {
-    let mut name: String = slug
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_' {
-                c
-            } else {
-                '-'
-            }
-        })
-        .collect();
-    name.push_str(".svg");
-    name
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -296,16 +276,6 @@ mod tests {
         let scene = scene_of(&map);
         // This fixture is all outdoor, so its interiors shelf is empty.
         assert_eq!(sheet(&scene.interiors, "town"), Err(NotDrawn::Empty));
-    }
-
-    /// A plate name becomes a filename that cannot escape its directory
-    /// or upset a filesystem.
-    #[test]
-    fn a_slug_becomes_a_safe_file_name() {
-        assert_eq!(file_name("landing.well"), "landing.well.svg");
-        assert_eq!(file_name("a/b\\c"), "a-b-c.svg");
-        assert_eq!(file_name(".."), "...svg");
-        assert_eq!(file_name("with space"), "with-space.svg");
     }
 
     /// The SVG's palette is the canvas's. Two renderers meant to agree

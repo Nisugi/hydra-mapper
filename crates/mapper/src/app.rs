@@ -1,6 +1,6 @@
 //! The window's state and its `eframe::App` implementation.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
@@ -317,13 +317,12 @@ impl MapperApp {
 
     /// The bar above everything: the export button, and whatever the
     /// corrections as a whole have to say. Returns whether to export.
-    fn corrections_bar(&mut self, ui: &mut egui::Ui, can_edit: bool) -> (bool, bool) {
+    fn corrections_bar(&mut self, ui: &mut egui::Ui, can_edit: bool) -> bool {
         // A store that will not load or save is said once, at the top,
         // because it means corrections are not being kept. The export
         // note shares the bar: both are about the corrections as a whole,
         // not about whatever area is on screen.
         let mut export_now = false;
-        let mut svg_now = false;
         if self.store_problem.is_some() || self.export_note.is_some() || can_edit {
             egui::Panel::top("corrections").show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
@@ -337,18 +336,13 @@ impl MapperApp {
                         )
                         .clicked();
                 });
-                // Plate SVGs for a PR: a reviewer should be able to see a
-                // plate without building this program.
-                let plates = self.svg_areas.len();
-                ui.add_enabled_ui(can_edit && plates > 0, |ui| {
-                    svg_now = ui
-                        .button(format!("Export {plates} area's SVGs"))
-                        .on_hover_text(
-                            "Draw every plate of the ticked areas, and the areas \
-                             themselves, as SVG files beside the map",
-                        )
-                        .clicked();
-                });
+                // Ticked areas ride along in the same file, so this says
+                // what the one button will carry rather than offering a
+                // second one.
+                let ticked = self.svg_areas.len();
+                if ticked > 0 {
+                    ui.weak(format!("+ {ticked} area(s) drawn"));
+                }
                 if let Some(problem) = &self.store_problem {
                     ui.colored_label(IMPASSABLE_COLOR, format!("Corrections: {problem}"));
                 } else if let Some(note) = &self.export_note {
@@ -359,7 +353,7 @@ impl MapperApp {
             });
         });
         }
-        (export_now, svg_now)
+        export_now
     }
 
     /// Draw every ticked area, and every plate hanging off one, as SVG
@@ -368,17 +362,12 @@ impl MapperApp {
     /// A plate is drawn alongside the area it was carved out of, because
     /// a reviewer judging "should these rooms be on their own sheet?"
     /// needs to see both halves of that question.
-    fn export_svgs(&mut self) {
-        let (Ok(map), Some(store_path)) = (&self.map, self.store_path.as_deref()) else {
-            self.export_note = Some("Nothing to draw: no map is loaded.".to_owned());
-            return;
-        };
-        let dir = store_path.with_file_name("plates");
-        if let Err(error) = std::fs::create_dir_all(&dir) {
-            self.export_note = Some(format!("Cannot make {}: {error}", dir.display()));
-            return;
-        }
-
+    /// Draw every ticked area and its plates, as slug -> SVG document.
+    ///
+    /// These ride inside the corrections file rather than being written
+    /// beside it: the issue form takes one attachment, and a person
+    /// should not have to gather a folder of loose files to submit.
+    fn draw_ticked_areas(&self, map: &Map) -> (BTreeMap<String, String>, Vec<String>) {
         // Every ticked area, plus the plates that belong to one. A plate
         // is its own entry in the Plates list, so it is drawn the same
         // way as any other area once its name is known.
@@ -396,7 +385,7 @@ impl MapperApp {
         wanted.sort();
         wanted.dedup();
 
-        let mut written = 0usize;
+        let mut drawn: BTreeMap<String, String> = BTreeMap::new();
         let mut problems: Vec<String> = Vec::new();
         for name in &wanted {
             let Some(area) = [AreaKind::Official, AreaKind::Mapdb, AreaKind::Plates]
@@ -437,11 +426,7 @@ impl MapperApp {
                 let slug = format!("{name}{suffix}");
                 match svg::sheet(sheet, &slug) {
                     Ok(doc) => {
-                        let path = dir.join(svg::file_name(&slug));
-                        match std::fs::write(&path, doc) {
-                            Ok(()) => written += 1,
-                            Err(error) => problems.push(format!("{slug}: {error}")),
-                        }
+                        drawn.insert(slug, doc);
                     }
                     // An empty interiors shelf is the normal case for an
                     // outdoor area, and not worth reporting.
@@ -450,12 +435,7 @@ impl MapperApp {
                 }
             }
         }
-
-        let mut note = format!("Drew {written} SVG(s) into {}", dir.display());
-        if !problems.is_empty() {
-            let _ = write!(note, "; {} skipped ({})", problems.len(), problems[0]);
-        }
-        self.export_note = Some(note);
+        (drawn, problems)
     }
 
     /// Walk to a room reached by following an exit, remembering where it
@@ -577,8 +557,18 @@ impl MapperApp {
         // against the same cells the person was looking at when they
         // dragged.
         let placements = self.placements_across_areas(map);
-        let (export, skipped) =
-            export::build(&self.store, map, source, &interiors, &area_of, &placements);
+        // Pictures of the ticked areas, carried inside the file so the
+        // whole submission is one attachment.
+        let (pictures, picture_problems) = self.draw_ticked_areas(map);
+        let (export, skipped) = export::build(
+            &self.store,
+            map,
+            source,
+            &interiors,
+            &area_of,
+            &placements,
+            pictures,
+        );
         if export.is_empty() {
             self.export_note = Some("Nothing to export yet.".to_owned());
             return;
@@ -591,11 +581,21 @@ impl MapperApp {
                     export.len(),
                     path.display()
                 );
+                if !export.pictures.is_empty() {
+                    let _ = write!(note, ", with {} picture(s)", export.pictures.len());
+                }
                 if !skipped.is_empty() {
                     // Said out loud: a correction that cannot be named
                     // across a map rebuild did not travel, and a person
                     // should know rather than find out downstream.
                     let _ = write!(note, "; {} skipped ({})", skipped.len(), skipped[0].why);
+                }
+                if let Some(problem) = picture_problems.first() {
+                    let _ = write!(
+                        note,
+                        "; {} area(s) not drawn ({problem})",
+                        picture_problems.len()
+                    );
                 }
                 self.export_note = Some(note);
             }
@@ -1570,12 +1570,8 @@ impl eframe::App for MapperApp {
         let go_to_plate = &mut jump;
         let can_edit = self.store_path.is_some() && self.store_problem.is_none();
 
-        let (export_now, svg_now) = self.corrections_bar(ui, can_edit);
-        if export_now {
+        if self.corrections_bar(ui, can_edit) {
             self.export_corrections();
-        }
-        if svg_now {
-            self.export_svgs();
         }
 
         let mut changed = false;
