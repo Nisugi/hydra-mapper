@@ -224,3 +224,58 @@ fn contradictory_rooms_place_to_nothing() {
     let dirs = DirectionMap::build(&map);
     assert!(place_by_order(&ids, &map, &dirs).is_none());
 }
+
+/// A street of three, a tower reached from its middle by "go steps" and
+/// then up and up, and a yard reached by "out": nothing orders the tower
+/// or the yard east-west or north-south, so ranking put all four at the
+/// origin, on one cell, with the street's own west end. They belong
+/// beside the room they are reached from, each on a cell of its own,
+/// and the street's order is not disturbed by making room for them.
+#[test]
+fn rooms_nothing_orders_sit_beside_their_neighbour_not_stacked_at_the_origin() {
+    let rooms = vec![
+        room(1, vec![exit(2, "east")]),
+        room(
+            2,
+            vec![
+                exit(1, "west"),
+                exit(3, "east"),
+                exit(10, "go steps"),
+                exit(20, "out"),
+            ],
+        ),
+        room(3, vec![exit(2, "west")]),
+        room(10, vec![exit(2, "down"), exit(11, "up")]),
+        room(11, vec![exit(10, "down"), exit(12, "up")]),
+        room(12, vec![exit(11, "down")]),
+        room(20, vec![exit(2, "go gate")]),
+    ];
+    let ids: Vec<RoomId> = rooms.iter().map(|r| r.id).collect();
+    let map = Map::from_rooms(rooms).expect("ok");
+    let dirs = DirectionMap::build(&map);
+    let placed = place_by_order(&ids, &map, &dirs).expect("satisfiable");
+
+    let mut cells: Vec<_> = placed.values().copied().collect();
+    cells.sort_unstable_by_key(|c| (c.x, c.y));
+    let before = cells.len();
+    cells.dedup();
+    assert_eq!(cells.len(), before, "two rooms share a cell: {placed:?}");
+
+    let at = |id: u32| placed[&RoomId(id)];
+    assert!(
+        at(1).x < at(2).x && at(2).x < at(3).x,
+        "the street lost its order: {placed:?}"
+    );
+    assert_eq!(at(1).y, at(2).y);
+    assert_eq!(at(2).y, at(3).y);
+    let apart = |a: crate::positioner::Cell, b: crate::positioner::Cell| {
+        (a.x - b.x).abs().max((a.y - b.y).abs())
+    };
+    for id in [10, 20] {
+        assert!(
+            apart(at(id), at(2)) <= 2,
+            "room {id} is {} cells from the room it is reached from: {placed:?}",
+            apart(at(id), at(2))
+        );
+    }
+}
