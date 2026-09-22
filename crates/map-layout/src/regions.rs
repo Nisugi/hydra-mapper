@@ -70,10 +70,36 @@ pub const TINY_ROOMS: usize = 6;
 /// teleport does not.
 pub const VIRTUAL_ROOM_TAG: &str = "urchin-hideout";
 
-/// Whether a room is a place at all, or a menu wearing a room's clothes.
+/// The tag on a room that has been taken out of the game.
+///
+/// Old Solhaven's streets, a Zul Logoth tunnel, a bank lobby that no
+/// longer exists: 145 rooms on `gs.map`, mostly in clumps of their own
+/// with only 15 live rooms still pointing at any of them. They are
+/// history the map keeps, not places, and they drag the sheet out of
+/// shape -- Icemule's `[Tower]` (15690, no exits at all) sits alone off
+/// the bottom of the town.
+///
+/// **Only this tag.** The map has three neighbours of it that do *not*
+/// mean removed, and taking them would delete live content:
+///
+/// - `closed` (798) -- shut, not gone: the Abbey, the Revel of the
+///   Anfelt, shops between events. They come back.
+/// - `missing` (52) -- the mapper could not find it, which is a claim
+///   about the mapping, not the room: Leaftoe's Bakery, the Ta'Illistim
+///   Realtor.
+/// - `rewritten` (140) -- replaced by rooms with new ids. Cairnfang
+///   Manor is `rewritten` and live; the ones that are also gone carry
+///   `gone` as well, and are taken by that.
+pub const REMOVED_ROOM_TAG: &str = "gone";
+
+/// Whether a room is a place at all: not a menu wearing a room's
+/// clothes, and not something the game no longer has.
 #[must_use]
 pub fn is_real_room(room: &Room) -> bool {
-    !room.tags.iter().any(|t| t == VIRTUAL_ROOM_TAG)
+    !room
+        .tags
+        .iter()
+        .any(|t| t == VIRTUAL_ROOM_TAG || t == REMOVED_ROOM_TAG)
 }
 
 /// Whether an exit is something a person can walk along, and so whether
@@ -773,6 +799,44 @@ mod tests {
                 "a hideout reached an area"
             );
         }
+    }
+
+    /// A room taken out of the game is not drawn, whether or not
+    /// anything still points at it. Icemule's `[Tower]` has no exits at
+    /// all and sat alone off the bottom of the town; the old Solhaven
+    /// streets are a clump of their own with a live road still leading
+    /// in. `closed` is not `gone`: the Abbey is shut, not deleted.
+    #[test]
+    fn a_room_the_game_no_longer_has_is_no_place() {
+        let mut rooms = vec![
+            room(1, "[Street]", Some("the town of Wehn"), OUT, &[2]),
+            room(2, "[Street]", Some("the town of Wehn"), OUT, &[1, 3]),
+            // Still reachable from the live street, but gone.
+            tagged(3, "[Old Lane]", Some("Wehn"), REMOVED_ROOM_TAG, &[2]),
+            // The Tower: gone, and nothing points at it either way.
+            tagged(4, "[Tower]", Some("Wehn"), REMOVED_ROOM_TAG, &[]),
+        ];
+        // A shut shop is still a place: it opens off the street.
+        rooms.push(tagged(5, "[Abbey]", Some("Wehn"), "closed", &[2]));
+        rooms[1].exits.push(Exit {
+            to: RoomId(5),
+            kind: ExitKind::Cardinal,
+            crossing: Crossing::Command("go abbey".to_owned()),
+            cost: Some(Cost::Fixed(1.0)),
+        });
+        let map = Map::from_rooms(rooms).expect("no duplicate ids");
+        let areas = derive_areas(&map);
+
+        for id in [3, 4] {
+            assert!(
+                !areas.iter().any(|a| a.rooms.contains(&RoomId(id))),
+                "a removed room reached an area: {id}"
+            );
+        }
+        assert!(
+            areas.iter().any(|a| a.rooms.contains(&RoomId(5))),
+            "a closed room is still a place"
+        );
     }
 
     #[test]
