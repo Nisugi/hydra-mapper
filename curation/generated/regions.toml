@@ -49,17 +49,23 @@
 #         Teras / Kharam Dzu               island / town      <- inverted
 #         Ta'Vaalor/Ta'Illistim Transport  a route BETWEEN two cities
 #
-#     Five of those six are place-then-container, so the direction is
-#     usually small-to-large -- but `Teras / Kharam Dzu` is the other way
-#     round and the Transport ones are not containment at all, which is
-#     enough to make a split unsafe.
+#         Zul Logoth / Kharag 'doth Dzulthu   ONE place, named twice
 #
-#     `Zul Logoth / Kharag 'doth Dzulthu` fits the majority shape. The
-#     region's 1,280 rooms are the town (584) plus its cave system --
-#     The Hive, Stormpeak, Czeroth Caverns, Zaerthu Tunnels, Mraent
-#     Caverns, Troll Burial Grounds -- so the second name is the
-#     container. `Kharag 'doth Dzulthu` appears nowhere in gs.map, only
-#     in this field.
+#     Four of those are place-then-container, so the direction looks
+#     small-to-large until it isn't: `Teras / Kharam Dzu` is the other way
+#     round, the Transport ones are not containment at all, and Zul Logoth
+#     and Kharag 'doth Dzulthu are the common and dwarven names of the
+#     SAME dwarven settlement, beneath the Dragon Spine Mountains. Three
+#     different relations behind one character.
+#
+#     The Zul Logoth case is the one that punishes reading the data
+#     instead of asking. Its 1,280 rooms are the settlement (584) plus
+#     The Hive, Stormpeak, the Czeroth Caverns, the Zaerthu Tunnels, the
+#     Mraent Caverns and the Troll Burial Grounds, which looks exactly
+#     like a town inside a cave system that the second name must denote.
+#     It is not: the caves are simply what surrounds a settlement that
+#     happens to be underground, and the container -- the Dragon Spine
+#     Mountains -- is not in the string at all.
 #
 #     Only 12 of the 72 have a slash at all, and
 #     the largest regions (`Ta'Illistim` 4,139, `Icemule Trace` 2,631,
