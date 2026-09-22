@@ -1,5 +1,6 @@
 //! The window's state and its `eframe::App` implementation.
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
@@ -16,6 +17,8 @@ use crate::draw;
 use crate::export;
 use crate::inspect::{Crossed, RoomFacts, bearing};
 use crate::overrides::{self, MapOverrides, RoomKey};
+use crate::placement;
+use crate::svg;
 
 /// What went wrong loading the map file, said to the player in the window
 /// rather than only on stderr -- a tool that cannot show a map should say
@@ -170,6 +173,14 @@ pub struct MapperApp {
     trail: Vec<RoomId>,
     /// What the last export did, shown until the next one.
     export_note: Option<String>,
+    /// Areas ticked for an SVG export. Kept by name rather than by
+    /// selection index, because the two lists are filtered independently
+    /// and an index means nothing once the filter changes.
+    svg_areas: BTreeSet<String>,
+    /// Whether the area list is showing its ticks. Its own toggle rather
+    /// than edit mode's: choosing what to draw happens while browsing,
+    /// and edit mode is only reachable once an area is already on screen.
+    picking_svgs: bool,
 }
 
 /// A drag in progress. Committed as one correction on release, so dragging
@@ -229,6 +240,8 @@ impl MapperApp {
             pending_inspect: None,
             trail: Vec::new(),
             export_note: None,
+            svg_areas: BTreeSet::new(),
+            picking_svgs: false,
         }
     }
 
@@ -236,6 +249,43 @@ impl MapperApp {
     ///
     /// Recomputed here rather than cached: exporting is rare, and a stale
     /// answer would put rooms on the wrong grid.
+    /// Every dragged room's placement, across every area that has one.
+    ///
+    /// Each area is re-solved and its corrections applied, because an
+    /// offset is measured against the cells the person was looking at --
+    /// the corrected layout, not the solver's first answer. Areas with no
+    /// drags are skipped rather than solved for nothing.
+    fn placements_across_areas(&self, map: &Map) -> Vec<placement::Resolved> {
+        let mut out = Vec::new();
+        for kind in [AreaKind::Official, AreaKind::Mapdb, AreaKind::Plates] {
+            for area in self.areas.list(kind) {
+                let Some(location) = self.store.location(&area.name) else {
+                    continue;
+                };
+                if location.group_offsets.is_empty() && location.room_pins.is_empty() {
+                    continue;
+                }
+                let rooms: Vec<cena_map::Room> = area
+                    .rooms
+                    .iter()
+                    .filter_map(|&id| map.room(id).cloned())
+                    .collect();
+                let Ok(subset) = Map::from_rooms(rooms) else {
+                    continue;
+                };
+                let edges = location.edge_overrides(&subset);
+                let mut layout = if edges.is_empty() {
+                    generate_layout(&subset)
+                } else {
+                    generate_layout_with(&subset, &edges)
+                };
+                overrides::apply(&mut layout, &subset, location);
+                out.extend(placement::resolve(&layout, &subset, location));
+            }
+        }
+        out
+    }
+
     fn interiors_by_area(&self, map: &Map) -> Vec<(String, Vec<RoomId>)> {
         let mut out = Vec::new();
         for kind in [AreaKind::Official, AreaKind::Mapdb, AreaKind::Plates] {
@@ -291,6 +341,24 @@ impl MapperApp {
                         )
                         .clicked();
                 });
+                // Picking which areas to draw is a question asked while
+                // browsing the list, so its toggle lives here rather than
+                // with the canvas: the canvas header only exists once an
+                // area is on screen, and that is too late to be choosing.
+                ui.add_enabled_ui(can_edit, |ui| {
+                    ui.toggle_value(&mut self.picking_svgs, "Pick areas to draw")
+                        .on_hover_text(
+                            "Tick areas in the list; their sheets and plates \
+                             are drawn into the export",
+                        );
+                });
+                let ticked = self.svg_areas.len();
+                if ticked > 0 {
+                    ui.weak(format!("+ {ticked} area(s) drawn"));
+                    if ui.small_button("clear").clicked() {
+                        self.svg_areas.clear();
+                    }
+                }
                 if let Some(problem) = &self.store_problem {
                     ui.colored_label(IMPASSABLE_COLOR, format!("Corrections: {problem}"));
                 } else if let Some(note) = &self.export_note {
@@ -302,6 +370,88 @@ impl MapperApp {
         });
         }
         export_now
+    }
+
+    /// Draw every ticked area, and every plate hanging off one, as SVG
+    /// files in a folder beside the map.
+    ///
+    /// A plate is drawn alongside the area it was carved out of, because
+    /// a reviewer judging "should these rooms be on their own sheet?"
+    /// needs to see both halves of that question.
+    /// Draw every ticked area and its plates, as slug -> SVG document.
+    ///
+    /// These ride inside the corrections file rather than being written
+    /// beside it: the issue form takes one attachment, and a person
+    /// should not have to gather a folder of loose files to submit.
+    fn draw_ticked_areas(&self, map: &Map) -> (BTreeMap<String, String>, Vec<String>) {
+        // Every ticked area, plus the plates that belong to one. A plate
+        // is its own entry in the Plates list, so it is drawn the same
+        // way as any other area once its name is known.
+        let mut wanted: Vec<String> = self.svg_areas.iter().cloned().collect();
+        for area in &self.svg_areas {
+            // `plates_of` gives (slug, display name); the Plates list is
+            // keyed by the name, which is what finds the rooms below.
+            wanted.extend(
+                self.store
+                    .plates_of(area)
+                    .into_iter()
+                    .map(|(_, name)| name.to_owned()),
+            );
+        }
+        wanted.sort();
+        wanted.dedup();
+
+        let mut drawn: BTreeMap<String, String> = BTreeMap::new();
+        let mut problems: Vec<String> = Vec::new();
+        for name in &wanted {
+            let Some(area) = [AreaKind::Official, AreaKind::Mapdb, AreaKind::Plates]
+                .iter()
+                .find_map(|&kind| self.areas.list(kind).iter().find(|a| &a.name == name))
+            else {
+                continue;
+            };
+            let rooms: Vec<cena_map::Room> = area
+                .rooms
+                .iter()
+                .filter_map(|&id| map.room(id).cloned())
+                .collect();
+            let Ok(subset) = Map::from_rooms(rooms) else {
+                continue;
+            };
+            let location = self.store.location(name);
+            let edges = location
+                .map(|l| l.edge_overrides(&subset))
+                .unwrap_or_default();
+            let mut layout = if edges.is_empty() {
+                generate_layout(&subset)
+            } else {
+                generate_layout_with(&subset, &edges)
+            };
+            if let Some(location) = location {
+                overrides::apply(&mut layout, &subset, location);
+            }
+            let scene = build_scene(name, &layout, &subset);
+
+            // Both sheets, each its own file: they are packed as separate
+            // grids and drawing them together would put rooms on top of
+            // one another.
+            for (sheet, suffix) in [
+                (&scene.outdoor, ""),
+                (&scene.interiors, export::INTERIORS_SUFFIX),
+            ] {
+                let slug = format!("{name}{suffix}");
+                match svg::sheet(sheet, &slug) {
+                    Ok(doc) => {
+                        drawn.insert(slug, doc);
+                    }
+                    // An empty interiors shelf is the normal case for an
+                    // outdoor area, and not worth reporting.
+                    Err(svg::NotDrawn::Empty) => {}
+                    Err(problem) => problems.push(format!("{slug}: {problem}")),
+                }
+            }
+        }
+        (drawn, problems)
     }
 
     /// Walk to a room reached by following an exit, remembering where it
@@ -418,7 +568,23 @@ impl MapperApp {
             }
             None
         };
-        let (export, skipped) = export::build(&self.store, map, source, &interiors, &area_of);
+        // Drags, stated as offsets from a room that did not move. Each area
+        // is solved on its own, so each is re-solved here to measure
+        // against the same cells the person was looking at when they
+        // dragged.
+        let placements = self.placements_across_areas(map);
+        // Pictures of the ticked areas, carried inside the file so the
+        // whole submission is one attachment.
+        let (pictures, picture_problems) = self.draw_ticked_areas(map);
+        let (export, skipped) = export::build(
+            &self.store,
+            map,
+            source,
+            &interiors,
+            &area_of,
+            &placements,
+            pictures,
+        );
         if export.is_empty() {
             self.export_note = Some("Nothing to export yet.".to_owned());
             return;
@@ -431,11 +597,21 @@ impl MapperApp {
                     export.len(),
                     path.display()
                 );
+                if !export.pictures.is_empty() {
+                    let _ = write!(note, ", with {} picture(s)", export.pictures.len());
+                }
                 if !skipped.is_empty() {
                     // Said out loud: a correction that cannot be named
                     // across a map rebuild did not travel, and a person
                     // should know rather than find out downstream.
                     let _ = write!(note, "; {} skipped ({})", skipped.len(), skipped[0].why);
+                }
+                if let Some(problem) = picture_problems.first() {
+                    let _ = write!(
+                        note,
+                        "; {} area(s) not drawn ({problem})",
+                        picture_problems.len()
+                    );
                 }
                 self.export_note = Some(note);
             }
@@ -768,7 +944,14 @@ impl MapperApp {
                 }
                 return;
             }
-            inspector(ui, shown, id, whole, &mut follow);
+            inspector(
+                ui,
+                shown,
+                id,
+                whole,
+                store.location(&shown.name),
+                &mut follow,
+            );
             if !edit_mode {
                 return;
             }
@@ -807,7 +990,7 @@ impl MapperApp {
     }
 
     /// The left panel: the two list tabs, a filter box, and the list.
-    fn picker(&mut self, ui: &mut egui::Ui) -> bool {
+    fn picker(&mut self, ui: &mut egui::Ui, picking: bool) -> bool {
         let mut changed = false;
         // Set when a room-number search is followed: the area to show,
         // and the room to inspect once it is on screen.
@@ -867,31 +1050,50 @@ impl MapperApp {
                     index,
                 };
                 let selected = self.selected == Some(selection);
-                // An area's count includes rooms drawn on a plate, which
-                // is the point -- they are still rooms of this place --
-                // so the ones that lay out elsewhere are called out
-                // rather than leaving the count looking wrong.
-                let plated = if self.tab == AreaKind::Plates {
-                    0
-                } else {
-                    area.rooms
-                        .iter()
-                        .filter(|&&id| {
-                            self.map
-                                .as_ref()
-                                .is_ok_and(|m| self.store.is_plated(RoomKey::of(id, m)))
-                        })
-                        .count()
-                };
-                let label = if plated > 0 {
-                    format!("{}  ({}, {plated} on plates)", area.name, area.rooms.len())
-                } else {
-                    format!("{}  ({})", area.name, area.rooms.len())
-                };
-                if ui.selectable_label(selected, label).clicked() {
-                    self.selected = Some(selection);
-                    changed = true;
-                }
+                let label = area_label(area, self.tab, self.map.as_ref().ok(), &self.store);
+                // The tick marks an area for the SVG export, and appears
+                // only while picking: a row that always carries one reads
+                // as a mode the window is stuck in.
+                //
+                // `horizontal_top` with a truncating label, rather than
+                // plain `horizontal`: a horizontal layout asks for its
+                // content's full width, which would stop the panel ever
+                // being dragged narrower than the longest area name.
+                ui.horizontal_top(|ui| {
+                    if picking {
+                        // Scoped by area name: every one of these
+                        // checkboxes has an empty label, and egui derives
+                        // a widget's id from its text and position, so
+                        // without this they all share one id and only a
+                        // single tick can be held across the whole list.
+                        ui.push_id(&area.name, |ui| {
+                            let mut ticked = self.svg_areas.contains(&area.name);
+                            if ui
+                                .checkbox(&mut ticked, "")
+                                .on_hover_text("Draw this area and its plates as SVGs")
+                                .changed()
+                            {
+                                if ticked {
+                                    self.svg_areas.insert(area.name.clone());
+                                } else {
+                                    self.svg_areas.remove(&area.name);
+                                }
+                            }
+                        });
+                    }
+                    if ui
+                        .add(
+                            egui::Button::selectable(selected, &label)
+                                .truncate()
+                                .min_size(egui::vec2(ui.available_width(), 0.0)),
+                        )
+                        .on_hover_text(&label)
+                        .clicked()
+                    {
+                        self.selected = Some(selection);
+                        changed = true;
+                    }
+                });
             }
         });
         if let Some((kind, index, room)) = goto {
@@ -914,6 +1116,7 @@ fn inspector(
     shown: &Shown,
     id: RoomId,
     whole: Option<&Map>,
+    location: Option<&crate::overrides::LocationOverrides>,
     follow: &mut Option<RoomId>,
 ) {
     let Some(facts) = RoomFacts::gather_in(id, &shown.subset, &shown.layout, whole) else {
@@ -979,6 +1182,22 @@ fn inspector(
         });
         if let Some(packing) = facts.packing {
             ui.label(format!("Packed by: {packing:?}"));
+        }
+
+        // What a drag on this room will travel as. Shown so the arithmetic
+        // can be checked by eye here, rather than trusted blind until
+        // something downstream reads the export.
+        if let Some(location) = location
+            && let Some(placed) = placement::resolve(&shown.layout, &shown.subset, location)
+                .into_iter()
+                .find(|p| p.room == id)
+        {
+            ui.add_space(4.0);
+            ui.label(format!(
+                "Exports as: {} from room {}",
+                offset_phrase(placed.dx, placed.dy),
+                placed.anchor.0
+            ));
         }
 
         if facts.violations.is_empty() {
@@ -1379,7 +1598,7 @@ impl eframe::App for MapperApp {
 
         let mut changed = false;
         egui::Panel::left("areas").show(ui, |ui| {
-            changed = self.picker(ui);
+            changed = self.picker(ui, self.picking_svgs && can_edit);
         });
         if changed {
             self.show_selected();
@@ -1605,6 +1824,61 @@ fn walk(trail: &mut Vec<RoomId>, at: Option<RoomId>, next: RoomId) {
     }
 }
 
+/// One area's row text: its name, its room count, and how many of those
+/// rooms lay out somewhere else.
+///
+/// The count includes rooms drawn on a plate, which is the point -- they
+/// are still rooms of this place -- so the ones that lay out elsewhere are
+/// called out rather than leaving the count looking wrong.
+fn area_label(
+    area: &crate::areas::Area,
+    tab: AreaKind,
+    map: Option<&Map>,
+    store: &MapOverrides,
+) -> String {
+    let plated = if tab == AreaKind::Plates {
+        0
+    } else {
+        area.rooms
+            .iter()
+            .filter(|&&id| map.is_some_and(|m| store.is_plated(RoomKey::of(id, m))))
+            .count()
+    };
+    if plated > 0 {
+        format!("{}  ({}, {plated} on plates)", area.name, area.rooms.len())
+    } else {
+        format!("{}  ({})", area.name, area.rooms.len())
+    }
+}
+
+/// A cell offset in words: "3 east, 2 north".
+///
+/// y grows downward on the grid, so a negative `dy` is north. Said in
+/// compass terms because that is how a person reads a map, and the raw
+/// signs invite exactly the wrong guess.
+fn offset_phrase(dx: i32, dy: i32) -> String {
+    let mut parts = Vec::new();
+    if dx != 0 {
+        parts.push(format!(
+            "{} {}",
+            dx.abs(),
+            if dx > 0 { "east" } else { "west" }
+        ));
+    }
+    if dy != 0 {
+        parts.push(format!(
+            "{} {}",
+            dy.abs(),
+            if dy > 0 { "south" } else { "north" }
+        ));
+    }
+    if parts.is_empty() {
+        "same cell".to_owned()
+    } else {
+        parts.join(", ")
+    }
+}
+
 /// A drag's pixel travel as whole grid cells, rounded, so a move snaps to
 /// the grid the layout is drawn on.
 #[allow(clippy::cast_possible_truncation)]
@@ -1637,6 +1911,18 @@ fn load_map(path: Option<&Path>) -> Result<Map, LoadProblem> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// y grows downward on the grid, so a negative dy is **north**. The
+    /// panel says this out loud to a person reading a map, and getting the
+    /// sign backwards would be invisible in the numbers.
+    #[test]
+    fn an_offset_reads_in_compass_terms() {
+        assert_eq!(offset_phrase(3, -2), "3 east, 2 north");
+        assert_eq!(offset_phrase(-1, 4), "1 west, 4 south");
+        assert_eq!(offset_phrase(0, -1), "1 north");
+        assert_eq!(offset_phrase(2, 0), "2 east");
+        assert_eq!(offset_phrase(0, 0), "same cell");
+    }
 
     /// `needs_fit` is what re-fits the camera on the next frame, and
     /// `rebuild_shown` sets it from its `Fit`. Only a switch may ask for
