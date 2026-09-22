@@ -1,165 +1,346 @@
-# Room classification: what the map records now, and what it should
+# Room classification: what the map records, and how it got that way
 
 Written for whoever curates `gs.map` and whoever consumes it — the
-walker, the mapper, and Hydra's minimap. Measured on `gs.map`, 36,838
-rooms, 2026-09-22.
+walker, the mapper, and Hydra's minimap.
 
-## The problem in one line
+Measured on `gs.map` after the `retag` migrations: **36,585 rooms,
+2026-09-22**. The census files in `analysis/` were taken *before* those
+migrations, against 36,838 rooms and 1,976 tags, so where they disagree
+with this document they are the older picture.
+
+## The problem this started from
 
 A room's *contents*, its *identity*, its *access rules* and its
-*disposition* are all stored in the same two fields, so the ones that
-matter least are maintained best.
+*disposition* were all stored in the same two fields, so the ones that
+mattered least were maintained best.
 
-`tags` holds 1,976 distinct values. About 950 of them are herb and
-creature names — room contents, re-sensed monthly by `;tags --crawl`.
-The five values that decide whether a room should exist on a map at all
-(`gone`, `closed`, `missing`, `rewritten`, `urchin-hideout`) sit in the
-same list, unversioned and unenforced, and are applied to roughly 1,150
-rooms out of 36,838.
+`tags` held 1,976 distinct values, about 950 of them herb and creature
+names re-sensed monthly by `;tags --crawl`. The five values that decide
+whether a room should exist on a map at all — `gone`, `closed`,
+`missing`, `rewritten`, `urchin-hideout` — sat in that same list,
+unversioned and unenforced.
 
-The result is silent inconsistency. **Caligos Isle sank in 2021 and 676
-of its 677 rooms carry no disposition at all** — one room is tagged
-`closed`. The Feywrot Mire, also shut, has `gone` on two of 628 rooms.
-Spitfire has `closed` on 9 of 85. Nothing in the data distinguishes any
-of them from Rumor Woods, which is open.
+The result was silent inconsistency. **Caligos Isle sank in 2021 and 676
+of its 677 rooms carried no disposition at all.** The Feywrot Mire, also
+shut, had `gone` on two of 628 rooms. Nothing in the data distinguished
+either from Rumor Woods, which is open.
 
-## Four independent axes
+That is fixed. `tags` is now 1,910 values, of which ~1,276 look like
+forage names; every disposition lives in `meta:map:status:*`, and `curation/`
+holds the rules that put it there, each with a note saying why.
+
+## Five independent axes
 
 These are genuinely orthogonal and want separate fields. Conflating any
-two is what produces the current ambiguity.
+two is what produced the original ambiguity.
 
 | axis | question | example | belongs to |
 |---|---|---|---|
 | **identity** | what *is* this? | urchin hub, maze, transition | the node |
 | **disposition** | does it exist, is it open? | Caligos (gone), the Abbey (closed) | the **area**, usually |
-| **access** | can *this character* get in? | premium halls, Voln, citizenship | the **edge**, per-walker |
-| **knowledge** | do we know where it is? | 186 Bloodriven sewer rooms | derived, not stored |
+| **access** | can *this character* get in? | premium halls, Voln, a locker ticket | the **edge**, per-walker |
+| **place** | where is it? | `wehnimers-landing-catacombs` | the **area**, curated |
+| **knowledge** | do we know where it is? | 189 Bloodriven sewer rooms | derived, never stored |
 
-The access axis is already correct and should not be touched:
-`Cost::Gated` prices an exit as `None` when a flag is absent, and
-`tags.lic` mutates its own ignore list from the character's profession,
-gender, race, CHE, guild and society (`tags.lic:157-183`). That is the
-right shape — a property of the edge, evaluated per walker — and the
-reason is that a node-level "avoid this room" would answer identically
-for every character, which is wrong.
+**Access is correct and should not be touched.** `Cost::Gated` prices an
+exit as `None` when a flag is absent, and `tags.lic` mutates its own
+ignore list from the character's profession, gender, race, CHE, guild and
+society (`tags.lic:157-183`). A node-level "avoid this room" would answer
+identically for every character, which is wrong.
 
-The knowledge axis should stay **derived, never stored**. A room with no
-exits and nothing pointing at it cannot be placed, whatever the reason;
-`regions::is_connected` computes that in two lines. Storing it would
-create a fourth thing to keep in sync, and `missing` (52 rooms) already
-shows what happens: it means "the mapper could not find it", which is
-neither gone nor closed, and no consumer knows what to do with it.
+The Chronomage transport hub is the clearest proof. The same rooms and
+the same edges cost 100,000 silvers in Prime and nothing in Shattered.
+Only a per-walker edge cost can say that; no room flag can.
 
-## What exists today
+**Knowledge stays derived.** A room with no exits and nothing pointing at
+it cannot be placed, whatever the reason, and `regions::is_connected`
+computes that in two lines. `missing` is what happens when you store it
+instead: 52 rooms meaning "the mapper could not find it", 11 of which
+were walkable, had uids and had exits. Those 11 lost the tag; the other
+41 keep it until someone walks them.
 
-### `meta` — 48 namespaces, and already the right shape
+## Disposition
 
-`meta` is a flat `Vec<String>` of `namespace:value` strings. It is
-better structured than `tags` and is where classification already
-partly lives.
+```
+meta:map:status:live      (default; never written)
+meta:map:status:closed    draw, do not route
+meta:map:status:gone      do not draw
+```
 
-**Identity — what the room is**
+**The verbs are the point.** `closed` and `gone` differ in *what they
+disable*, not in flavour, and stating that in the value stops each
+consumer inventing its own reading.
 
-| meta | rooms | note |
-|---|---:|---|
-| `map:virtual room` | 16 | **exactly the 16 urchin hideouts** — identical set to the `urchin-hideout` tag |
-| `map:multi-uid` | 206 | one room, several game ids |
-| `map:ignore-blanks` | 40 | parser hint |
-| `map:ignore-selfpath` | 2 | parser hint |
-| `map:close and open door` | 1 | walker hint |
-| `maze:` | 65 | |
-| `transition:` | 2 | |
-| `transport:` | 12 | |
-| `town:defense` | 5 | |
+| status | draw | route | example | rooms |
+|---|:--:|:--:|---|---:|
+| `live` | yes | yes | Rumor Woods in April | 31,474 |
+| `closed` | yes | **no** | the Abbey, Duskruin between runs | 2,848 |
+| `gone` | **no** | no | Caligos Isle, the Feywrot Mire | 2,263 |
 
-**Behaviour — affects walking, not drawing**
+This distinction is load-bearing beyond drawing. A pass that skipped
+*both* when assigning areas threw away 1,263 rooms that were only
+closed — and a closed festival still needs an area to be drawn in when
+it reopens.
 
-| meta | rooms |
-|---|---:|
-| `nomagic:` | 667 |
-| `splashy:` | 235 |
-| `trap:` | 128 |
-| `underwater:` | 66 |
-| `noteleport:fwi` | 35 |
-| `morphing:` | 34 |
-| `latched:` | 21 |
-| `jail cell:` | 11 |
-| `samepath:<dirs>` | 3 |
+### Events are durable; closure is not
 
-**Access gates — per character**
+GemStone runs paid events in even months for about 21 days: February
+Duskruin, April Rumor Woods, August Duskruin, October Ebon Gate, with
+Rings of Lumnis and Inquisitor in June/December. So a Duskruin room is
+open in February and shut in March, and re-curating the map four times a
+year is not a plan.
 
-| meta | rooms | values |
-|---|---:|---|
-| `che:*` | 1,233 | 72 (House of the Argent Aspis, Helden Hall, …) |
-| `society:*` | 136 | Order of Voln 89, Council of Light 41, Sunfist 6 |
-| `premium:` | 123 | |
-| `mho:*` | 140 | 17 |
-| `pay-to-play:` | 44 | |
-| `citizenship:*` | 43 | Ta'Vaalor 26, Solhaven 12, Icemule 3, Teras 1, WL 1 |
-| `prof:*` | 9 | cleric 5, sorcerer 4 |
-| `gender:*` | 2 | female 1, male 1 |
-| `game:*` | 29 | GSPlat 16, GSX 7, GSF 6 |
+`meta:event:<name>` records *which* event owns an area, which is durable.
+A consumer answers "open now?" from that plus a calendar. Nine values:
+`anfelt`, `duskruin`, `ebon-gate`, `fof`, `frontier`, `grawood`,
+`highman`, `rumor-woods`, `velathae`.
 
-**Feature / content**
+`fest:*` used to say the same thing on 590 rooms and overlapped `event:*`
+on **zero** — two vocabularies split by who added each. `fest:` is gone.
 
-| meta | rooms | values |
-|---|---:|---|
-| `playershop:` | 2,401 | bare |
-| `fest:*` | 590 | grawood 211, anfelt 186, velathae 113, highman 75, fof 4, frontier 1 |
-| `teleport:fwi` | 247 | |
-| `locker:` / `locker annex:*` | 373 | |
-| `taskroom:` | 63 | |
-| `storyline:` | 62 | |
-| `mentor:` | 34 | |
-| `trashcan:*` | 42 | 34 values |
-| `boxpool:*` | 26 | 24 values |
-| `quest:nexus` | 5 | |
+### The rule that decides disposition
+
+**A room someone can walk to is live, whatever a tag says.** `retag`
+fails the run rather than writing a disposition that contradicts the
+graph, and it earned that twice:
+
+- The **Arena of the Abyss** records `location = "Caligos Isle"` but the
+  game moved it to Evermore Hollow. A `gone` rule on Caligos would have
+  hidden eight live rooms. Its uids (`8225001`–`8225009`) are unchanged,
+  so it is the same Arena relocated, not a new copy.
+- **Briarmoon Cove**'s rooms carry `location = "the Pinefar Trading
+  Post"`, a live 301-room town. A location rule would have hidden Pinefar
+  too; a title rule was needed.
+
+Reachability ignores gates — the question is whether *someone* can get
+there — and does **not** follow `event transport` edges. Those exist in
+the map but only work while the event runs; following them would make
+1,378 Duskruin, Ebon Gate and Evermore Hollow rooms look live year-round.
+There is no `quest transport` in the map; the game renamed that verb.
+
+Two waivers, both deliberate and opt-in:
+
+- **Dead shops you can still walk into** are `closed`. The tag describes
+  the shop; the open door is a forgotten lock. 87 rooms.
+- **`gone` rooms have no uid** — all 145, against 21% of the map. The
+  game numbers the rooms it has, so its silence corroborates the tag. The
+  one exception with a uid was refused until the multi-uid Winding
+  Tunnels explained it: room 4 is an unmerged fragment of a tunnel
+  consolidated into room 16918, which carries seven uids at once.
+
+### Disconnection has three causes, and only one is a disposition
+
+This is the distinction most worth remembering, because conflating them
+hides live content:
+
+1. **No entrance recorded** — the Flotilla is a live OSA town with no
+   edge into it. Walk it, do not hide it.
+2. **The area is shut or removed** — a disposition.
+3. **The entrance is priced or gated** — the Quest Nexus needs a token,
+   the Skyship needs a portal from an active Onslaught, the Chronomage
+   hub needs a ticket. All live; all access.
+
+## Place
+
+`location` is the game's own answer and stays as it is: useful, gathered
+by visiting, and not a partition. 1,357 rooms have none, 661 are
+`location_unknowable`, 257 are `check_location`, and 59 distinct values
+encode structure in prose ("Arborsong, inside the island town of Mist
+Harbor").
+
+**`regions::derive_areas` is not the answer either.** It merges adjacent
+units that share a region, and one unlabelled corridor is enough to fuse
+two towns: its "Wehnimer's Landing" is 3,050 rooms across 28 locations,
+including 186 in Talador. That is why `[Road to Talador]` — a room whose
+own `location` says Talador — was drawn in the middle of the town square.
+
+**The seed is Simutronics' own layout.** `crates/mapper/data/areas.tsv`
+holds 117 `official layout` areas over 13,689 rooms, hand-drawn and
+clean: `wehnimers-landing-town` (171), `-outside-gates` (143),
+`-catacombs` (176), `-old-mine-road` (128). `curation/areas.toml` records
+only what they do not cover.
+
+### A cave is not a building
+
+The seed already makes this distinction, and it is **not** one of indoor
+versus outdoor:
+
+```
+wehnimers-landing-catacombs   176 indoor,   0 outdoor   an AREA
+wehnimers-landing-old-mines    57 indoor,   0 outdoor   an AREA
+wehnimers-landing-town          2 indoor, 169 outdoor   a town
+```
+
+A cave system is a place with its own name and extent. A shop's back room
+is a room of a building, and the building belongs to whatever area its
+front door opens onto. Both are "indoor"; what separates them is
+standing, not sense.
+
+So `[[place]]` and `[[building]]` are different kinds of entry rather
+than a threshold on one number. A building needs a **real front door** —
+an indoor room of the group opening onto an outdoor room of the area.
+Adjacency is not belonging: a Krolvin Warship touches
+`wehnimers-landing-danjirland` by one exit and is an Open Sea Adventures
+ship instance.
+
+`location` was tried as that test and rejected. It correctly drops the
+Krolvin, but it also dropped 45 real buildings whose only fault was that
+their town is spelled two ways ("Wehnimer's Landing" beside "the town of
+Wehnimer's Landing").
+
+A group is **one place** when a single title prefix holds half its rooms
+or more, and prefixes of one or two rooms are ignored when deciding.
+Without that, a CHE house looks like four places: Cairnfang Manor is 64
+rooms of 67, beside a Forsythia Table of one. Every house names the
+tables in its lounge.
+
+### Still open
+
+`analysis/area-triage.tsv`, regenerable with
+`cargo run -p cena-map-layout --example area_triage`:
+
+```
+213  undecided
+105  building   (in areas.toml)
+ 25  skip       (gone; needs no area)
+ 19  split      (several places welded into one group)
+ 14  place      (in areas.toml)
+```
+
+`split` is not an assignment. The pieces are usually a *mix* — the
+192-room group holding Ta'Illistim Keep and the Moonglae Inn is most
+likely one place and one building of `taillistim-town`. Splitting by
+title prefix is not reliable: the prefix-pieces were each internally
+connected in only 19 of the 45 groups tried.
+
+Above place, `landmass → region` is still unbuilt. The Open Sea
+Adventures map (cartography by Arianiss Winterfox, May 2025) supplies
+what the graph cannot: which places share a continent, and which are
+reachable only by sea. Two rooms can be adjacent in the graph — a ship
+route, a portal, an urchin — while sitting on different continents.
+
+## Layout: a doorway says which rooms are one building
+
+Not classification, but it answers the same question — what belongs
+together — and got it wrong for the same reason.
+
+Components were built over compass edges alone, so every `go door`, `go
+archway` and `go yett` was a group boundary. That shattered **71% of
+buildings** — 1,061 of 1,497, and 20,431 rooms. The Bard Guild came out
+as 97 fragments; the Temple of Tonis as 11 across two sheets, which is
+how its Hall of Spring ended up an enormous distance from the Garden
+Bower one archway away.
+
+A bearingless doorway cannot place a room, but it does say two rooms are
+one place. Which doorways to follow is decided by what they join:
+
+```
+indoor <-> indoor      structure, follow
+indoor <-> courtyard   structure, follow
+indoor <-> open air    a front door, stop
+```
+
+Following front doors welds every shop onto its street. Blocking
+courtyards splits a temple from the gardens only it reaches. The two look
+identical locally, so the difference is taken from the graph: an outdoor
+run is the open air when it is a large share of the largest outdoor run
+in the map. In `gs.map` those runs are 11,740 rooms, then 308, 242, 211 —
+the world outside is forty times the next thing, so the line sits in a
+wide gap rather than on a judgement call.
+
+Result: buildings drawn whole 436 → **989**, groups 13,221 → 4,056,
+singleton groups 9,335 → 1,950.
+
+**The limitation:** indoor↔indoor also joins a keep to the inn next door.
+The 19 `split` groups are exactly that, and nothing distinguishes
+"another room of this building" from "the building next door".
+
+## The rest of `meta`
+
+46 namespaces. The ones that classify:
+
+**Identity** — `map:virtual room` (16, exactly the urchin hideouts),
+`map:multi-uid` (206), `map:rewritten` (140), `map:no-auto-map` (133),
+`maze` (65), `transport` (12), `transition` (2).
+
+`rewritten` is **not** a disposition — Cairnfang Manor is rewritten *and*
+live — which is why it became `map:rewritten` rather than a status.
+
+**Behaviour** — `nomagic` (667), `splashy` (235), `trap` (128),
+`underwater` (66), `noteleport:fwi` (35), `morphing` (34), `latched`
+(21), `jail cell` (11).
+
+**Access** — `che:*` (999 rooms over 32 house keys), `society:*` (136),
+`premium` (123),
+`mho:*` (129), `pay-to-play` (44), `citizenship:*` (43), `prof:*` (9),
+`game:*` (22).
+
+**Lockers** — 551 rooms under one namespace:
+
+```
+meta:locker:public                 a public town locker
+meta:locker:che                    a shared CHE hall, no one house
+meta:locker:che:house:<house>      a house locker room
+meta:locker:che:annex:<house>      the house's room in a town annex
+meta:locker:che:entrance:<house>   the way into one
+```
+
+This replaced four overlapping schemes and 19 tags. The fact that forced
+it: `publiclockers` (89 rooms) and bare `meta:locker` (164) overlapped on
+**zero** rooms — two disjoint sets naming one concept in two fields, so a
+consumer reading `meta` found no public lockers and one reading `tags`
+found no house vaults.
+
+**An annex is a shared locker building**, one per town, holding one
+private room per Great House — not "a locker in another town". Kraken's
+Fall has 12 annex rooms for 12 houses off four `[Inking Den, Annex
+Hallway]` corridors; Mist Harbor has 14 for 14. That is why only 59 of
+the 208 `locker annex:` rooms had "annex" in the title: the rest are the
+berry-room and cubbyhole each house gets inside the building.
+
+`che:<house>:locker` and `:entrance_locker` are **kept**. They carry the
+access fact — who may open the door — which is a different question from
+whose locker it is.
 
 **mapdb legacy** — `mapname` (234 values), `mapshortname` (198),
-`mapcategory` (32, incl. `Events and Festivals` on 14). Metadata about
-the old map *files*, not about rooms. Covers only 233 rooms.
+`mapcategory` (32), over 233 rooms. Metadata about the old map *files*.
+`mapcategory:Events and Festivals` (14 rooms) was left alone: it names no
+event to fold into, and only one of its rooms carried a `fest:` key.
 
-### `tags` — 1,976 values, ~950 of them contents
+## The rest of `tags`
 
-**Dispositions (the whole set):**
+1,910 values, ~1,276 of them forage names.
 
-| tag | rooms | locations | meaning |
-|---|---:|---:|---|
-| `closed` | 798 | 24 | shut, not deleted — the Abbey, Revel of the Anfelt |
-| `gone` | 145 | 13 | removed from the game |
-| `rewritten` | 140 | 9 | replaced by new ids; Cairnfang Manor is rewritten *and live* |
-| `no-auto-map` | 135 | 22 | do not map |
-| `missing` | 52 | 7 | the mapper could not find it |
-| `urchin-hideout` | 16 | — | duplicate of `meta:map:virtual room` |
-| `duplicate` | 2 | — | |
+**Functional:** `no forageables` (5,172), `urchin-access` (517), `private
+property` (318), `node` (212), `supernode` (91), `table` (41), `bank`
+(36), plus ~30 service tags used as `;go2` destinations.
 
-**Other functional tags:** `no forageables` (5,184), `urchin-access`
-(517), `private property` (318), `node` (212), `supernode` (91),
-`table` (41), `bank` (36), plus ~30 service tags (`inn`, `gemshop`,
-`furrier`, `herbalist`, `pawnshop`, …) used as `;go2` destinations.
+### The guild "split" was not what it looked like
 
-### The same fact, spelled several ways
+An earlier draft of this document said every guild was "split almost
+exactly in half", so a consumer filtering on `bardguild` would "silently
+find half the bard guilds". **That was wrong.** `bardguild` and `bard
+guild` were on the *same ten rooms*, all ten — double-tagged, not
+divided. Either filter already found everything.
 
-Two distinct problems, both worth fixing before anything is built on
-top of this data.
+Only six of the 44 spelling families were genuine splits. `clericshop`
+was the only one that cost anything: 9 and 4 with 3 shared, so six rooms
+were reachable by one spelling only. 217 tags were normalised, 1,964 →
+1,910 distinct. The case for a closed enum still stands on hygiene, but
+it is weaker than the original claim made it sound.
 
-**(a) One concept split across `tags` and `meta`.** Eighteen concepts
-appear in both fields. Most are coincidence (`temple` appears in
-`mapname:` strings), but three are real:
+Two kinds of near-duplicate are deliberately left:
 
-| concept | tags | meta | overlap |
-|---|---:|---:|---:|
-| lockers | 153 | 164 | **26** |
-| premium | 24 | 123 | 23 |
-| citizenship | 6 | 43 | **0** |
-| teleport | 8 | 246 | **0** |
-| trap | 1 | 128 | **0** |
+- **99 `peer ...` entries are not tags.** They are disambiguation probes
+  holding a regular expression, used to tell apart rooms sharing a title
+  — four `[Annex, Booth]`, six `[Enemy Ship, Quarters]`, five `[The
+  Rift]`. Two differ only by `^...$`, which is a different pattern, not a
+  different spelling, so merging them would change what matches.
+- **Ten proper names** (`Whirlin`, `Sadie`, `Khylynnia`, `WillowHall`)
+  where capitalisation may carry meaning.
 
-Near-zero overlap means these are not redundant copies — each field
-holds rooms the other does not — so a consumer reading only one gets a
-partial answer.
+### `jail` is correct modelling with an unfortunate name
 
-**Not every split is a bug.** `jail` is the instructive counter-example:
 11 rooms carry the tag, 11 carry `meta:jail cell`, and the overlap is
 **zero** — because they are different rooms.
 
@@ -168,298 +349,65 @@ tag jail        -> [Wehnimer's, Constabulary]   (pay the fine)
 meta jail cell  -> [Wehnimer's, Jail Cell]      (serve the time)
 ```
 
-Eleven towns, one of each. That is correct modelling with an
-unfortunate tag name, and it should be left alone.
+Eleven towns, one of each. Leave it alone.
 
-**Lockers are the genuine mess: four overlapping schemes, 538 rooms.**
+### Duplicate stubs: 264, and ten of them are not duplicates
 
-- `meta:locker:` — 165 rooms, bare
-- `meta:locker annex:<House>` — 208 rooms, 14 houses
-- `meta:che:<house>:locker` / `:entrance_locker` / `:entrance_annex` —
-  ~350 rooms, per-house
-- **22 distinct tags**: `public locker` (89), `publiclockers` (89),
-  `houselockers`, `locker:public`, `pauperslockers`, `bhalocker`,
-  `cysaegir public locker`, `brigatta locker`, `locker:twilighthall`,
-  `sglocker`, `lockerentrance:twilighthall`, `paupers locker`,
-  `silvergate locker`, `locker:beaconhall`, `public lockers`,
-  `twilight locker`, `sylvanfair locker`, `sylvanfair annex`, …
-
-`locker annex` and `che:*locker*` overlap on 102 rooms; the rest are
-disjoint. One room carries three spellings at once:
+Rooms titled `duplicate of NNNN`. The title names its own target, so
+which room is current is recorded, not inferred — do **not** use the id
+ordering, which agrees 262 times out of 264 and is not a rule.
 
 ```
-RoomId(18253) [Lockers, Antechamber]
-  meta = ["che:paupers:entrance_locker", "locker annex:House of Paupers"]
-  tags = ["paupers locker", "pauperslockers"]
+              stubs   targets
+  uid           0       242
+  exits       139       264
+  inbound       5       263
 ```
 
-**(b) One concept spelled several ways within `tags`.** 44 families
-differ only by spacing or case. The ones affecting five or more rooms:
+253 were deleted. Not one had a uid; the five with inbound edges were
+pointed at only by other stubs, so no live room lost an edge.
 
-| rooms | spellings |
-|---:|---|
-| 213 | `node` (212), `Node` (1) |
-| 91 | `publiclockers` (89), `public lockers` (2) |
-| 27 | `locksmith pool` (13), `locksmithpool` (13), `locksmith-pool` (1) |
-| 23 | `pawnshop` (21), `pawn shop` (2) |
-| 22 | `lumnisdonate` (11), `lumnis donate` (11) |
-| 21 | `gemshop` (20), `gem shop` (1) |
-| 20 | `bardguild` (10), `bard guild` (10) |
-| 20 | `rogueguild` (10), `rogue guild` (10) |
-| 19 | `sorcererguild` (9), `sorcerer guild` (9), `Sorcerer Guild` (1) |
-| 18 | each of cleric/empath/warrior/wizard guild — split ~9/9 |
-| 16 | `rangerguild` (8), `ranger guild` (8) |
-| 13 | `clericshop` (9), `cleric shop` (4) |
-| 12 | `sanctuary` (11), `Sanctuary` (1) |
-
-The guild tags are the worst: **every guild is split almost exactly in
-half** between the spaced and unspaced spelling. Any consumer filtering
-on `"bardguild"` silently finds half the bard guilds.
-
-This is the argument for the service tags becoming a closed enum rather
-than free text.
-
-**Contents:** ~950 herb and creature names. `tags.lic`'s `@herb_list`
-has 611 entries and **has drifted behind the map** — `withered mushroom`
-(5,597 rooms), `soft mushroom` (4,435), `wild rose` (3,465) and whole
-families (teas, wisterias, oleanders, daturas) are absent from it.
-
-### `location` — 342 values, and not a partition
-
-- 1,608 rooms have none; 661 are `location_unknowable`; 263 are
-  `check_location`.
-- Only 4 near-duplicates (`Hinterwilds` / `the Hinterwilds`), so
-  normalisation is nearly a non-issue.
-- **103 locations encode structure in prose**: "Arborsong, inside the
-  island town of Mist Harbor". `regions::region_of` parses English to
-  recover a parent that should have been a field.
-- Too coarse where it exists: "Mist Harbor" is 1,692 rooms covering many
-  distinct places. The graph finds 427 areas where `location` names 342,
-  and **208 of those areas have names invented from title prefixes**
-  because no location distinguished them.
-
-### The wiki dump — a curated source for `area`, not for `location`
-
-`E:\Gemstone\data\wiki_clean` holds 19,618 article dumps. Two things in
-it bear on this.
-
-**`List of hunting areas.txt` is a curated area hierarchy** — 112 areas
-under 8 regions, human-authored, exactly the `region → area` shape §1
-proposes:
+**The ten exceptions have a description**, and comparing it with the
+target's shows they are day/night variants:
 
 ```
-== Wehnimer's Landing ==
-*Castle Anwyn
-*Catacombs (Wehnimer's Landing)
-*Upper Trollfang
-...
+stub 5896   "The normally crowded intersection of wey and var is
+             nearly deserted.  A row of pennants ..."
+room 3490   "The crowded intersection of wey and var teems with
+             people, each hurrying ...  A row of pennants ..."
 ```
 
-Matched against `derive_areas`, **58 of the 112 already agree by name**,
-with 6 more matching a `location` but not a derived area. That is
-independent corroboration: the graph grouping finds the same places a
-human curator named, without being told about them. It is the strongest
-validation of `derive_areas` so far, and the list is a ready-made seed
-for the curated `area` field. Parsed to `analysis/wiki-hunting-areas.tsv`.
+Same place, different time of day. That is why the test is the
+description and not the title: a room with a body of text is a room
+someone visited. Deleting on the title alone would have taken ten live
+Ta'Vaalor streets. (An earlier draft put this count at 140 and called
+them all bookkeeping.)
 
-The 48 that match nothing are mostly a granularity question rather than
-a failure — Cavernhold, Ant Hill, Sentoph and Thanatoph are hunting
-grounds *inside* larger derived areas. Deciding whether those are areas
-or sub-areas is the same question as §1's parent pointer.
+## Housekeeping still worth doing
 
-**Articles carry room-level data that joins to the map.** Pages include
-room titles, descriptions, exits and `Room number::NNNNNN`, plus a
-`realm::` property:
+- **Update `@herb_list`** in `tags.lic` — missing at least 340 forage
+  names, which affects `;tags --sense`, not just the census. Outside this
+  repo.
+- **Two rooms keep a `no-auto-map` tag** — 30727 and 31846. The
+  disposition pass claimed them first, so the loose-tag pass skipped
+  them.
+- **The `peer ...` probes want a field** rather than sitting in `tags`.
+  That is a `cena-map` change.
+- **421 rooms need a `location`** the game knows and the file does not:
+  252 with none and 169 to verify (`analysis/worklist.tsv`, itself taken
+  before the migrations). Map-wide, 1,357 rooms have no location and 257
+  are flagged `check_location`. Walking is the only way to close these —
+  the wiki covers 0 of them, because the rooms people wrote articles
+  about are the ones already well recorded.
 
-```
-Isle Designs is a shop in realm::Mist Harbor ...
-[Isle Designs, Entry]
-Room: Room number::739511
-```
+## What the map cannot tell us
 
-**670 of the 697 distinct room numbers join to the map**, so the wiki is
-queryable against `gs.map` — but *two numbering schemes share the
-field*, because pages written before uids existed quote the old game
-room number. They separate by magnitude:
+Several facts in `curation/` came from a person and appear in the map
+nowhere: the paid-event calendar, that Summit Academy's last event ran in
+2017, Briarmoon Cove's in 2020 and Highman Games' in 2010, that `event
+transport` only works while an event is live, that an annex is a shared
+building, and that Silvergate Inn and Silvergate Manor are one house.
 
-- **632 numbers are ≥ 40,000** — uid-shaped, and match a `uid`.
-- **65 are < 40,000** — map-id-shaped. 64 of these match a uid *and* an
-  id (a small number valid in both spaces, i.e. a coincidence), and
-  exactly one is id-only: `25985`, `[Journey's End, Lawn]` in Solhaven,
-  whose uid is `4547201`.
-
-So a reader should resolve small numbers as ids and large ones as uids,
-rather than trying `uid` first as this analysis originally did.
-
-The 26 that match nothing (`3002036`, `7110481`, `13010047`, …) are
-uid-shaped but absent from `gs.map`: rooms never recorded, or removed
-content the wiki still documents.
-
-**But it cannot fill the location worklist: 0 of the 960 rooms are
-covered.** The wiki documents rooms people wrote articles about — shops
-and landmarks — which are exactly the well-recorded rooms that already
-have uids and locations. The gaps are gaps because nobody has documented
-them either. Walking remains the only way to close them.
-
-Useful, then, for naming and grouping; not for gathering.
-
-## Proposal
-
-### 1. `landmass` → `region` → `area` — curated place, replacing prose parsing
-
-Three tiers, not two. The third comes from the Open Sea Adventures map
-(`Open Sea Adventures.png`, cartography by Arianiss Winterfox, May
-2025), which supplies a fact **the room graph cannot derive**: which
-places share a continent, and which are reachable only by sea.
-
-The map shows one main continent split north-south by the DragonSpine:
-
-- **West of the spine** — Icemule Trace, Glaoveln, Wehnimer's Landing,
-  Vornavis/Solhaven, Brisker's Cove, Fairport, Ta'Nalfein, Tamzyrr,
-  the Feywrot Mire
-- **East of the spine** — Ta'Illistim, Ta'Loenthra, Ta'Vaalor, Atan Irith
-- **Islands, reachable only by sea** — Teras Isle, Kraken's Fall,
-  Caligos Isle, Isle of Ornath
-- **A southern landmass** — New Ta'Faendryl, Maelshyve, Sharath,
-  Idolone, Ubl
-
-Why this matters for layout: two rooms can be adjacent in the graph — a
-ship route, a portal, an urchin — while sitting on different continents.
-`region_of` has no concept of this, so it cannot tell "next door" from
-"across an ocean".
-
-It also explains apparent gaps. Of the 11 OSA port towns, 8 are already
-top-level regions in `derive_areas`. The three that are not turn out to
-be naming mismatches rather than missing data:
-
-| OSA map | `gs.map` | relationship |
-|---|---|---|
-| Teras Isle | `the town of Kharam-Dzu` (861 rooms) | the island vs the town on it |
-| Glaoveln | `the Pinefar Trading Post` (302) | the shore vs the settlement |
-| Sleeping Drake Harbor | `the Isle of Ornath` | a harbour on a Southern Ocean island |
-
-**The clearest case for curation is Solhaven.** The OSA map labels
-Vornavis and Solhaven as one place. `derive_areas` produces seven
-regions for it:
-
-```
-1748  Solhaven                              317  the southern part of Solhaven
- 120  the plains of Vornavis                 87  Vornavis
-  48  Solhaven's Warrior Guild               38  Vornavis Proper
-   8  between Wehnimer's Landing and Solhaven
-```
-
-No string parsing fixes that. It needs a curated field.
-
-
-
-Two fields, or one `area` with a parent pointer. `location` stays as the
-game's own answer (useful, gathered by visiting); `area` is the curated
-one the mapper and minimap use.
-
-Requirements:
-
-- **A partition.** Every room in exactly one area. `location` is not
-  one, which is why Wehnimer's Landing is 274 connected pieces under one
-  name.
-- **A parent.** The 103 prose locations prove a flat field is
-  insufficient — "Arborsong" needs to belong to "Mist Harbor" without
-  encoding it in the string.
-- **A landmass at the top.** Only the OSA map has it, and only it can
-  say that a graph edge crosses an ocean. 8 of the 11 port towns are
-  already regions; the other three are naming mismatches, above.
-- **Generated, then corrected.** `regions::derive_areas` already
-  produces 427 areas as a first pass; nobody should hand-author 36,838
-  rooms. This is what the mapper's corrections store is for.
-
-Expect the curated count nearer 427 than 342: the graph is finding real
-distinctions the location field does not encode.
-
-### 2. `meta:map:status` — disposition, promoted into the namespace that already holds identity
-
-**Recommendation: use the existing `map:` namespace rather than a new
-field.** `meta:map:virtual room` is already precisely the concept, and
-it is already exactly right — the same 16 rooms the `urchin-hideout` tag
-marks. Extending it costs no new plumbing and no new parser.
-
-```
-meta:map:status:live      (default; need not be written)
-meta:map:status:closed    draw, do not route
-meta:map:status:gone      do not draw
-```
-
-**The verbs are the point.** `closed` and `gone` differ in *what they
-disable*, not in flavour, and stating that in the value stops each
-consumer inventing its own reading — which is how the mapper ended up
-drawing teleport edges the walker would never take:
-
-| status | draw | route | example |
-|---|:--:|:--:|---|
-| `live` | yes | yes | Rumor Woods, Duskruin |
-| `closed` | yes | **no** | the Abbey, Duskruin between runs |
-| `gone` | **no** | no | Caligos Isle, Feywrot Mire, Spitfire |
-
-**Set it per area, override per room.** Area-level is how Caligos gets
-fixed in one edit instead of 677; room-level is needed because
-Bloodriven's `[Sable Quietus, Entry]` is one closed shop on a live
-street. Room wins over area.
-
-This subsumes `gone`, `closed` and `missing` as tags. `rewritten` is
-**not** a disposition — Cairnfang Manor is rewritten and live — and
-should stay a tag, or become `meta:map:rewritten`.
-
-### 3. Keep the access axis exactly as it is
-
-`Cost::Gated` on the edge, `meta:che:*` / `society:*` / `citizenship:*` /
-`premium:` as the conditions. Nothing to change. Worth stating in the
-schema so nobody later "simplifies" it into a room flag.
-
-### 4. Housekeeping worth doing while in there
-
-- **Normalise the split spellings.** 44 tag families differ only by
-  spacing or case; the guild tags are split almost exactly in half
-  (`bardguild` 10 / `bard guild` 10, and the same for cleric, empath,
-  ranger, rogue, sorcerer, warrior, wizard). A consumer filtering on one
-  spelling finds half the guilds. Service tags want a closed enum.
-- **Consolidate the four locker schemes** (538 rooms, 22 tags, three
-  meta namespaces) onto one. `meta:locker:<house|public>` would cover
-  every case now spread across `locker:`, `locker annex:<House>`,
-  `che:<house>:locker` and the tags.
-- **Leave `jail` alone.** The tag marks the constabulary, the meta marks
-  the cell; zero overlap is correct.
-- **`urchin-hideout` is redundant** with `meta:map:virtual room`
-  (identical 16 rooms). Drop the tag, keep the meta.
-- **140 `duplicate of NNNN` rooms** — bookkeeping stubs with titles like
-  `duplicate of 2937`, no exits, nothing pointing in. Delete rather than
-  visit.
-- **Two mislabelled rooms**: 26891 and 26896 carry
-  `location = "the sewers of Bloodriven Village"` but their exits lead to
-  Mark Alley, Pewter Road and Bailey Park. They are village rooms.
-- **Update `@herb_list`** in `tags.lic` — it is missing at least 340
-  forage names, which affects `;tags --sense`, not just this census.
-- **Two festival schemes**: `fest:*` marks 590 rooms across six
-  festivals, but Caligos uses `mapcategory:Events and Festivals`
-  instead. Neither is complete. Pick one.
-
-## What this fixes, concretely
-
-- Caligos Isle, the Feywrot Mire and Spitfire (1,627 rooms, three
-  derived areas) can be hidden by three area-level edits, with no
-  hardcoded location list in the layout engine — which would rot the
-  next time a festival closes.
-- 208 invented area names become curated ones.
-- `regions::region_of` stops parsing English.
-- The mapper and Hydra's minimap read the same disposition and cannot
-  drift.
-
-## What the map cannot tell us, and needs walking
-
-Separate from the schema: 421 reachable rooms need a `location` the game
-knows and the file does not (`analysis/worklist.tsv`). 754 have no location, 206
-are flagged `check_location`. Each row names a located neighbour and the
-command to reach it.
-
-Note this does **not** fix the invented area names: typing `location` in
-Cobblestone Path returns "Mist Harbor", the same coarse answer that
-caused the problem. Walking gathers the game's opinion; `area` needs a
-curator's.
+They are recorded in the `note` fields of `curation/*.toml`, because in
+six months the interesting question about `Summit Academy = gone` is not
+what it does but how anyone knew.
