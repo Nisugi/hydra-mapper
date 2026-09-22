@@ -283,6 +283,7 @@ name = "cena-map-layout"
 version = "0.1.0"
 dependencies = [
  "cena-map",
+ "cena-retag",
  "serde",
  "serde_json",
 ]

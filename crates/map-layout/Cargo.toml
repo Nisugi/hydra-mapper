@@ -23,6 +23,9 @@ serde.workspace = true
 # crate that has no file I/O still pins the format its callers persist.
 [dev-dependencies]
 serde_json.workspace = true
+# The probes in examples/ check curation against the SAME walkability
+# invariant `retag` enforces, rather than reimplementing it and drifting.
+cena-retag = { path = "../retag" }
 
 [lints]
 workspace = true

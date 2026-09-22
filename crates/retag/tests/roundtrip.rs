@@ -335,3 +335,87 @@ fn every_locker_key_is_well_formed() {
     bad.dedup();
     assert!(bad.is_empty(), "malformed locker keys: {bad:?}");
 }
+
+/// The region pass joins on uid and nothing else.
+///
+/// A title join would invent agreement between two sources whose
+/// disagreement is the thing being measured, so this pins the join: every
+/// room that gains a `region:` has a uid, and that uid is one the mapdb
+/// listed under exactly that region.
+#[test]
+fn a_region_is_only_written_where_a_uid_matched() {
+    let Some((_, map)) = real_map() else {
+        eprintln!("skipping: gs.map not present");
+        return;
+    };
+    let Ok(curation) = Curation::load(&curation_dir()) else {
+        eprintln!("skipping: curation/ not readable");
+        return;
+    };
+    let mut region_of: std::collections::BTreeMap<i64, &str> = std::collections::BTreeMap::new();
+    for region in &curation.regions.regions {
+        for uid in &region.uids {
+            region_of.insert(*uid, region.name.as_str());
+        }
+    }
+
+    let rooms = apply(map.rooms(), &plan(&map, &curation));
+    let mut tagged = 0usize;
+    for room in &rooms {
+        let Some(meta) = room.meta.iter().find(|m| m.starts_with("region:")) else {
+            continue;
+        };
+        tagged += 1;
+        let name = meta.strip_prefix("region:").unwrap_or_default();
+        assert!(
+            !room.uid.is_empty(),
+            "room {} has a region but no uid",
+            room.id.0
+        );
+        let agrees = room
+            .uid
+            .iter()
+            .any(|u| region_of.get(&u.0).copied() == Some(name));
+        assert!(
+            agrees,
+            "room {} tagged {name:?} but no uid of {:?} is listed under it",
+            room.id.0, room.uid
+        );
+    }
+    assert!(tagged > 20_000, "expected the bulk of the map, got {tagged}");
+}
+
+/// A room the mapdb never listed keeps no region at all.
+///
+/// 40% of gs.map does not join, and a pass that quietly invented a value
+/// for those would be worse than one that leaves them blank: absence is
+/// the honest answer and is itself a measurement.
+#[test]
+fn an_unjoined_room_gets_no_region() {
+    let Some((_, map)) = real_map() else {
+        eprintln!("skipping: gs.map not present");
+        return;
+    };
+    let Ok(curation) = Curation::load(&curation_dir()) else {
+        eprintln!("skipping: curation/ not readable");
+        return;
+    };
+    let known: std::collections::BTreeSet<i64> = curation
+        .regions
+        .regions
+        .iter()
+        .flat_map(|r| r.uids.iter().copied())
+        .collect();
+
+    let rooms = apply(map.rooms(), &plan(&map, &curation));
+    for room in &rooms {
+        if room.uid.iter().any(|u| known.contains(&u.0)) {
+            continue;
+        }
+        assert!(
+            !room.meta.iter().any(|m| m.starts_with("region:")),
+            "room {} has no listed uid but carries a region",
+            room.id.0
+        );
+    }
+}

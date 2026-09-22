@@ -289,6 +289,27 @@ pub struct Curation {
     pub tags: TagFile,
     pub spellings: SpellingFile,
     pub lockers: LockerFile,
+    pub regions: RegionFile,
+}
+
+/// `generated/regions.toml`: the official mapdb's `loc` field, keyed by
+/// uid.
+///
+/// Not a replacement for `location`. The two answer different questions --
+/// `location` is what the game's verb replies, `loc` is an administrative
+/// region -- and this pass writes `meta:region:<name>` beside the existing
+/// value so the two can be compared on real data before either is trusted
+/// over the other.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct RegionFile {
+    #[serde(default, rename = "region")]
+    pub regions: Vec<Region>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Region {
+    pub name: String,
+    pub uids: Vec<i64>,
 }
 
 impl Curation {
@@ -306,6 +327,10 @@ impl Curation {
         let tags: TagFile = read_toml(&dir.join("tags.toml"))?;
         let spellings: SpellingFile = read_toml(&dir.join("spellings.toml"))?;
         let lockers: LockerFile = read_toml(&dir.join("lockers.toml"))?;
+        // Generated from the mapdb rather than hand-written, so it lives
+        // in its own directory: a reviewer should not have to wonder which
+        // of 345KB of uids someone decided by hand.
+        let regions: RegionFile = read_toml(&dir.join("generated/regions.toml"))?;
 
         for (i, rule) in status.rules.iter().enumerate() {
             if rule.location.is_none() && rule.title.is_none() && rule.ids.is_none() {
@@ -328,6 +353,7 @@ impl Curation {
             tags,
             spellings,
             lockers,
+            regions,
         })
     }
 

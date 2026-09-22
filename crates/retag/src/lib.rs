@@ -25,6 +25,38 @@ use cena_map::{Map, Room};
 
 pub use rules::{Curation, LoadError, Rule, Verdict};
 
+/// Write `meta:region:<name>` from the official mapdb's `loc` field.
+///
+/// Joined by **uid only**. A title join would invent agreement -- 20,128
+/// mapdb titles against ours, with `[Shop]` and `[Second Floor]` repeating
+/// town to town -- and the point of this pass is to compare two sources,
+/// which is worthless if one is derived from a guess about the other.
+///
+/// Additive: `location` is not touched. The two fields answer different
+/// questions, and which one a consumer should want is exactly what this
+/// pass exists to let someone measure.
+fn tag_regions(plan: &mut Plan, rooms: &[Room], curation: &Curation) {
+    let mut region_of: BTreeMap<i64, &str> = BTreeMap::new();
+    for region in &curation.regions.regions {
+        for uid in &region.uids {
+            region_of.insert(*uid, region.name.as_str());
+        }
+    }
+    for room in rooms {
+        let Some(name) = room.uid.iter().find_map(|u| region_of.get(&u.0).copied()) else {
+            continue;
+        };
+        let meta = format!("region:{name}");
+        if room.meta.iter().any(|m| *m == meta) {
+            continue;
+        }
+        plan.changes.push(Change::AddMeta {
+            id: room.id.0,
+            meta,
+        });
+    }
+}
+
 /// One change to one room.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Change {
@@ -244,6 +276,9 @@ pub fn plan(map: &Map, curation: &Curation) -> Plan {
             });
         }
     }
+
+    // Pass 2e: regions from the official mapdb.
+    tag_regions(&mut plan, rooms, curation);
 
     // Pass 3: duplicate stubs.
     for id in deletable_stubs(map) {
