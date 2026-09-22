@@ -1,0 +1,43 @@
+# Location corrections for gs.map, applied by `retag` BEFORE the rules in
+# status.toml.
+#
+# The order matters. Disposition rules key on `location`, so a room whose
+# location is stale gets the wrong verdict. The Arena of the Abyss is the
+# worked example: it carries `location = "Caligos Isle"` but the game moved
+# it to Evermore Hollow, and a `gone` rule on Caligos would have hidden a
+# live sub-area. Correcting the location first makes
+# `location = "Caligos Isle"` mean exactly the 666 rooms that did sink.
+#
+# `location` here is the game's own answer to the LOCATION command, so a
+# correction is a claim the recorded answer is stale -- not a curator's
+# preference about grouping. That distinction is why these live in their
+# own file: the curated `area` field, when it exists, will be separate and
+# will not overwrite this one.
+
+# The Arena of the Abyss moved to Evermore Hollow and is entered from
+# [Evermore Hollow, Outer Circle] (31577) by `out`, a plain edge both ends
+# agree on. Its 8 rooms kept their original uids (8225001-8225009), so this
+# is the same Arena relocated, not a new copy: there is no second set of
+# Arena rooms under Evermore-range uids.
+#
+# Not to be confused with RoomId 28351 [Arena of the Abyss], uid 8213625,
+# `location = "Duskruin Arena"` -- a separate Duskruin entrance stub.
+[[fix]]
+uids = [8225001, 8225002, 8225003, 8225005, 8225006, 8225007, 8225008, 8225009]
+location = "Evermore Hollow"
+note = "Relocated from Caligos Isle. Verified live: reachable by a non-seasonal edge."
+
+# [Arena of the Abyss, Cursed Pit] -- an orphan fragment left behind. No
+# uid, no exits, nothing pointing in, so it cannot be addressed by uid and
+# cannot be placed. Left as Caligos (and so `gone`) rather than moved on a
+# guess; it needs a walk to settle.
+# id 28564
+
+# The two rooms the room-classification doc found by hand: they carry
+# `location = "the sewers of Bloodriven Village"` but their exits lead to
+# Mark Alley, Pewter Road and Bailey Park, which are village streets. The
+# connectivity check found the same pair independently.
+[[fix]]
+ids = [26891, 26896]
+location = "Bloodriven Village"
+note = "Village rooms mislabelled as sewers; exits lead to Pewter Road, Mark Alley, Bailey Park."

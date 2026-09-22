@@ -1,0 +1,322 @@
+# Disposition rules for gs.map. Applied by `retag` into meta:map:status:*.
+#
+#   live   = real place; draw and route. The default, never written to a room.
+#   closed = exists, shut right now; draw but do not route.
+#   gone   = removed from the game; do not draw.
+#
+# A rule names rooms by `location` or by `title` prefix. Room-level wins
+# over area-level; later rules win over earlier ones.
+#
+# `event = "<name>"` records WHICH paid event an area belongs to, written as
+# meta:event:<name>. That is a durable fact; `closed` is not. GemStone runs
+# paid events in even months for ~21 days (Feb Duskruin, Apr Rumor Woods,
+# Aug Duskruin, Oct Ebon Gate; Rings of Lumnis and Inquisitor Jun/Dec), so
+# an event area is open a few weeks a year and shut the rest. A consumer
+# answers "is it open now?" from a calendar plus meta:event:*, rather than
+# this file being re-curated four times a year.
+#
+# INVARIANT: a rule may never mark a room `gone` or `closed` if that room is
+# reachable by walking from a town centre. Someone can get there, so it is
+# live whatever this file says. `retag plan` reports any rule that trips
+# this and refuses to apply it.
+#
+# Reachability IGNORES `event transport` edges. The command only works while
+# the event is live, so the edge exists in the map but cannot be traversed
+# most of the year. Counting it would make all 1,378 Duskruin, Ebon Gate and
+# Evermore Hollow rooms look live year-round. Every other edge counts, and
+# gates (profession, race, CHE, society, citizenship) are ignored too --
+# the test is whether SOMEONE can walk there, not whether everyone can.
+
+
+# ---------------------------------------------------------------- live
+# Disconnected in the map only because nobody recorded the entrance edge.
+# These are walk-it-later gaps, not dispositions.
+
+[[rule]]
+verdict = "live"
+location = "Vornavis"
+title = "[Academy,"
+note = "Night at the Academy - paid quest, live. Scoped to Vornavis: Rone Academy is a different Academy (9 rooms)."
+
+[[rule]]
+verdict = "live"
+title = "[Krolvin Warship"
+note = "Open Sea Adventures instance - 127 rooms, loc 'somewhere on the Great Western Sea'."
+
+[[rule]]
+verdict = "live"
+location = "the Flotilla"
+note = "OSA floating town, 116 rooms."
+
+[[rule]]
+verdict = "live"
+location = "Glaoveln"
+note = "OSA port town on the Open Sea Adventures map; 224 rooms."
+
+# -------------------------------------------------------------- closed
+# Exist, shut right now. Festivals and event areas between runs.
+
+[[rule]]
+verdict = "closed"
+location = "Rumor Woods"
+event = "rumor-woods"
+note = "Festival, reopens in April."
+
+[[rule]]
+verdict = "closed"
+location = "Bloodriven Village"
+event = "duskruin"
+note = "Duskruin event area."
+
+[[rule]]
+verdict = "closed"
+location = "the sewers of Bloodriven Village"
+event = "duskruin"
+note = "Duskruin event area. 186 of these are unplaceable singletons."
+
+[[rule]]
+verdict = "closed"
+location = "Duskruin Arena"
+event = "duskruin"
+note = "Duskruin event area, 86 rooms."
+
+[[rule]]
+verdict = "closed"
+title = "[Sonreeva"
+event = "ebon-gate"
+note = "Ebon Gate dungeon crawl, event area. 46 rooms, loc Naidem."
+
+[[rule]]
+verdict = "closed"
+title = "[Hollowlair"
+event = "ebon-gate"
+note = "Ebon Gate dungeon crawl, event area. 26 rooms."
+
+[[rule]]
+verdict = "closed"
+location = "Grawood Farmstead outside of River's Rest"
+note = "fest:grawood; already tagged closed on all 211."
+
+[[rule]]
+verdict = "closed"
+location = "Revel of the Anfelt"
+note = "fest:anfelt; already tagged closed on all 186."
+
+[[rule]]
+verdict = "closed"
+location = "Village of Velathae"
+note = "fest:velathae; already tagged closed on all 113."
+
+# ---------------------------------------------------------------- gone
+# Removed from the game.
+
+[[rule]]
+verdict = "gone"
+title = "[Bank of Bloodriven"
+note = "Bank heist removed. May return as a new area, which would be new rooms. 7 rooms, no location, no exits."
+
+[[rule]]
+verdict = "gone"
+location = "The Miasmic Verge"
+note = "Feywrot Mire event area, 644 rooms."
+
+[[rule]]
+verdict = "gone"
+location = "the Feywrot Mire"
+note = "Event area, 628 rooms."
+
+[[rule]]
+verdict = "gone"
+location = "Caligos Isle"
+note = "Sank in 2021, 674 rooms. NOTE: 8 Arena of the Abyss rooms carry this location but relocated to Evermore Hollow and are live - their location must be corrected before this rule is safe."
+
+# ============================================================ round 2
+# Ebon Gate's current home. Caligos Isle sank in 2021 and the event moved
+# to Naidem; Evermore Hollow is its grounds, Sonreeva and Hollowlair its
+# dungeon crawl, Endeltime Estates and Bittermere Woods its manor district.
+# All 937 rooms break off as one component once `event transport` edges are
+# excluded, which is exactly right: no way in until October.
+
+[[rule]]
+verdict = "closed"
+location = "Evermore Hollow"
+event = "ebon-gate"
+note = "Ebon Gate grounds, 742 rooms in the 937-room block."
+
+[[rule]]
+verdict = "closed"
+location = "Naidem"
+event = "ebon-gate"
+note = "Ebon Gate's home since Caligos sank."
+
+[[rule]]
+verdict = "closed"
+location = "the Realm of Naidem"
+event = "ebon-gate"
+
+[[rule]]
+verdict = "closed"
+location = "Endeltime Estates, Naidem"
+event = "ebon-gate"
+note = "Manor district, incl. Bittermere Woods Gardens."
+
+[[rule]]
+verdict = "closed"
+location = "Delirium Manor"
+event = "ebon-gate"
+note = "77 rooms in the Ebon Gate block."
+
+[[rule]]
+verdict = "closed"
+location = "Sonreeva"
+event = "ebon-gate"
+
+# -------------------------------------------------------- retired venues
+# Venues whose events stopped running. Not `closed`: nothing is scheduled
+# to reopen them, and `closed` means "shut right now", which would imply a
+# return date these do not have.
+
+[[rule]]
+verdict = "gone"
+location = "Summit Academy"
+note = "Venue for Sylinar's Spire, Summit Expression Faire, Return to Summit Academy. Last run 2017. 73 rooms, incl. Brickburn Hall."
+
+[[rule]]
+verdict = "gone"
+title = "[Briarmoon Cove"
+note = "Briarmoon Cove festival, last run 2020. Title rule, NOT a location rule: these 28 rooms carry location 'the Pinefar Trading Post', which is a live town (301 rooms). A location rule would hide Pinefar."
+
+# ---------------------------------------------------- Open Sea Adventures
+# OSA is live. The ocean has several seas, and each ship and island is its
+# own instance, so these float as separate components by design rather than
+# for want of a recorded entrance.
+
+[[rule]]
+verdict = "live"
+location = "Sailor's Grief"
+note = "Newest hunting area: three islands (Talon Isle, The Mageborn, Sailor's Grief wreckage) you swim between, plus The Contempt -- a floating town that moves among them. 163 rooms across 4 components. The Contempt's Crow's Nest carries tags node/supernode/town."
+
+[[rule]]
+verdict = "live"
+title = "[Sloop"
+note = "OSA vessel instance."
+
+[[rule]]
+verdict = "live"
+location = "Ships"
+note = "OSA vessel instances."
+
+[[rule]]
+verdict = "live"
+location = "The Tenebrous Cauldron"
+note = "OSA, one of the several seas."
+
+[[rule]]
+verdict = "live"
+location = "the Glaesen Star"
+note = "OSA vessel."
+
+[[rule]]
+verdict = "live"
+location = "Nyessem"
+
+[[rule]]
+verdict = "live"
+location = "Brayern Isle"
+note = "OSA island."
+
+[[rule]]
+verdict = "live"
+location = "somewhere on the Great Western Sea"
+note = "OSA open water; Krolvin Warship instances live here."
+
+# ============================================================ round 3
+
+# Quest Nexus: the hub reached by QUEST NEXUS TRANSPORT (a quest token from
+# the SIMUCOIN store is required). Leads to the pay quests Night at the
+# Academy, Return to Black Swan Castle and Troubled Waters. Live -- the
+# token is an access gate, not a disposition, and `QUEST NEXUS STATUS`
+# reports all three quests Available.
+#
+# Consistent with the [Academy, rule above, which marks Night at the
+# Academy live.
+[[rule]]
+verdict = "live"
+location = "the Quest Nexus"
+note = "Pay-quest hub. Gated by a quest token, which is an access condition (meta), not a status."
+
+# Skyship: Syndicate airship raids. Slaying Empyrean during an active
+# Onslaught can open a swirling portal into one; multi-deck combat, groups
+# of up to five. Live but gated behind the Onslaught event, which is why
+# no ordinary edge reaches it. 72 rooms across 3 components, uid 12102xxx.
+[[rule]]
+verdict = "live"
+title = "[Skyship"
+note = "Syndicate airship raid, entered via a portal from Empyrean during an active Onslaught. Gated, not closed."
+
+# Rumor Woods rooms that carry no location; same festival as the 354
+# located ones above.
+[[rule]]
+verdict = "closed"
+title = "[Rumor Woods"
+event = "rumor-woods"
+note = "The 40-room component with no location set."
+
+# Chronomage Teleportation System: the paid inter-town travel network.
+# The 10 rooms (uid 4002910-4002919) are the transport waiting rooms --
+# [Wehnimer's Landing Room], [Icemule Trace Room], [Ta'Vaalor Room] and so
+# on -- reached from [Swirling Nexus, Transport Hub]. Live in Prime.
+#
+# Tickets cost 100,000 silvers from a clerk in each town's Chronomage
+# office; departures at :00, :20 and :40. A day pass (5,000s) covers
+# unlimited travel between two towns in the same zone for 24 hours.
+#
+# Disconnected only because the edge in is a ticket-raise, not a walk --
+# an access condition, like the Quest Nexus token and the Skyship portal.
+[[rule]]
+verdict = "live"
+title = "[Swirling Nexus"
+note = "Chronomage transport hub, Prime. Gated by a purchased ticket."
+
+[[rule]]
+verdict = "live"
+ids = [30596, 30597, 30598, 30599, 30600, 30601, 30602, 30603, 30604]
+note = "Chronomage per-destination waiting rooms: Kraken's Fall, Icemule, Ta'Illistim, Ta'Vaalor, Zul Logoth, Kharam Dzu, Solhaven, Wehnimer's, River's Rest."
+
+# ---------------------------------------------------------- ON INSTANCES
+# The Chronomage hub above is live in BOTH Prime and Shattered; only the
+# price of the edge differs -- 100,000 silvers for a ticket in Prime, free
+# in Shattered, where you can simply walk in. That is a property of the
+# EDGE and of the character: the access axis, which Cost::Gated and
+# tags.lic already model correctly and which the room-classification doc
+# says to leave alone. It is not a disposition and needs no per-instance
+# status.
+#
+# Worth writing down because the opposite conclusion looks plausible from
+# the data alone: gs.map does mix instances, and meta:game:* marks only 29
+# rooms (GSPlat 16, GSX 7, GSF 6), none of them these. If a room is ever
+# genuinely gone in one instance and live in another, that gap is real and
+# meta:game:<instance> is where it belongs -- but this is not that case.
+
+[[rule]]
+verdict = "gone"
+location = "Highman Games near Icemule Trace"
+note = "Festival last run 2010. All 75 rooms already carry the `closed` tag, but sixteen years with nothing scheduled is not `closed` -- that means shut right now and expected back. Same reasoning as Summit Academy (2017) and Briarmoon Cove (2020)."
+
+# [Zul Logoth, Winding Tunnels] room 4 -- the one `gone`-tagged room in the
+# map that HAS a uid, so `require_no_uid` in tags.toml refuses it and it
+# needs naming here.
+#
+# The uid turns out not to mean what it looks like. Room 16918 carries
+# seven uids at once (278901, 278903-278907, 278909): the mapper collapsed
+# a stretch of identical tunnel into one node. Room 4's uid, 278902, sits
+# inside that run, and 16919 holds 278908. So room 4 is a leftover fragment
+# of a consolidated tunnel, not a room the game still keeps separately.
+#
+# The graph agrees. Its single exit leads northwest to 16919, which does
+# not point back -- 16919 goes to 9441 instead -- and nothing anywhere
+# points at room 4. One-way and unreachable.
+[[rule]]
+verdict = "gone"
+ids = [4]
+note = "Unmerged fragment of the multi-uid Winding Tunnels; no return edge, nothing inbound."

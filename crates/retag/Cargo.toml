@@ -1,0 +1,35 @@
+[package]
+name = "cena-retag"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+# The curation tool: applies `curation/*.toml` to `gs.map`.
+#
+# Exists because the classification the map needs (disposition, corrected
+# locations, consolidated tags) is a set of human decisions about places,
+# and a decision belongs in a reviewable file rather than in a one-off
+# script that is run once and lost. `retag plan` prints what would change;
+# `retag apply` writes it. Re-running `apply` changes nothing the second
+# time, so the rules -- not the binary diff -- are the record of what the
+# map says and why.
+#
+# The safety property that makes this tool sane to run on a 23MB binary:
+# `cena_map::binary` round-trips gs.map byte-for-byte, so every difference
+# in the output is one this tool made on purpose. `tests/roundtrip.rs`
+# pins that.
+[dependencies]
+cena-map.workspace = true
+serde.workspace = true
+toml = "0.9"
+
+[lints]
+workspace = true
+
+[lib]
+name = "cena_retag"
+path = "src/lib.rs"
+
+[[bin]]
+name = "retag"
+path = "src/main.rs"

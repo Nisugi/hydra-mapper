@@ -1,0 +1,86 @@
+# What to do with the disposition tags no area rule in `status.toml`
+# reaches: the scattered individual rooms, mostly dead shops in live towns.
+#
+# These are not in doubt. Someone judged each one already, and the data
+# broadly corroborates it -- 144 of the 145 `gone` rooms have no uid, so
+# the game has never numbered them. The problem is only that the map then
+# carries two vocabularies at once: `meta:map:status:*` on the areas a
+# rule covers, and a bare tag on everything else. This file closes that.
+#
+# Walkability decides every hard case, because it is the one thing that
+# cannot be argued with: someone can stand in the room right now.
+
+# --------------------------------------------------------------- `gone`
+# All 145 become meta:map:status:gone.
+#
+# The corroborating fact is the uid: NOT ONE of the 145 has one, and that
+# is not what chance looks like -- only 21% of the map lacks a uid, so a
+# set this size coming out at 100% is a signal, not a coincidence. The
+# game numbers the rooms it has; a room it has never numbered is a room it
+# does not have, which is exactly what the tag claims.
+#
+# That settles the 28 walkable ones, which would otherwise be vetoed.
+# They are uid-less like the rest, and they read as retired structures
+# rather than shops: the seven [Watchtower, *] rooms in Solhaven, the nine
+# Dreadnaught Alliance rooms in Ta'Illistim, a Kharam-Dzu merchant row,
+# [Icemule Trace, Airship Hangar], and the Solhaven street grid -- Grebe
+# Lane, Limpet Trail, Murre Place, Scaup Road.
+#
+# `require_no_uid` is what makes waiving the veto safe here. It is not
+# "trust the tag"; it is "trust the tag where the game agrees with it".
+# A `gone`-tagged room that DID have a uid would still be refused, and
+# would deserve the argument.
+[convert.gone]
+from_tag = "gone"
+to_status = "gone"
+only_if_unwalkable = true
+allow_walkable = true
+require_no_uid = true
+
+# ------------------------------------------------------------- `closed`
+# All 798 become meta:map:status:closed, walkable or not.
+#
+# 87 of them are walkable: [Prestidigitorium], [Ilyra's Fashions], the five
+# Ta'Vaalor blackjack tables, [Moot Hall, Mayor's Office]. You can open the
+# door and walk in; there is no inventory and no merchant.
+#
+# `closed` is a claim about the SHOP, not about the doorway. The lock was
+# most likely meant to be there and was forgotten or reverted, and an empty
+# room you can wander into hurts nothing -- so the tag is better evidence
+# about the place than the edge is. Treat them as closed and not walkable.
+#
+# This needs `allow_walkable`, because the walkability veto would otherwise
+# refuse them: a room someone can stand in is normally live by definition.
+# That veto stays on by default and is waived only here, where the
+# exception is understood. It is still what catches a rule that names a
+# live area by accident -- the Arena of the Abyss inside Caligos Isle, or a
+# location rule on Briarmoon Cove taking the live Pinefar Trading Post
+# with it.
+[convert.closed]
+from_tag = "closed"
+to_status = "closed"
+only_if_unwalkable = true
+allow_walkable = true
+
+# ------------------------------------------------------------ `missing`
+# `missing` never meant gone. It meant "the mapper could not find it",
+# which is a fact about mapping, not about the game -- the
+# room-classification doc's knowledge axis, which it says to derive and
+# never store.
+#
+# Eleven rooms prove the point: walkable, with a uid, with exits.
+# [Whimbley's Four Corners], [Dreamshine's Bedding], [The Distinctive Elf]
+# and the rest of the Icemule shop row are perfectly ordinary rooms whose
+# tag is simply stale. The tag goes; nothing replaces it.
+#
+# The other 41 keep it for now. They are genuinely unplaced, and until
+# someone walks them there is no better answer -- but `is_connected`
+# already computes that, so this tag is redundant there too and should
+# eventually go entirely.
+[convert.missing]
+from_tag = "missing"
+to_status = "none"
+only_if_walkable = true
+require_uid = true
+require_exits = true
+note = "Stale mapping note on rooms that are demonstrably fine."
