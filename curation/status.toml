@@ -320,3 +320,238 @@ note = "Festival last run 2010. All 75 rooms already carry the `closed` tag, but
 verdict = "gone"
 ids = [4]
 note = "Unmerged fragment of the multi-uid Winding Tunnels; no return edge, nothing inbound."
+
+# ============================================================== Talador
+# The barony of Talador was destroyed in 5116 -- a blood marble obelisk
+# set off by Prelate Chaston Griffin during Eyes of the Dawn, intended
+# for Tamzyrr and redirected by Raznel. What replaced it is the
+# Bleaklands, which the map already carries as its own live location: 34
+# rooms, all reachable, all with uids.
+#
+# The old barony is still in the file. `location = "Talador"` holds 528
+# rooms and splits exactly:
+#
+#    90  reachable, live    The Ember Vale (53), Luinne Bheinn (18),
+#                           Deadfall Forest (17) -- wilderness that
+#                           survived, each fully reachable
+#   438  unreachable        the city, its mines, Doggoroth Keep, and the
+#                           shops inside it: Patty's Cakes, Dress the
+#                           Dead, Quarrels and Quivers, the Blacksmith
+#
+# ALL 438 have no uid. Not one, against 21% map-wide. That is the same
+# signal that settled every other `gone` area: the game numbers the rooms
+# it has, so its silence is the game agreeing these are not rooms any
+# more.
+#
+# A single rule on `location = "Talador"` was tried first and REFUSED by
+# the walkability invariant, which reported 90 walkable rooms it would
+# have hidden. That is the check doing its job: the location covers both
+# the dead city and three live wildernesses, so the rules are scoped by
+# title instead. Each is listed rather than guessed at.
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[Talador"
+note = "The city and its mines. Includes [Talador, The Bleaklands], the transitional rooms; the 34-room `Bleaklands` location is separate and live."
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[Doggoroth"
+note = "Doggoroth Keep, built by dwarves around 4519 to protect the silver mines."
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[Road to Talador"
+note = "The approach. These are the rooms `derive_areas` drew in the middle of Wehnimer's town square, having fused Talador into the Landing across an unlabelled corridor."
+
+# The city's own streets and buildings. Every one is unreachable and
+# uid-less; they are named individually because the location cannot be
+# used wholesale.
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[The Murkwoods"
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[The Demonwall"
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[Barret's Gorge"
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[The Old Keep Road"
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[Lich's Landing"
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[Lich Citadel"
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[Barracks"
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[Idolone"
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[Banshee Tower"
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[Blacksmith"
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[DragonSpines"
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[The Swale"
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[Darkness With Inn"
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[Hall of Mages"
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[Shade Square"
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[The Darkness With Inn"
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[Demon Draught"
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[The Bitter Bite"
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[Northern DragonSpines"
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[Underground Cavern"
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[Fitzwobbin's Figures"
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[Dress the Dead"
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[Hendoran Outpost"
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[Holishant Farm"
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[Magic Might"
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[Old Stone Tower"
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[Patty's Cakes"
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[Quarrels and Quivers"
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[Shield of the Shrickhen"
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[The Demon Draught"
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[The Golden Artificer"
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[The Northern Armament"
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[Tokens of Talador"
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[The Warding Way"
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[Weapons Wight Away"
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[The Spirits"
+
+[[rule]]
+verdict = "gone"
+location = "Talador"
+title = "[The Lich's Throne"
