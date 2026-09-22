@@ -36,6 +36,8 @@ use std::collections::{BTreeMap, HashSet};
 
 use cena_map::{Map, RoomId};
 
+use crate::overrides::{MapOverrides, RoomKey};
+
 /// `areas.tsv` as produced by `research/jev-trial/areas.py`, compiled in so
 /// the binary needs no data file beside it.
 ///
@@ -45,13 +47,16 @@ use cena_map::{Map, RoomId};
 /// not a code change.
 const AREAS_TSV: &str = include_str!("../data/areas.tsv");
 
-/// Which of the two groupings a list holds.
+/// Which of the three groupings a list holds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AreaKind {
     /// Simutronics' own layout areas (`source` = `official layout`).
     Official,
     /// The game's `location` verb (`source` = `mapdb location`).
     Mapdb,
+    /// Plates a person made, and moved rooms onto, to keep satellites off
+    /// a town's own sheet. See [`crate::overrides`].
+    Plates,
 }
 
 impl AreaKind {
@@ -60,6 +65,7 @@ impl AreaKind {
         match self {
             AreaKind::Official => "Official",
             AreaKind::Mapdb => "Mapdb",
+            AreaKind::Plates => "Plates",
         }
     }
 }
@@ -68,41 +74,68 @@ impl AreaKind {
 pub struct Area {
     pub name: String,
     /// Members, in map order. Official areas carry them from `areas.tsv`;
-    /// mapdb areas collect every room sharing a `location`.
+    /// mapdb areas collect every room sharing a `location`; plates collect
+    /// whatever was moved onto them.
     pub rooms: Vec<RoomId>,
 }
 
-/// Both lists, each sorted by name, built once at startup.
+impl Area {
+    /// This area without the rooms in `taken`, or `None` when that leaves
+    /// nothing -- an area emptied onto plates stops being listed rather
+    /// than offering a name that draws a blank sheet.
+    fn without(mut self, taken: &HashSet<RoomId>) -> Option<Area> {
+        self.rooms.retain(|id| !taken.contains(id));
+        (!self.rooms.is_empty()).then_some(self)
+    }
+}
+
+/// All three lists, each sorted by name, rebuilt whenever a room is moved
+/// between plates.
 pub struct Areas {
     pub official: Vec<Area>,
     pub mapdb: Vec<Area>,
+    pub plates: Vec<Area>,
 }
 
 impl Areas {
-    /// Build both lists for `map`.
+    /// Build the lists for `map`, honouring the plates and membership
+    /// moves in `store`.
     ///
-    /// **Official layout is truth, and the two lists do not overlap.** A
-    /// room an official area claims is not listed a second time under its
-    /// mapdb location: the official layout is the curated split, whereas
-    /// mapdb `location` frequently cuts a building into areas of one or
-    /// two rooms. So the official list is taken first and the mapdb list
-    /// covers only what is left -- the same precedence `areas.py` applies
-    /// when it assigns each room exactly one area.
+    /// **A moved room leaves its old area.** Membership moves are applied
+    /// first and win over everything: that is the whole point of moving a
+    /// room onto its own plate -- the Town Well stops crowding the
+    /// Landing's sheet because it is no longer *in* the Landing's list.
+    ///
+    /// After that, **official layout is truth, and the lists do not
+    /// overlap.** A room an official area claims is not listed a second
+    /// time under its mapdb location: the official layout is the curated
+    /// split, whereas mapdb `location` frequently cuts a building into
+    /// areas of one or two rooms. So the official list is taken first and
+    /// the mapdb list covers only what is left -- the same precedence
+    /// `areas.py` applies when it assigns each room exactly one area.
     ///
     /// The official list is intersected with the rooms actually present:
     /// `areas.tsv` was generated against one map file, and a room it names
     /// that this map does not have would otherwise produce an area that
     /// draws as a hole.
     #[must_use]
-    pub fn build(map: &Map) -> Areas {
-        let official = official_areas(map);
-        let claimed: HashSet<RoomId> = official
+    pub fn build(map: &Map, store: &MapOverrides) -> Areas {
+        let plates = plate_areas(map, store);
+        let mut claimed: HashSet<RoomId> = plates
             .iter()
             .flat_map(|a| a.rooms.iter().copied())
             .collect();
+
+        let official: Vec<Area> = official_areas(map)
+            .into_iter()
+            .filter_map(|area| area.without(&claimed))
+            .collect();
+        claimed.extend(official.iter().flat_map(|a| a.rooms.iter().copied()));
+
         Areas {
-            mapdb: mapdb_areas(map, &claimed),
             official,
+            mapdb: mapdb_areas(map, &claimed),
+            plates,
         }
     }
 
@@ -113,8 +146,37 @@ impl Areas {
         match kind {
             AreaKind::Official => &self.official,
             AreaKind::Mapdb => &self.mapdb,
+            AreaKind::Plates => &self.plates,
         }
     }
+}
+
+/// One area per plate that has rooms on it, named as the person named it.
+///
+/// A plate with no rooms left is not listed: it would draw as an empty
+/// sheet. The plate itself survives in the store, so it stays available as
+/// a move target.
+fn plate_areas(map: &Map, store: &MapOverrides) -> Vec<Area> {
+    let mut by_plate: BTreeMap<&str, Vec<RoomId>> = BTreeMap::new();
+    for room in map.rooms() {
+        let key = RoomKey::of(room.id, map);
+        if let Some(plate) = store.membership_moves.get(&key) {
+            by_plate.entry(plate.as_str()).or_default().push(room.id);
+        }
+    }
+    by_plate
+        .into_iter()
+        .map(|(plate, rooms)| Area {
+            // The display name if the plate was minted here; the key
+            // itself for one that arrived in a hand-edited file.
+            name: store
+                .custom_maps
+                .get(plate)
+                .cloned()
+                .unwrap_or_else(|| plate.to_owned()),
+            rooms,
+        })
+        .collect()
 }
 
 /// Parse the bundled TSV, keeping `official layout` rows whose rooms this

@@ -12,6 +12,8 @@ publish.workspace = true
 # dependency graph.
 [dependencies]
 cena-map.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 cena-map-layout = { path = "../map-layout" }
 egui.workspace = true
 eframe.workspace = true

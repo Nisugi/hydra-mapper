@@ -14,6 +14,7 @@ mod areas;
 mod camera;
 mod draw;
 mod inspect;
+mod overrides;
 
 use std::path::PathBuf;
 

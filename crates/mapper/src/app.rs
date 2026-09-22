@@ -1,8 +1,9 @@
 //! The window's state and its `eframe::App` implementation.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use cena_map::{Map, RoomId};
+use cena_map_layout::Cell;
 use cena_map_layout::scene::Sheet;
 use cena_map_layout::{Layout, MapScene, build_scene, generate_layout};
 
@@ -10,6 +11,7 @@ use crate::areas::{AreaKind, Areas};
 use crate::camera::Camera;
 use crate::draw;
 use crate::inspect::{Crossed, RoomFacts, bearing};
+use crate::overrides::{self, MapOverrides, RoomKey};
 
 /// What went wrong loading the map file, said to the player in the window
 /// rather than only on stderr -- a tool that cannot show a map should say
@@ -72,6 +74,29 @@ struct Selection {
     index: usize,
 }
 
+/// One completed edit, applied after the frame's panels have let go of
+/// their borrows. Every one of these saves the store.
+#[derive(Debug, Clone)]
+enum EditAction {
+    /// Shift a whole group by a cell delta.
+    NudgeGroup { anchor: RoomKey, delta: Cell },
+    /// Place one room within its group's frame.
+    PinRoom { key: RoomKey, pin: Cell },
+    /// Drop a room's pin, returning it to where the solver put it.
+    UnpinRoom { key: RoomKey },
+    /// Forget every correction for the shown area.
+    ResetLocation,
+    /// Delete a plate, releasing its rooms back to their own areas.
+    DeletePlate { plate: String },
+    /// Move rooms onto a plate, or (with `None`) back to their own area.
+    MoveRooms {
+        keys: Vec<RoomKey>,
+        to: Option<String>,
+    },
+    /// Mint a plate and move rooms onto it in one action.
+    NewPlate { name: String, keys: Vec<RoomKey> },
+}
+
 pub struct MapperApp {
     /// `Err` once, at startup, and shown instead of a window full of
     /// nothing; loading never happens again from inside the app (v1 is a
@@ -94,17 +119,59 @@ pub struct MapperApp {
     /// The room the inspector panel is describing, if any.
     inspected: Option<RoomId>,
     shown: Option<Shown>,
+
+    // --- editing ---
+    /// Hand-made corrections: moves, pins and plates. Saved on every edit.
+    store: MapOverrides,
+    /// Where the store is saved. `None` when no map path was given, which
+    /// also means corrections cannot be kept.
+    store_path: Option<PathBuf>,
+    /// A store that would not load or save, said in the window. While this
+    /// is set from a failed *load*, editing stays off.
+    store_problem: Option<String>,
+    /// Whether dragging moves rooms instead of panning the view.
+    edit_mode: bool,
+    drag: Option<DragState>,
+    /// Name being typed for a new plate.
+    new_plate: String,
+}
+
+/// A drag in progress. Committed as one correction on release, so dragging
+/// a group across the sheet is a single entry rather than one per frame.
+#[derive(Debug, Clone, Copy)]
+struct DragState {
+    /// The group being moved.
+    group: usize,
+    /// Set when only this room moves (Alt held at drag start).
+    room: Option<RoomId>,
+    /// Pixels moved so far, converted to whole cells on release.
+    accumulated: egui::Vec2,
 }
 
 impl MapperApp {
     #[must_use]
     pub fn load(path: Option<&Path>) -> MapperApp {
         let map = load_map(path);
+        let store_path = path.map(overrides::store_path);
+        let (store, store_problem) = match store_path.as_deref() {
+            Some(path) => match MapOverrides::load(path) {
+                Ok(store) => (store, None),
+                // A store that will not parse is NOT discarded: it is
+                // hand-curated work. Editing stays off until it is fixed
+                // or moved aside, so a stray save cannot overwrite it.
+                Err(error) => (
+                    MapOverrides::default(),
+                    Some(format!("{} {error}", path.display())),
+                ),
+            },
+            None => (MapOverrides::default(), None),
+        };
         let areas = match &map {
-            Ok(map) => Areas::build(map),
+            Ok(map) => Areas::build(map, &store),
             Err(_) => Areas {
                 official: Vec::new(),
                 mapdb: Vec::new(),
+                plates: Vec::new(),
             },
         };
         MapperApp {
@@ -117,7 +184,47 @@ impl MapperApp {
             camera: Camera::default(),
             inspected: None,
             shown: None,
+            store,
+            store_path,
+            store_problem,
+            edit_mode: false,
+            drag: None,
+            new_plate: String::new(),
         }
+    }
+
+    /// Save the store, turning a write failure into a message the window
+    /// shows rather than a silent loss of the correction just made.
+    fn save_store(&mut self) {
+        let Some(path) = self.store_path.as_deref() else {
+            self.store_problem = Some("No map path, so corrections cannot be saved.".to_owned());
+            return;
+        };
+        match self.store.save(path) {
+            Ok(()) => self.store_problem = None,
+            Err(error) => {
+                self.store_problem = Some(format!("Cannot save {}: {error}", path.display()));
+            }
+        }
+    }
+
+    /// Rebuild the area lists after a membership change, keeping the
+    /// selected area selected by name where it still exists.
+    fn rebuild_areas(&mut self) {
+        let Ok(map) = &self.map else { return };
+        let was = self
+            .selected
+            .and_then(|s| self.areas.list(s.kind).get(s.index))
+            .map(|a| (self.tab, a.name.clone()));
+        self.areas = Areas::build(map, &self.store);
+        self.selected = was.and_then(|(kind, name)| {
+            self.areas
+                .list(kind)
+                .iter()
+                .position(|a| a.name == name)
+                .map(|index| Selection { kind, index })
+        });
+        self.show_selected();
     }
 
     /// Compute (or recompute) the layout and scene for the selected area.
@@ -149,18 +256,186 @@ impl MapperApp {
             self.shown = None;
             return;
         };
-        let layout = generate_layout(&subset);
-        let scene = build_scene(&area.name, &layout, &subset);
+        let name = area.name.clone();
+        let mut layout = generate_layout(&subset);
+        // Corrections are a diff on top of the solver's own output, so the
+        // generated layout stays the thing being corrected.
+        if let Some(location) = self.store.location(&name) {
+            overrides::apply(&mut layout, &subset, location);
+        }
+        let scene = build_scene(&name, &layout, &subset);
         // A new area's selection does not carry over: the room is not in
         // it, and a stale inspector panel would describe nothing visible.
         self.inspected = None;
         self.shown = Some(Shown {
-            name: area.name.clone(),
+            name,
             layout,
             subset,
             scene,
             needs_fit: true,
         });
+    }
+
+    /// Track a drag across frames and turn a finished one into an edit.
+    ///
+    /// The whole drag is one correction: pixels accumulate while the mouse
+    /// is down and convert to cells once, on release, so a slow drag does
+    /// not record a trail of one-cell nudges.
+    fn handle_drag(&mut self, hit: &draw::Hit) -> Option<EditAction> {
+        if let Some((id, alt)) = hit.drag_started {
+            let group = self
+                .shown
+                .as_ref()
+                .and_then(|shown| shown.scene.room(id).map(|(_, room)| room.group));
+            self.drag = group.map(|group| DragState {
+                group,
+                room: alt.then_some(id),
+                accumulated: egui::Vec2::ZERO,
+            });
+        }
+        if let (Some(delta), Some(drag)) = (hit.dragged_by, self.drag.as_mut()) {
+            drag.accumulated += delta;
+        }
+        if !hit.drag_stopped {
+            return None;
+        }
+
+        let drag = self.drag.take()?;
+        let delta = cells_dragged(drag, self.camera);
+        if delta.x == 0 && delta.y == 0 {
+            return None;
+        }
+        let shown = self.shown.as_ref()?;
+        #[allow(clippy::single_match_else)] // both arms build a different edit
+        match drag.room {
+            // One room: pinned at its position within the group's own
+            // frame, which is its drawn cell less the group's offset.
+            Some(id) => {
+                let room = shown.scene.room(id)?.1;
+                let offset = shown
+                    .scene
+                    .group_offsets
+                    .get(&drag.group)
+                    .copied()
+                    .unwrap_or_default();
+                Some(EditAction::PinRoom {
+                    key: RoomKey::of(id, &shown.subset),
+                    pin: Cell {
+                        x: room.cell.x - offset.x + delta.x,
+                        y: room.cell.y - offset.y + delta.y,
+                    },
+                })
+            }
+            None => {
+                let group = shown.layout.groups.get(drag.group)?;
+                Some(EditAction::NudgeGroup {
+                    anchor: RoomKey::anchor(group, &shown.subset)?,
+                    delta,
+                })
+            }
+        }
+    }
+
+    /// Apply an edit, save the store, and redraw whatever it changed.
+    fn commit(&mut self, edit: EditAction) {
+        let area = self.shown.as_ref().map(|shown| shown.name.clone());
+        let mut membership_changed = false;
+        match edit {
+            EditAction::NudgeGroup { anchor, delta } => {
+                let Some(area) = area else { return };
+                self.store.nudge_group(&area, anchor, delta);
+            }
+            EditAction::PinRoom { key, pin } => {
+                let Some(area) = area else { return };
+                self.store.pin_room(&area, key, Some(pin));
+            }
+            EditAction::UnpinRoom { key } => {
+                let Some(area) = area else { return };
+                self.store.pin_room(&area, key, None);
+            }
+            EditAction::ResetLocation => {
+                let Some(area) = area else { return };
+                self.store.reset_location(&area);
+            }
+            EditAction::DeletePlate { plate } => {
+                self.store.delete_map(&plate);
+                membership_changed = true;
+            }
+            EditAction::MoveRooms { keys, to } => {
+                for key in keys {
+                    self.store.move_room(key, to.as_deref());
+                }
+                membership_changed = true;
+            }
+            EditAction::NewPlate { name, keys } => {
+                let plate = self.store.create_map(&name);
+                for key in keys {
+                    self.store.move_room(key, Some(&plate));
+                }
+                membership_changed = true;
+            }
+        }
+        self.save_store();
+        if membership_changed {
+            // A moved room changes which areas exist and what is in them,
+            // so the lists are rebuilt, not just the shown layout.
+            self.rebuild_areas();
+        } else {
+            self.show_selected();
+        }
+    }
+
+    /// The inspector panel, drawn before the central panel so egui gives
+    /// the canvas whatever space is left.
+    fn inspector_panel(&mut self, ui: &mut egui::Ui, can_edit: bool) -> Option<EditAction> {
+        let (Some(shown), Some(id)) = (&self.shown, self.inspected) else {
+            return None;
+        };
+        let mut edit = None;
+        let edit_out = &mut edit;
+        let mut open = true;
+        let store = &self.store;
+        let new_plate = &mut self.new_plate;
+        let edit_mode = self.edit_mode && can_edit;
+
+        egui::Panel::right("inspector").show(ui, |ui| {
+            ui.horizontal(|ui| {
+                if ui
+                    .button("x")
+                    .on_hover_text("Close the inspector")
+                    .clicked()
+                {
+                    open = false;
+                }
+                ui.label("Inspector");
+            });
+            ui.separator();
+            inspector(ui, shown, id);
+            if !edit_mode {
+                return;
+            }
+            // Editing controls live below the facts, so the panel
+            // reads the same whether or not Edit is on.
+            ui.separator();
+            let key = RoomKey::of(id, &shown.subset);
+            if store
+                .location(&shown.name)
+                .is_some_and(|l| l.room_pins.contains_key(&key))
+                && ui
+                    .button("Unpin room")
+                    .on_hover_text("Put this room back where the solver placed it")
+                    .clicked()
+            {
+                *edit_out = Some(EditAction::UnpinRoom { key });
+            }
+            if let Some(action) = membership(ui, shown, store, id, new_plate) {
+                *edit_out = Some(action);
+            }
+        });
+        if !open {
+            self.inspected = None;
+        }
+        edit
     }
 
     /// The left panel: the two list tabs, a filter box, and the list.
@@ -169,7 +444,7 @@ impl MapperApp {
 
         ui.heading("Areas");
         ui.horizontal(|ui| {
-            for kind in [AreaKind::Official, AreaKind::Mapdb] {
+            for kind in [AreaKind::Official, AreaKind::Mapdb, AreaKind::Plates] {
                 let label = format!("{} ({})", kind.title(), self.areas.list(kind).len());
                 if ui.selectable_label(self.tab == kind, label).clicked() {
                     self.tab = kind;
@@ -315,6 +590,119 @@ fn inspector(ui: &mut egui::Ui, shown: &Shown, id: RoomId) {
     });
 }
 
+/// The editing half of the inspector: which plate this room is on, and the
+/// controls to move it to another or onto a new one.
+///
+/// This is the answer to a crowded town sheet. Wehnimer's Town Square
+/// Central has a well and a treehouse hanging off it; moving those onto
+/// `landing.well` and `landing.treehouse` takes them out of the town's own
+/// list, so they stop competing for space on its sheet, while staying
+/// reachable as plates of their own.
+fn membership(
+    ui: &mut egui::Ui,
+    shown: &Shown,
+    store: &MapOverrides,
+    id: RoomId,
+    new_plate: &mut String,
+) -> Option<EditAction> {
+    let mut edit = None;
+    let key = RoomKey::of(id, &shown.subset);
+    // Group moves are offered because a building is usually what wants
+    // moving, not one room of it.
+    let group_keys = |group: usize| -> Vec<RoomKey> {
+        shown
+            .layout
+            .groups
+            .get(group)
+            .map(|g| {
+                g.room_ids
+                    .iter()
+                    .map(|&rid| RoomKey::of(rid, &shown.subset))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let group = shown.scene.room(id).map(|(_, room)| room.group);
+
+    ui.add_space(8.0);
+    ui.strong("Plate");
+    match store.membership_moves.get(&key) {
+        Some(plate) => {
+            let name = store.custom_maps.get(plate).unwrap_or(plate);
+            ui.label(format!("On: {name}"));
+            if ui
+                .button("Send back")
+                .on_hover_text("Return this room to the area it came from")
+                .clicked()
+            {
+                edit = Some(EditAction::MoveRooms {
+                    keys: vec![key],
+                    to: None,
+                });
+            }
+        }
+        None => {
+            ui.label("On: its own area");
+        }
+    }
+
+    if !store.custom_maps.is_empty() {
+        egui::ComboBox::from_id_salt("move_to_plate")
+            .selected_text("Move to plate...")
+            .show_ui(ui, |ui| {
+                for (plate, name) in &store.custom_maps {
+                    if store.membership_moves.get(&key) == Some(plate) {
+                        continue;
+                    }
+                    if ui.selectable_label(false, name).clicked() {
+                        edit = Some(EditAction::MoveRooms {
+                            keys: vec![key],
+                            to: Some(plate.clone()),
+                        });
+                    }
+                }
+            });
+    }
+
+    ui.horizontal(|ui| {
+        ui.add(
+            egui::TextEdit::singleline(new_plate)
+                .hint_text("new plate name")
+                .desired_width(120.0),
+        );
+        let named = !new_plate.trim().is_empty();
+        if ui
+            .add_enabled(named, egui::Button::new("+ room"))
+            .on_hover_text("Make this plate and move this room onto it")
+            .clicked()
+        {
+            edit = Some(EditAction::NewPlate {
+                name: new_plate.trim().to_owned(),
+                keys: vec![key],
+            });
+            new_plate.clear();
+        }
+        if let Some(group) = group {
+            let keys = group_keys(group);
+            if ui
+                .add_enabled(named && !keys.is_empty(), egui::Button::new("+ group"))
+                .on_hover_text(format!(
+                    "Make this plate and move all {} rooms of this group onto it",
+                    keys.len()
+                ))
+                .clicked()
+            {
+                edit = Some(EditAction::NewPlate {
+                    name: new_plate.trim().to_owned(),
+                    keys,
+                });
+                new_plate.clear();
+            }
+        }
+    });
+    edit
+}
+
 impl eframe::App for MapperApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         if let Err(problem) = &self.map {
@@ -323,6 +711,18 @@ impl eframe::App for MapperApp {
                 ui.colored_label(egui::Color32::from_rgb(200, 80, 80), problem.to_string());
             });
             return;
+        }
+
+        let mut edit: Option<EditAction> = None;
+        let edit_out = &mut edit;
+        let can_edit = self.store_path.is_some() && self.store_problem.is_none();
+
+        // A store that will not load or save is said once, at the top,
+        // because it means corrections are not being kept.
+        if let Some(problem) = &self.store_problem {
+            egui::Panel::top("store_problem").show(ui, |ui| {
+                ui.colored_label(IMPASSABLE_COLOR, format!("Corrections: {problem}"));
+            });
         }
 
         let mut changed = false;
@@ -335,25 +735,8 @@ impl eframe::App for MapperApp {
 
         // Before the central panel, which egui gives whatever space the
         // side panels leave.
-        if let (Some(shown), Some(id)) = (&self.shown, self.inspected) {
-            let mut open = true;
-            egui::Panel::right("inspector").show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    if ui
-                        .button("x")
-                        .on_hover_text("Close the inspector")
-                        .clicked()
-                    {
-                        open = false;
-                    }
-                    ui.label("Inspector");
-                });
-                ui.separator();
-                inspector(ui, shown, id);
-            });
-            if !open {
-                self.inspected = None;
-            }
+        if let Some(action) = self.inspector_panel(ui, can_edit) {
+            *edit_out = Some(action);
         }
 
         egui::CentralPanel::default().show(ui, |ui| {
@@ -363,32 +746,16 @@ impl eframe::App for MapperApp {
                 return;
             };
 
-            ui.horizontal(|ui| {
-                ui.heading(&shown.name);
-                ui.separator();
-                for (sheet, label) in [(Sheet::Outdoor, "Outdoor"), (Sheet::Interiors, "Interiors")]
-                {
-                    let count = shown.scene.sheet(sheet).rooms.len();
-                    let chosen = self.sheet == sheet;
-                    // An empty sheet stays visible but unclickable, so it
-                    // is clear the location simply has no interiors rather
-                    // than the toggle having gone missing.
-                    ui.add_enabled_ui(count > 0, |ui| {
-                        if ui
-                            .selectable_label(chosen, format!("{label} ({count})"))
-                            .clicked()
-                        {
-                            self.sheet = sheet;
-                            shown.needs_fit = true;
-                        }
-                    });
-                }
-                ui.separator();
-                if ui.button("Fit").clicked() {
-                    shown.needs_fit = true;
-                }
-                ui.label("drag to pan, wheel to zoom, click a room");
-            });
+            canvas_header(
+                ui,
+                shown,
+                &self.store,
+                self.tab,
+                &mut self.sheet,
+                &mut self.edit_mode,
+                can_edit,
+                edit_out,
+            );
 
             // Fit on the first frame after a change, when the canvas size
             // is finally known -- `load` has no window to measure.
@@ -401,19 +768,132 @@ impl eframe::App for MapperApp {
                 }
             }
 
+            // The in-flight drag, in whole cells, for the ghost preview.
+            let ghost = self
+                .drag
+                .map(|drag| (drag.group, drag.room, cells_dragged(drag, self.camera)));
             let hit = draw::scene(
                 ui,
                 &shown.scene,
                 self.sheet,
                 &mut self.camera,
                 self.inspected,
+                self.edit_mode,
+                ghost,
             );
             if let Some(id) = hit.clicked {
                 // Clicking the inspected room again closes the panel, so
                 // the canvas can be cleared without reaching for the x.
                 self.inspected = (self.inspected != Some(id)).then_some(id);
             }
+            if edit_out.is_none() {
+                *edit_out = self.handle_drag(&hit);
+            }
         });
+        if let Some(edit) = edit {
+            self.commit(edit);
+        }
+    }
+}
+
+/// The bar above the canvas: the area name, the sheet toggles, Fit, and
+/// the edit controls.
+///
+/// A free function, not a method: `shown` is already borrowed out of the
+/// app, so a `&mut self` method could not also be called here.
+#[allow(clippy::too_many_arguments)] // each one is a distinct piece of app state
+fn canvas_header(
+    ui: &mut egui::Ui,
+    shown: &mut Shown,
+    store: &MapOverrides,
+    tab: AreaKind,
+    sheet: &mut Sheet,
+    edit_mode: &mut bool,
+    can_edit: bool,
+    edit_out: &mut Option<EditAction>,
+) {
+    ui.horizontal(|ui| {
+        ui.heading(&shown.name);
+        ui.separator();
+        for (which, label) in [(Sheet::Outdoor, "Outdoor"), (Sheet::Interiors, "Interiors")] {
+            let count = shown.scene.sheet(which).rooms.len();
+            let chosen = *sheet == which;
+            // An empty sheet stays visible but unclickable, so it
+            // is clear the location simply has no interiors rather
+            // than the toggle having gone missing.
+            ui.add_enabled_ui(count > 0, |ui| {
+                if ui
+                    .selectable_label(chosen, format!("{label} ({count})"))
+                    .clicked()
+                {
+                    *sheet = which;
+                    shown.needs_fit = true;
+                }
+            });
+        }
+        ui.separator();
+        if ui.button("Fit").clicked() {
+            shown.needs_fit = true;
+        }
+        ui.separator();
+        // Editing is refused outright while the store would not
+        // load: the file holds hand curation, and saving over it
+        // with an empty one would destroy that work silently.
+        ui.add_enabled_ui(can_edit, |ui| {
+            ui.toggle_value(&mut *edit_mode, "Edit")
+                .on_hover_text("Drag a group to move it; hold Alt for one room");
+        });
+        if *edit_mode {
+            ui.label("drag a group (Alt: one room)");
+            // Deleting is offered only where the plate itself is
+            // on screen, so it cannot be hit while looking at a
+            // town that merely lost rooms to one.
+            if tab == AreaKind::Plates
+                && let Some(plate) = plate_key_of(store, &shown.name)
+                && ui
+                    .button("Delete plate")
+                    .on_hover_text("Release every room back to its own area")
+                    .clicked()
+            {
+                *edit_out = Some(EditAction::DeletePlate { plate });
+            }
+            let count = store
+                .location(&shown.name)
+                .map_or(0, crate::overrides::LocationOverrides::len);
+            if count > 0
+                && ui
+                    .button(format!("Reset ({count})"))
+                    .on_hover_text("Forget this area's corrections")
+                    .clicked()
+            {
+                *edit_out = Some(EditAction::ResetLocation);
+            }
+        } else {
+            ui.label("drag to pan, wheel to zoom, click a room");
+        }
+    });
+}
+
+/// The plate key whose display name is `shown`, for the delete button.
+fn plate_key_of(store: &MapOverrides, shown: &str) -> Option<String> {
+    store
+        .custom_maps
+        .iter()
+        .find(|(key, name)| name.as_str() == shown || key.as_str() == shown)
+        .map(|(key, _)| key.clone())
+}
+
+/// A drag's pixel travel as whole grid cells, rounded, so a move snaps to
+/// the grid the layout is drawn on.
+#[allow(clippy::cast_possible_truncation)]
+fn cells_dragged(drag: DragState, camera: Camera) -> Cell {
+    let px = camera.cell_px();
+    if px <= 0.0 {
+        return Cell::default();
+    }
+    Cell {
+        x: (drag.accumulated.x / px).round() as i32,
+        y: (drag.accumulated.y / px).round() as i32,
     }
 }
 

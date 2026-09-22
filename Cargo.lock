@@ -294,6 +294,8 @@ dependencies = [
  "cena-map-layout",
  "eframe",
  "egui",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

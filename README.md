@@ -49,11 +49,8 @@ where no artist ever drew one.
 - **`cena-mapper`** — the standalone window (`egui`/`eframe`, the same
   fork Cena's future GUI is expected to use). Loads a `.map` file
   (`CENA_MAP` env var, or a path as the first argument) and draws the
-  layout for whichever area you pick. Read-only: this is an explorer, not
-  an editor — no write-back, no way to hand-correct a bad layout yet.
-  Vellum's own override system (position pins, edge overrides,
-  classification flips) is the reference for what that becomes later; it
-  is not ported.
+  layout for whichever area you pick, with hand corrections saved beside
+  the map.
 
   **Two area lists, and no room is in both.** The **Official** tab holds
   Simutronics' own layout areas (117, the unit their artwork is positioned
@@ -104,6 +101,40 @@ where no artist ever drew one.
   one that had not. They are genuine data conflicts, not layout bugs: two
   rooms in Old Ta'Faendryl are joined by exits claiming *both* east and
   west, which no 2D placement can satisfy.
+
+  **Editing.** The `Edit` toggle turns dragging from panning into moving:
+  drag a group to shift it, hold Alt to move one room. A ghost outline
+  previews where it lands, and the whole drag commits as one correction on
+  release. `Reset (n)` forgets an area's corrections; `Unpin room` returns
+  one room to where the solver put it.
+
+  **Plates** are the answer to a crowded town. Wehnimer's Town Square
+  Central has a well and a treehouse hanging off it; moving those onto
+  `landing.well` and `landing.treehouse` takes them out of the town's own
+  list, so they stop competing for space on its sheet while staying
+  reachable as plates of their own. The inspector's Plate section moves
+  the selected room, or its whole group, onto a new or existing plate; a
+  third picker tab lists them.
+
+  Corrections save to `<map>.overrides.json` beside the map file, written
+  atomically on every edit, and are a diff applied *after* generation — so
+  the solver's own output stays the thing being corrected, and a
+  correction whose anchor no longer resolves is skipped rather than
+  guessed at. Rooms are keyed by game uid where they have one, which
+  survives a map rebuild, falling back to the map's room id for the 21%
+  that do not.
+
+  This ports two of VellumFE's override kinds (`plan/26` §0 named its
+  `overrides.rs` as the reference). Its edge restyling, forced sheets and
+  room-data edits are not ported; every field is `#[serde(default)]`, so
+  they can arrive without a format change.
+
+  One deliberate divergence: Vellum keys overrides by uid with a room-id
+  fallback, on the stated grounds that *"uids are >= 7 digits, so the key
+  spaces never collide"*. That does not hold here — 9,542 uids in `gs.map`
+  are below 1,000,000 and 228 are negative, giving 160 keys two rooms both
+  claim (room 1207 has uid 17127; room 17127 has no uid). Keys here name
+  their space (`uid:7122`, `id:4242`) instead.
 
 ## Running it
 

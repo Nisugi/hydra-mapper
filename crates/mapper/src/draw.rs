@@ -7,6 +7,7 @@
 //! placing anything at a fixed offset.
 
 use cena_map::RoomId;
+use cena_map_layout::Cell;
 use cena_map_layout::MapScene;
 use cena_map_layout::scene::{SceneEdgeKind, Sheet, SheetScene};
 use egui::{Align2, Color32, FontId, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2};
@@ -33,6 +34,7 @@ const LABEL_COLOR: Color32 = Color32::from_rgb(220, 220, 200);
 const CANVAS_BG: Color32 = Color32::from_rgb(24, 26, 30);
 const SELECTED_STROKE: Color32 = Color32::from_rgb(250, 250, 250);
 const HOVER_STROKE: Color32 = Color32::from_rgb(200, 220, 250);
+const GHOST_STROKE: Color32 = Color32::from_rgb(250, 220, 120);
 
 /// What the pointer did over the canvas this frame, for the caller to act
 /// on: the canvas itself owns no selection state.
@@ -44,6 +46,13 @@ pub struct Hit {
     /// The room just clicked. `None` on a drag, so panning never changes
     /// the selection.
     pub clicked: Option<RoomId>,
+    /// In edit mode: the room a drag just started on, and whether Alt was
+    /// held (move one room rather than its whole group).
+    pub drag_started: Option<(RoomId, bool)>,
+    /// In edit mode: pixels dragged this frame, to accumulate.
+    pub dragged_by: Option<egui::Vec2>,
+    /// In edit mode: the drag ended this frame; commit it.
+    pub drag_stopped: bool,
 }
 
 /// Draw one sheet into a pannable, zoomable canvas filling the panel,
@@ -59,6 +68,8 @@ pub fn scene(
     sheet: Sheet,
     camera: &mut Camera,
     selected: Option<RoomId>,
+    edit_mode: bool,
+    ghost: Option<(usize, Option<RoomId>, Cell)>,
 ) -> Hit {
     let sheet = scene.sheet(sheet);
     if sheet.rooms.is_empty() {
@@ -70,16 +81,27 @@ pub fn scene(
     let canvas = response.rect;
     painter.rect_filled(canvas, 0.0, CANVAS_BG);
 
-    apply_input(ui, &response, camera);
+    // In edit mode a drag moves rooms, so the view must not pan with it.
+    apply_input(ui, &response, camera, edit_mode);
 
     let hovered = response
         .hover_pos()
         .and_then(|pos| room_at(pos, sheet, *camera, canvas));
     // `clicked` is false after a drag, so panning across rooms does not
     // select whichever one the release happened over.
-    let hit = Hit {
+    let mut hit = Hit {
         clicked: response.clicked().then_some(hovered).flatten(),
+        ..Hit::default()
     };
+    if edit_mode {
+        if response.drag_started() {
+            hit.drag_started = hovered.map(|id| (id, ui.input(|i| i.modifiers.alt)));
+        }
+        if response.dragged() {
+            hit.dragged_by = Some(response.drag_delta());
+        }
+        hit.drag_stopped = response.drag_stopped();
+    }
 
     // Clipped so a panned sheet does not paint over the panels beside it.
     let painter = painter.with_clip_rect(canvas);
@@ -88,10 +110,48 @@ pub fn scene(
     if camera.scale >= LABEL_MIN_SCALE {
         draw_labels(&painter, sheet, *camera, canvas);
     }
+    if let Some((group, room, delta)) = ghost {
+        draw_ghost(&painter, sheet, *camera, canvas, group, room, delta);
+    }
     if let Some(id) = hovered {
         hover_tooltip(&response, sheet, id);
     }
     hit
+}
+
+/// Where a drag would land, previewed as outlines while the mouse is down,
+/// so a move is aimed rather than guessed and undone.
+#[allow(clippy::cast_precision_loss)] // a drag delta is a handful of cells
+fn draw_ghost(
+    painter: &egui::Painter,
+    sheet: &SheetScene,
+    camera: Camera,
+    canvas: Rect,
+    group: usize,
+    room: Option<RoomId>,
+    delta: Cell,
+) {
+    let side = (ROOM_PX * camera.scale).max(2.0);
+    let shift = Vec2::new(
+        delta.x as f32 * camera.cell_px(),
+        delta.y as f32 * camera.cell_px(),
+    );
+    for scene_room in &sheet.rooms {
+        let moving = match room {
+            Some(id) => scene_room.id == id,
+            None => scene_room.group == group,
+        };
+        if !moving {
+            continue;
+        }
+        let at = camera.to_screen(scene_room.cell, canvas) + shift;
+        painter.rect_stroke(
+            Rect::from_center_size(at, Vec2::splat(side)),
+            2.0,
+            Stroke::new(1.5, GHOST_STROKE),
+            StrokeKind::Outside,
+        );
+    }
 }
 
 /// The room whose square contains `pos`, searched back to front so the
@@ -133,8 +193,8 @@ fn hover_tooltip(response: &egui::Response, sheet: &SheetScene, id: RoomId) {
 /// Drag to pan, wheel to zoom about the pointer. Zoom anchors on the
 /// pointer rather than the centre so wheeling toward a corner of a town
 /// walks into it instead of away.
-fn apply_input(ui: &egui::Ui, response: &egui::Response, camera: &mut Camera) {
-    if response.dragged() {
+fn apply_input(ui: &egui::Ui, response: &egui::Response, camera: &mut Camera, edit_mode: bool) {
+    if response.dragged() && !edit_mode {
         camera.pan_by(response.drag_delta());
     }
 
