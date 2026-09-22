@@ -231,6 +231,26 @@ For `placement` specifically:
 **Never** accept an absolute cell or pixel coordinate. No version of this
 format has a field for one, and something offering it is not this format.
 
+## Pictures for a review
+
+A corrections file says where rooms go; it does not show it. The mapper
+also draws the ticked areas, and every plate hanging off one, as SVG files
+in a `plates/` folder beside the map — so a pull request can carry the
+layout as something a reviewer opens in a browser rather than something
+they have to build this program to see.
+
+Each sheet is its own file (`<slug>.svg`, and `<slug>.interiors.svg`),
+because the two are packed as independent grids and drawing them together
+would put rooms on top of one another. A plate is drawn alongside the area
+it was carved out of, since judging "should these rooms be on their own
+sheet?" needs both halves of the question. Room number and title are
+`<title>` tooltips rather than drawn text, which keeps a dense sheet
+readable.
+
+These are review evidence, not part of the format: nothing in a
+corrections file references them, and a submission is complete without
+them.
+
 ## Where accepted corrections live
 
 Corrections are merged **as a sidecar the combiner reads**, not as edits

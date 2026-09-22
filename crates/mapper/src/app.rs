@@ -1,5 +1,6 @@
 //! The window's state and its `eframe::App` implementation.
 
+use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
@@ -17,6 +18,7 @@ use crate::export;
 use crate::inspect::{Crossed, RoomFacts, bearing};
 use crate::overrides::{self, MapOverrides, RoomKey};
 use crate::placement;
+use crate::svg;
 
 /// What went wrong loading the map file, said to the player in the window
 /// rather than only on stderr -- a tool that cannot show a map should say
@@ -171,6 +173,10 @@ pub struct MapperApp {
     trail: Vec<RoomId>,
     /// What the last export did, shown until the next one.
     export_note: Option<String>,
+    /// Areas ticked for an SVG export. Kept by name rather than by
+    /// selection index, because the two lists are filtered independently
+    /// and an index means nothing once the filter changes.
+    svg_areas: BTreeSet<String>,
 }
 
 /// A drag in progress. Committed as one correction on release, so dragging
@@ -230,6 +236,7 @@ impl MapperApp {
             pending_inspect: None,
             trail: Vec::new(),
             export_note: None,
+            svg_areas: BTreeSet::new(),
         }
     }
 
@@ -310,12 +317,13 @@ impl MapperApp {
 
     /// The bar above everything: the export button, and whatever the
     /// corrections as a whole have to say. Returns whether to export.
-    fn corrections_bar(&mut self, ui: &mut egui::Ui, can_edit: bool) -> bool {
+    fn corrections_bar(&mut self, ui: &mut egui::Ui, can_edit: bool) -> (bool, bool) {
         // A store that will not load or save is said once, at the top,
         // because it means corrections are not being kept. The export
         // note shares the bar: both are about the corrections as a whole,
         // not about whatever area is on screen.
         let mut export_now = false;
+        let mut svg_now = false;
         if self.store_problem.is_some() || self.export_note.is_some() || can_edit {
             egui::Panel::top("corrections").show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
@@ -329,6 +337,18 @@ impl MapperApp {
                         )
                         .clicked();
                 });
+                // Plate SVGs for a PR: a reviewer should be able to see a
+                // plate without building this program.
+                let plates = self.svg_areas.len();
+                ui.add_enabled_ui(can_edit && plates > 0, |ui| {
+                    svg_now = ui
+                        .button(format!("Export {plates} area's SVGs"))
+                        .on_hover_text(
+                            "Draw every plate of the ticked areas, and the areas \
+                             themselves, as SVG files beside the map",
+                        )
+                        .clicked();
+                });
                 if let Some(problem) = &self.store_problem {
                     ui.colored_label(IMPASSABLE_COLOR, format!("Corrections: {problem}"));
                 } else if let Some(note) = &self.export_note {
@@ -339,7 +359,103 @@ impl MapperApp {
             });
         });
         }
-        export_now
+        (export_now, svg_now)
+    }
+
+    /// Draw every ticked area, and every plate hanging off one, as SVG
+    /// files in a folder beside the map.
+    ///
+    /// A plate is drawn alongside the area it was carved out of, because
+    /// a reviewer judging "should these rooms be on their own sheet?"
+    /// needs to see both halves of that question.
+    fn export_svgs(&mut self) {
+        let (Ok(map), Some(store_path)) = (&self.map, self.store_path.as_deref()) else {
+            self.export_note = Some("Nothing to draw: no map is loaded.".to_owned());
+            return;
+        };
+        let dir = store_path.with_file_name("plates");
+        if let Err(error) = std::fs::create_dir_all(&dir) {
+            self.export_note = Some(format!("Cannot make {}: {error}", dir.display()));
+            return;
+        }
+
+        // Every ticked area, plus the plates that belong to one. A plate
+        // is its own entry in the Plates list, so it is drawn the same
+        // way as any other area once its name is known.
+        let mut wanted: Vec<String> = self.svg_areas.iter().cloned().collect();
+        for area in &self.svg_areas {
+            // `plates_of` gives (slug, display name); the Plates list is
+            // keyed by the name, which is what finds the rooms below.
+            wanted.extend(
+                self.store
+                    .plates_of(area)
+                    .into_iter()
+                    .map(|(_, name)| name.to_owned()),
+            );
+        }
+        wanted.sort();
+        wanted.dedup();
+
+        let mut written = 0usize;
+        let mut problems: Vec<String> = Vec::new();
+        for name in &wanted {
+            let Some(area) = [AreaKind::Official, AreaKind::Mapdb, AreaKind::Plates]
+                .iter()
+                .find_map(|&kind| self.areas.list(kind).iter().find(|a| &a.name == name))
+            else {
+                continue;
+            };
+            let rooms: Vec<cena_map::Room> = area
+                .rooms
+                .iter()
+                .filter_map(|&id| map.room(id).cloned())
+                .collect();
+            let Ok(subset) = Map::from_rooms(rooms) else {
+                continue;
+            };
+            let location = self.store.location(name);
+            let edges = location
+                .map(|l| l.edge_overrides(&subset))
+                .unwrap_or_default();
+            let mut layout = if edges.is_empty() {
+                generate_layout(&subset)
+            } else {
+                generate_layout_with(&subset, &edges)
+            };
+            if let Some(location) = location {
+                overrides::apply(&mut layout, &subset, location);
+            }
+            let scene = build_scene(name, &layout, &subset);
+
+            // Both sheets, each its own file: they are packed as separate
+            // grids and drawing them together would put rooms on top of
+            // one another.
+            for (sheet, suffix) in [
+                (&scene.outdoor, ""),
+                (&scene.interiors, export::INTERIORS_SUFFIX),
+            ] {
+                let slug = format!("{name}{suffix}");
+                match svg::sheet(sheet, &slug) {
+                    Ok(doc) => {
+                        let path = dir.join(svg::file_name(&slug));
+                        match std::fs::write(&path, doc) {
+                            Ok(()) => written += 1,
+                            Err(error) => problems.push(format!("{slug}: {error}")),
+                        }
+                    }
+                    // An empty interiors shelf is the normal case for an
+                    // outdoor area, and not worth reporting.
+                    Err(svg::NotDrawn::Empty) => {}
+                    Err(problem) => problems.push(format!("{slug}: {problem}")),
+                }
+            }
+        }
+
+        let mut note = format!("Drew {written} SVG(s) into {}", dir.display());
+        if !problems.is_empty() {
+            let _ = write!(note, "; {} skipped ({})", problems.len(), problems[0]);
+        }
+        self.export_note = Some(note);
     }
 
     /// Walk to a room reached by following an exit, remembering where it
@@ -858,7 +974,7 @@ impl MapperApp {
     }
 
     /// The left panel: the two list tabs, a filter box, and the list.
-    fn picker(&mut self, ui: &mut egui::Ui) -> bool {
+    fn picker(&mut self, ui: &mut egui::Ui, can_edit: bool) -> bool {
         let mut changed = false;
         // Set when a room-number search is followed: the area to show,
         // and the room to inspect once it is on screen.
@@ -939,10 +1055,29 @@ impl MapperApp {
                 } else {
                     format!("{}  ({})", area.name, area.rooms.len())
                 };
-                if ui.selectable_label(selected, label).clicked() {
-                    self.selected = Some(selection);
-                    changed = true;
-                }
+                // The tick marks an area for the SVG export. It shares the
+                // row rather than living in its own list, because "which
+                // areas" is a question about these same entries.
+                ui.horizontal(|ui| {
+                    if can_edit {
+                        let mut ticked = self.svg_areas.contains(&area.name);
+                        if ui
+                            .checkbox(&mut ticked, "")
+                            .on_hover_text("Draw this area and its plates as SVGs")
+                            .changed()
+                        {
+                            if ticked {
+                                self.svg_areas.insert(area.name.clone());
+                            } else {
+                                self.svg_areas.remove(&area.name);
+                            }
+                        }
+                    }
+                    if ui.selectable_label(selected, label).clicked() {
+                        self.selected = Some(selection);
+                        changed = true;
+                    }
+                });
             }
         });
         if let Some((kind, index, room)) = goto {
@@ -1441,13 +1576,17 @@ impl eframe::App for MapperApp {
         let go_to_plate = &mut jump;
         let can_edit = self.store_path.is_some() && self.store_problem.is_none();
 
-        if self.corrections_bar(ui, can_edit) {
+        let (export_now, svg_now) = self.corrections_bar(ui, can_edit);
+        if export_now {
             self.export_corrections();
+        }
+        if svg_now {
+            self.export_svgs();
         }
 
         let mut changed = false;
         egui::Panel::left("areas").show(ui, |ui| {
-            changed = self.picker(ui);
+            changed = self.picker(ui, can_edit);
         });
         if changed {
             self.show_selected();

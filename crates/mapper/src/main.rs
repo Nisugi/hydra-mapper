@@ -17,6 +17,7 @@ mod export;
 mod inspect;
 mod overrides;
 mod placement;
+mod svg;
 
 use std::path::PathBuf;
 

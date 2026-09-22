@@ -25,13 +25,13 @@ const LABEL_MIN_SCALE: f32 = 0.55;
 /// How fast the wheel zooms, per notch.
 const ZOOM_PER_NOTCH: f32 = 1.0015;
 
-const ROOM_FILL: Color32 = Color32::from_rgb(60, 90, 130);
-const ROOM_STROKE: Color32 = Color32::from_rgb(140, 180, 220);
-const ENTRANCE_STROKE: Color32 = Color32::from_rgb(230, 170, 60);
-const DIRECTIONAL_LINE: Color32 = Color32::from_rgb(120, 150, 180);
-const CONNECTOR_LINE: Color32 = Color32::from_rgb(150, 120, 90);
-const LABEL_COLOR: Color32 = Color32::from_rgb(220, 220, 200);
-const CANVAS_BG: Color32 = Color32::from_rgb(24, 26, 30);
+pub(crate) const ROOM_FILL: Color32 = Color32::from_rgb(60, 90, 130);
+pub(crate) const ROOM_STROKE: Color32 = Color32::from_rgb(140, 180, 220);
+pub(crate) const ENTRANCE_STROKE: Color32 = Color32::from_rgb(230, 170, 60);
+pub(crate) const DIRECTIONAL_LINE: Color32 = Color32::from_rgb(120, 150, 180);
+pub(crate) const CONNECTOR_LINE: Color32 = Color32::from_rgb(150, 120, 90);
+pub(crate) const LABEL_COLOR: Color32 = Color32::from_rgb(220, 220, 200);
+pub(crate) const CANVAS_BG: Color32 = Color32::from_rgb(24, 26, 30);
 const SELECTED_STROKE: Color32 = Color32::from_rgb(250, 250, 250);
 const HOVER_STROKE: Color32 = Color32::from_rgb(200, 220, 250);
 const GHOST_STROKE: Color32 = Color32::from_rgb(250, 220, 120);
