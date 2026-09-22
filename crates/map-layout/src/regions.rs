@@ -70,36 +70,38 @@ pub const TINY_ROOMS: usize = 6;
 /// teleport does not.
 pub const VIRTUAL_ROOM_TAG: &str = "urchin-hideout";
 
-/// The tag on a room that has been taken out of the game.
+/// The `meta` key on a room that has been taken out of the game.
 ///
 /// Old Solhaven's streets, a Zul Logoth tunnel, a bank lobby that no
-/// longer exists: 145 rooms on `gs.map`, mostly in clumps of their own
-/// with only 15 live rooms still pointing at any of them. They are
-/// history the map keeps, not places, and they drag the sheet out of
-/// shape -- Icemule's `[Tower]` (15690, no exits at all) sits alone off
-/// the bottom of the town.
+/// longer exists, the whole barony of Talador. They are history the map
+/// keeps, not places, and they drag the sheet out of shape -- Icemule's
+/// `[Tower]` (15690, no exits at all) sits alone off the bottom of the
+/// town, and `[Road to Talador]` was drawn through Wehnimer's town
+/// square.
 ///
-/// **Only this tag.** The map has three neighbours of it that do *not*
-/// mean removed, and taking them would delete live content:
+/// **This was a `tags` entry named `gone` and is not one any more.** The
+/// disposition migration moved the fact to `meta` and dropped the tag
+/// from every room, so a `tags` test here matched nothing at all and
+/// 2,559 removed rooms were laid out and drawn as though live. The fact
+/// did not move quietly -- it moved to a namespace with a verdict in it:
 ///
-/// - `closed` (798) -- shut, not gone: the Abbey, the Revel of the
-///   Anfelt, shops between events. They come back.
-/// - `missing` (52) -- the mapper could not find it, which is a claim
-///   about the mapping, not the room: Leaftoe's Bakery, the Ta'Illistim
-///   Realtor.
-/// - `rewritten` (140) -- replaced by rooms with new ids. Cairnfang
-///   Manor is `rewritten` and live; the ones that are also gone carry
-///   `gone` as well, and are taken by that.
-pub const REMOVED_ROOM_TAG: &str = "gone";
+/// - `map:status:closed` -- shut, not gone: the Abbey, Rumor Woods
+///   between events. **Closed still draws.** It is the whole distinction
+///   the status carries, so this tests for `gone` and nothing else.
+/// - `map:status:live` -- said out loud where a rule had to overrule the
+///   graph.
+///
+/// Checked against `meta` rather than `tags` because that is where
+/// `retag` writes it; see `curation/status.toml` for which places were
+/// decided and why.
+pub const REMOVED_ROOM_META: &str = "map:status:gone";
 
 /// Whether a room is a place at all: not a menu wearing a room's
 /// clothes, and not something the game no longer has.
 #[must_use]
 pub fn is_real_room(room: &Room) -> bool {
-    !room
-        .tags
-        .iter()
-        .any(|t| t == VIRTUAL_ROOM_TAG || t == REMOVED_ROOM_TAG)
+    !room.tags.iter().any(|t| t == VIRTUAL_ROOM_TAG)
+        && !room.meta.iter().any(|m| m == REMOVED_ROOM_META)
 }
 
 /// Whether anything at all connects a room to the rest of the map: an
@@ -646,6 +648,17 @@ mod tests {
         }
     }
 
+    /// A room carrying a `meta` key. Disposition lives in `meta`, not
+    /// `tags` -- a fixture that spells it as a tag tests a map that no
+    /// longer exists, which is exactly how 2,559 removed rooms went on
+    /// being drawn while this file's tests passed.
+    fn with_meta(id: u32, title: &str, location: Option<&str>, meta: &str, to: &[u32]) -> Room {
+        Room {
+            meta: vec![meta.to_owned()],
+            ..room(id, title, location, IN, to)
+        }
+    }
+
     fn room(id: u32, title: &str, location: Option<&str>, paths: &str, to: &[u32]) -> Room {
         Room {
             id: RoomId(id),
@@ -851,12 +864,12 @@ mod tests {
             room(1, "[Street]", Some("the town of Wehn"), OUT, &[2]),
             room(2, "[Street]", Some("the town of Wehn"), OUT, &[1, 3]),
             // Still reachable from the live street, but gone.
-            tagged(3, "[Old Lane]", Some("Wehn"), REMOVED_ROOM_TAG, &[2]),
+            with_meta(3, "[Old Lane]", Some("Wehn"), REMOVED_ROOM_META, &[2]),
             // The Tower: gone, and nothing points at it either way.
-            tagged(4, "[Tower]", Some("Wehn"), REMOVED_ROOM_TAG, &[]),
+            with_meta(4, "[Tower]", Some("Wehn"), REMOVED_ROOM_META, &[]),
         ];
         // A shut shop is still a place: it opens off the street.
-        rooms.push(tagged(5, "[Abbey]", Some("Wehn"), "closed", &[2]));
+        rooms.push(with_meta(5, "[Abbey]", Some("Wehn"), "map:status:closed", &[2]));
         rooms[1].exits.push(Exit {
             to: RoomId(5),
             kind: ExitKind::Cardinal,
