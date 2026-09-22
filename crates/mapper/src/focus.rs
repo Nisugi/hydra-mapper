@@ -115,6 +115,12 @@ impl Focus {
         &self.doors
     }
 
+    /// The street rooms, drawn whatever is in focus.
+    #[must_use]
+    pub fn streets(&self) -> &HashSet<RoomId> {
+        &self.units[STREETS].rooms
+    }
+
     #[must_use]
     pub fn can_go_back(&self) -> bool {
         !self.stack.is_empty()

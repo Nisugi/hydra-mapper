@@ -68,6 +68,9 @@ pub struct View {
     pub edit_mode: bool,
     /// Room titles are drawn beside the rooms.
     pub labels: bool,
+    /// Every interior room out of focus is drawn as a dot, not only the
+    /// door you enter its building by.
+    pub interiors: bool,
 }
 
 /// What is in focus: the rooms drawn as squares. Everything else on the
@@ -75,6 +78,9 @@ pub struct View {
 /// map whichever part of it is being looked at.
 pub struct Focus<'a> {
     pub rooms: &'a HashSet<RoomId>,
+    /// The street rooms: always drawn, as squares or as dots, because
+    /// they are the roads the rest hangs off.
+    pub streets: &'a HashSet<RoomId>,
     /// Rooms a door leads into from outside their unit, and the street
     /// rooms hosting a doorway: drawn as larger dots when out of focus,
     /// so the ways in are visible.
@@ -84,6 +90,14 @@ pub struct Focus<'a> {
 impl Focus<'_> {
     fn has(&self, id: RoomId) -> bool {
         self.rooms.contains(&id)
+    }
+
+    /// Whether a room is drawn at all. In focus, always; out of focus,
+    /// only the streets and the doors -- a building not being looked at
+    /// is one dot where you enter it, not its floor plan sprinkled beside
+    /// the street.
+    fn shows(&self, id: RoomId, interiors: bool) -> bool {
+        interiors || self.has(id) || self.streets.contains(&id) || self.doors.contains(&id)
     }
 }
 
@@ -103,7 +117,11 @@ pub fn scene(
     view: View,
     ghost: Option<(usize, Option<RoomId>, Cell)>,
 ) -> Hit {
-    let View { edit_mode, labels } = view;
+    let View {
+        edit_mode,
+        labels,
+        interiors,
+    } = view;
     let sheet = &scene.sheet;
     if sheet.rooms.is_empty() {
         ui.label("This sheet has no rooms to show.");
@@ -119,7 +137,7 @@ pub fn scene(
 
     let hovered = response
         .hover_pos()
-        .and_then(|pos| room_at(pos, sheet, *camera, canvas));
+        .and_then(|pos| room_at(pos, sheet, focus, interiors, *camera, canvas));
     // `clicked` is false after a drag, so panning across rooms does not
     // select whichever one the release happened over.
     let mut hit = Hit {
@@ -139,7 +157,9 @@ pub fn scene(
     // Clipped so a panned sheet does not paint over the panels beside it.
     let painter = painter.with_clip_rect(canvas);
     draw_edges(&painter, sheet, focus, *camera, canvas);
-    draw_rooms(&painter, sheet, focus, *camera, canvas, selected, hovered);
+    draw_rooms(
+        &painter, sheet, focus, interiors, *camera, canvas, selected, hovered,
+    );
     if labels && camera.scale >= LABEL_MIN_SCALE {
         draw_labels(&painter, scene, focus, *camera, canvas);
     }
@@ -189,7 +209,14 @@ fn draw_ghost(
 
 /// The room whose square contains `pos`, searched back to front so the
 /// topmost drawn room wins where two sit in one cell.
-fn room_at(pos: Pos2, sheet: &SheetScene, camera: Camera, canvas: Rect) -> Option<RoomId> {
+fn room_at(
+    pos: Pos2,
+    sheet: &SheetScene,
+    focus: &Focus<'_>,
+    interiors: bool,
+    camera: Camera,
+    canvas: Rect,
+) -> Option<RoomId> {
     // Always at least a few pixels, so rooms stay clickable when zoomed
     // far out and the drawn square is tiny.
     let side = (ROOM_PX * camera.scale).max(6.0);
@@ -200,7 +227,7 @@ fn room_at(pos: Pos2, sheet: &SheetScene, camera: Camera, canvas: Rect) -> Optio
         .rooms
         .iter()
         .rev()
-        .find(|room| hit(room.cell))
+        .find(|room| focus.shows(room.id, interiors) && hit(room.cell))
         .map(|room| room.id)
 }
 
@@ -276,10 +303,12 @@ fn draw_edges(
 /// A room in focus is a square; one out of focus is a dot on the road --
 /// larger where a door leads in -- so the whole area is always there to
 /// see, and the part being looked at stands out from it.
+#[allow(clippy::too_many_arguments)] // one call site, each a distinct fact
 fn draw_rooms(
     painter: &egui::Painter,
     sheet: &SheetScene,
     focus: &Focus<'_>,
+    interiors: bool,
     camera: Camera,
     canvas: Rect,
     selected: Option<RoomId>,
@@ -287,6 +316,9 @@ fn draw_rooms(
 ) {
     let side = (ROOM_PX * camera.scale).max(2.0);
     for room in &sheet.rooms {
+        if !focus.shows(room.id, interiors) {
+            continue;
+        }
         let centre = camera.to_screen(room.cell, canvas);
         let rect = Rect::from_center_size(centre, Vec2::splat(side));
         if !canvas.intersects(rect) {

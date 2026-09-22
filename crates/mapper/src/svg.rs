@@ -84,6 +84,7 @@ impl std::fmt::Display for NotDrawn {
 pub fn sheet(
     scene: &SheetScene,
     focus: &HashSet<RoomId>,
+    streets: &HashSet<RoomId>,
     doors: &HashSet<RoomId>,
     title: &str,
 ) -> Result<String, NotDrawn> {
@@ -144,7 +145,7 @@ pub fn sheet(
     }
     let _ = writeln!(svg, "</g>");
 
-    write_rooms(&mut svg, scene, &in_focus, doors, &px, &py);
+    write_rooms(&mut svg, scene, &in_focus, streets, doors, &px, &py);
 
     // Labels name what is in focus: a building's label draws when the
     // building does. A label's unit is looked up by whether its group's
@@ -185,6 +186,7 @@ fn write_rooms(
     svg: &mut String,
     scene: &SheetScene,
     in_focus: &dyn Fn(RoomId) -> bool,
+    streets: &HashSet<RoomId>,
     doors: &HashSet<RoomId>,
     px: &dyn Fn(i32) -> f32,
     py: &dyn Fn(i32) -> f32,
@@ -192,7 +194,12 @@ fn write_rooms(
     // Rooms out of focus are dots on the road, larger where a door leads
     // in.
     let _ = writeln!(svg, r#"<g stroke="none">"#);
-    for room in scene.rooms.iter().filter(|r| !in_focus(r.id)) {
+    // A building out of focus is one dot where you enter it.
+    for room in scene
+        .rooms
+        .iter()
+        .filter(|r| !in_focus(r.id) && (streets.contains(&r.id) || doors.contains(&r.id)))
+    {
         let r = if doors.contains(&room.id) { 5.4 } else { 3.2 };
         let _ = writeln!(
             svg,
@@ -297,7 +304,14 @@ mod tests {
     fn a_sheet_draws_its_rooms_and_edges() {
         let map = town();
         let scene = scene_of(&map);
-        let svg = sheet(&scene.sheet, &all(&scene), &HashSet::new(), "town").expect("draws");
+        let svg = sheet(
+            &scene.sheet,
+            &all(&scene),
+            &all(&scene),
+            &HashSet::new(),
+            "town",
+        )
+        .expect("draws");
 
         assert!(svg.starts_with("<svg xmlns=\"http://www.w3.org/2000/svg\""));
         assert!(svg.trim_end().ends_with("</svg>"));
@@ -312,7 +326,8 @@ mod tests {
         let map = town();
         let scene = scene_of(&map);
         let one: HashSet<RoomId> = std::iter::once(scene.sheet.rooms[0].id).collect();
-        let svg = sheet(&scene.sheet, &one, &HashSet::new(), "town").expect("draws");
+        // Every room is a street here, so all the rest are dots.
+        let svg = sheet(&scene.sheet, &one, &all(&scene), &HashSet::new(), "town").expect("draws");
         assert_eq!(svg.matches("<rect").count(), 1 + 1);
         assert_eq!(svg.matches("<circle").count(), scene.sheet.rooms.len() - 1);
     }
@@ -323,7 +338,14 @@ mod tests {
     fn markup_in_a_title_cannot_break_the_file() {
         let map = town();
         let scene = scene_of(&map);
-        let svg = sheet(&scene.sheet, &all(&scene), &HashSet::new(), "town").expect("draws");
+        let svg = sheet(
+            &scene.sheet,
+            &all(&scene),
+            &all(&scene),
+            &HashSet::new(),
+            "town",
+        )
+        .expect("draws");
         assert!(
             svg.contains("Well &amp; &lt;Treehouse&gt;"),
             "a title was not escaped: {svg}"
@@ -343,6 +365,7 @@ mod tests {
         let svg = sheet(
             &scene.sheet,
             &all(&scene),
+            &all(&scene),
             &HashSet::new(),
             "Bob's <plate> & co",
         )
@@ -355,7 +378,13 @@ mod tests {
     fn an_empty_sheet_is_not_drawn() {
         let empty = SheetScene::default();
         assert_eq!(
-            sheet(&empty, &HashSet::new(), &HashSet::new(), "town"),
+            sheet(
+                &empty,
+                &HashSet::new(),
+                &HashSet::new(),
+                &HashSet::new(),
+                "town"
+            ),
             Err(NotDrawn::Empty)
         );
     }

@@ -160,11 +160,10 @@ pub struct MapperApp {
     /// A store that would not load or save, said in the window. While this
     /// is set from a failed *load*, editing stays off.
     store_problem: Option<String>,
-    /// Whether dragging moves rooms instead of panning the view.
-    edit_mode: bool,
-    /// Whether room titles are drawn. Off, a dense interiors sheet reads
-    /// as shape instead of as overlapping text.
-    show_labels: bool,
+    /// The canvas toggles: editing, labels, every interior room as a dot.
+    /// Labels and interiors start off -- a town's worth of titles, or of
+    /// floor plans, is the first thing anyone turns off.
+    view: draw::View,
     drag: Option<DragState>,
     /// Name being typed for a new plate.
     new_plate: String,
@@ -239,8 +238,11 @@ impl MapperApp {
             store,
             store_path,
             store_problem,
-            edit_mode: false,
-            show_labels: false,
+            view: draw::View {
+                edit_mode: false,
+                labels: false,
+                interiors: false,
+            },
             drag: None,
             new_plate: String::new(),
             pending_inspect: None,
@@ -413,7 +415,7 @@ impl MapperApp {
                     continue;
                 }
                 let slug = format!("{name}{suffix}");
-                match svg::sheet(&scene.sheet, rooms, focus.doors(), &slug) {
+                match svg::sheet(&scene.sheet, rooms, &streets, focus.doors(), &slug) {
                     Ok(doc) => {
                         drawn.insert(slug, doc);
                     }
@@ -903,7 +905,7 @@ impl MapperApp {
         let mut open = true;
         let store = &self.store;
         let new_plate = &mut self.new_plate;
-        let edit_mode = self.edit_mode && can_edit;
+        let edit_mode = self.view.edit_mode && can_edit;
 
         let whole = self.map.as_ref().ok();
         let visiting = shown.subset.room(id).is_none();
@@ -1638,8 +1640,7 @@ impl eframe::App for MapperApp {
                 shown,
                 &self.store,
                 self.tab,
-                &mut self.edit_mode,
-                &mut self.show_labels,
+                &mut self.view,
                 can_edit,
                 edit_out,
                 go_to_plate,
@@ -1673,6 +1674,7 @@ impl eframe::App for MapperApp {
             });
             let focus = draw::Focus {
                 rooms: shown.focus.rooms(),
+                streets: shown.focus.streets(),
                 doors: shown.focus.doors(),
             };
             let hit = draw::scene(
@@ -1681,10 +1683,7 @@ impl eframe::App for MapperApp {
                 &focus,
                 &mut self.camera,
                 self.inspected,
-                draw::View {
-                    edit_mode: self.edit_mode,
-                    labels: self.show_labels,
-                },
+                self.view,
                 ghost,
             );
             if let Some(id) = hit.clicked {
@@ -1714,8 +1713,7 @@ fn canvas_header(
     shown: &mut Shown,
     store: &MapOverrides,
     tab: AreaKind,
-    edit_mode: &mut bool,
-    show_labels: &mut bool,
+    view: &mut draw::View,
     can_edit: bool,
     edit_out: &mut Option<EditAction>,
     go_to_plate: &mut Option<String>,
@@ -1767,17 +1765,19 @@ fn canvas_header(
         if ui.button("Fit").clicked() {
             shown.needs_fit = true;
         }
-        ui.toggle_value(&mut *show_labels, "Labels")
+        ui.toggle_value(&mut view.labels, "Labels")
             .on_hover_text("Draw room titles (hover still shows them)");
+        ui.toggle_value(&mut view.interiors, "Interiors")
+            .on_hover_text("Draw every interior room as a dot, not only each building's door");
         ui.separator();
         // Editing is refused outright while the store would not
         // load: the file holds hand curation, and saving over it
         // with an empty one would destroy that work silently.
         ui.add_enabled_ui(can_edit, |ui| {
-            ui.toggle_value(&mut *edit_mode, "Edit")
+            ui.toggle_value(&mut view.edit_mode, "Edit")
                 .on_hover_text("Drag a group to move it; hold Alt for one room");
         });
-        if *edit_mode {
+        if view.edit_mode {
             ui.label("drag a group (Alt: one room)");
             // Deleting is offered only where the plate itself is
             // on screen, so it cannot be hit while looking at a
