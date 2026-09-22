@@ -673,6 +673,7 @@ mod tests {
     /// hideout. Those hops are not passages: the hideout is a room of the
     /// Landing, and the towns stay apart.
     #[test]
+    #[allow(clippy::cast_possible_truncation)] // fixture ids
     fn a_hideout_joins_its_town_and_fuses_nothing() {
         let mut rooms = Vec::new();
         for (t, town) in ["Wehn", "Sol", "Ice", "Riv"].iter().enumerate() {
