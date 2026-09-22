@@ -41,16 +41,27 @@
 #     manufacture a `region / area` tier would be wrong in both
 #     directions:
 #
+#         River's Rest / Torre             town   / county
+#         Brisker's Cove / Seareach        town   / county
 #         Cold River / The Hinterwilds     town   / wilderness around it
 #         Solhaven / Vornavis              town   / barony
 #         Mist Harbor / Four Winds Isle    town   / isle
 #         Teras / Kharam Dzu               island / town      <- inverted
 #         Ta'Vaalor/Ta'Illistim Transport  a route BETWEEN two cities
 #
-#     It reads as two names for one place -- the town and the larger thing
-#     it sits in, or a common name and a dwarven one (`Zul Logoth /
-#     Kharag 'doth Dzulthu`) -- written together because either might be
-#     what someone calls it. Only 12 of the 72 have a slash at all, and
+#     Five of those six are place-then-container, so the direction is
+#     usually small-to-large -- but `Teras / Kharam Dzu` is the other way
+#     round and the Transport ones are not containment at all, which is
+#     enough to make a split unsafe.
+#
+#     `Zul Logoth / Kharag 'doth Dzulthu` fits the majority shape. The
+#     region's 1,280 rooms are the town (584) plus its cave system --
+#     The Hive, Stormpeak, Czeroth Caverns, Zaerthu Tunnels, Mraent
+#     Caverns, Troll Burial Grounds -- so the second name is the
+#     container. `Kharag 'doth Dzulthu` appears nowhere in gs.map, only
+#     in this field.
+#
+#     Only 12 of the 72 have a slash at all, and
 #     the largest regions (`Ta'Illistim` 4,139, `Icemule Trace` 2,631,
 #     `Wehnimer's Landing` 2,346) have none, so a split would leave them
 #     with no area.
