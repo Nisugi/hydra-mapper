@@ -552,6 +552,25 @@ fn frames(
             streets: frame_streets,
         });
     }
+    // **One frame: the town.** Every frame shares the same skeleton -- the
+    // outdoor sheet, scaled up -- so they are merged into one, and every
+    // outdoor room is echoed, doors or not, so the skeleton is the whole
+    // town and not just the streets the buildings happen to open onto.
+    if !frames.is_empty() {
+        let mut members: Vec<usize> = frames
+            .iter()
+            .flat_map(|f| f.members.iter().copied())
+            .collect();
+        members.sort_unstable();
+        members.dedup();
+        let mut streets: Vec<RoomId> = frames
+            .iter()
+            .flat_map(|f| f.streets.iter().copied())
+            .collect();
+        streets.sort_unstable();
+        streets.dedup();
+        frames = vec![Frame { members, streets }];
+    }
     (frames, claimed)
 }
 
@@ -1030,6 +1049,7 @@ fn merge_cluster_members(
             local.insert(idx, c);
             place(idx, c, &mut occupied);
         }
+        reserve_roads(skeleton, &cells, &edges, &mut occupied);
     }
 
     loop {
@@ -1106,86 +1126,66 @@ fn member_free_offset(
 /// Where a member can go, nearest a proposed offset, or nowhere.
 type FreeFor<'a> = dyn Fn(usize, Cell, &HashSet<Cell>) -> Option<Cell> + 'a;
 
-/// The street laid down in its own shape, with room made for the
-/// buildings. See the comments inside for how.
+/// The road between two adjacent echoes is drawn as a line; keep the
+/// cells under it clear so no building sits on the street.
+fn reserve_roads(
+    skeleton: &[Cell],
+    cells: &[Cell],
+    edges: &HashMap<usize, Vec<Edge>>,
+    occupied: &mut HashSet<Cell>,
+) {
+    for (i, &a) in skeleton.iter().enumerate() {
+        for e in edges
+            .get(&anchor_index(i))
+            .map_or(&[] as &[_], Vec::as_slice)
+        {
+            let Some(j) = anchor_at(e.other_group) else {
+                continue;
+            };
+            let b = skeleton[j];
+            if (a.x - b.x).abs().max((a.y - b.y).abs()) != 1 {
+                continue;
+            }
+            let (dx, dy) = ((b.x - a.x).signum(), (b.y - a.y).signum());
+            for step in 1..TOWN_SCALE {
+                occupied.insert(Cell {
+                    x: cells[i].x + dx * step,
+                    y: cells[i].y + dy * step,
+                });
+            }
+        }
+    }
+}
+
+/// How many cells one outdoor cell becomes on the interiors sheet.
+const TOWN_SCALE: i32 = 4;
+
+/// The town laid down in its own shape, scaled so the buildings fit
+/// between its rooms. See the comments inside for how.
 fn lay_street(
     groups: &[Group],
     anchors: &[RoomId],
     skeleton: &[Cell],
     edges: &HashMap<usize, Vec<Edge>>,
 ) -> Vec<Cell> {
-    // **The street goes down first, in its own shape.** Every echo
-    // is placed at its outdoor cell -- exact directions, exact
-    // adjacency -- and then the grid is ripped open around each one
-    // by the room its buildings need, largest demand first. A rip
-    // shifts whole half-planes, so nothing changes order or side:
-    // Modwir Way still runs east-west, its corners are still its
-    // corners, there is just space between them now. The buildings
-    // then hang off the street rather than the street being lost
-    // among the buildings.
-    let demand: Vec<usize> = (0..anchors.len())
-        .map(|i| {
-            let echo = anchor_index(i);
-            let mut counted: HashSet<usize> = HashSet::new();
-            edges
-                .iter()
-                .filter(|(idx, list)| {
-                    anchor_at(**idx).is_none() && list.iter().any(|e| e.other_group == echo)
-                })
-                .filter(|(idx, _)| counted.insert(**idx))
-                .map(|(idx, _)| groups[*idx].room_ids.len())
-                .sum()
-        })
-        .collect();
-    // Each echo's need: cells of clearance on every side for the
-    // buildings that hang off it, from their room count.
-    #[allow(
-        clippy::cast_precision_loss,
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss
-    )]
-    let need: Vec<i32> = demand
-        .iter()
-        .map(|&d| {
-            if d == 0 {
-                0
-            } else {
-                ((d as f64).sqrt().ceil() as i32 / 2 + 1).max(1)
-            }
-        })
-        .collect();
-    // Widen each gap between adjacent skeleton columns to what the
-    // echoes on either side need, and the same for rows. Per gap,
-    // not per echo: shifting a half-plane for every echo would add
-    // every echo's need to every gap beyond it, and a town of five
-    // hundred street rooms came out six hundred cells wide that way.
-    // A column is shared by many echoes, so this grows the sheet by
-    // the sum of the *column* needs instead.
-    let widen = |axis: &dyn Fn(Cell) -> i32| -> HashMap<i32, i32> {
-        let mut need_at: BTreeMap<i32, i32> = BTreeMap::new();
-        for (i, &c) in skeleton.iter().enumerate() {
-            let slot = need_at.entry(axis(c)).or_default();
-            *slot = (*slot).max(need[i]);
-        }
-        let mut out: HashMap<i32, i32> = HashMap::new();
-        let mut prev: Option<(i32, i32, i32)> = None; // (old, new, need)
-        for (&old, &n) in &need_at {
-            let new = match prev {
-                None => old,
-                Some((pold, pnew, pneed)) => pnew + (old - pold) + pneed + n,
-            };
-            out.insert(old, new);
-            prev = Some((old, new, n));
-        }
-        out
+    // **The town goes down first, at scale.** Every echo is placed at its
+    // outdoor cell times `TOWN_SCALE`: exact directions, exact adjacency,
+    // the outdoor sheet's own shape, with `TOWN_SCALE - 1` free cells
+    // between neighbours for the buildings to sit in. Scaling uniformly
+    // rather than widening each gap by demand keeps the two sheets the
+    // same picture -- a player can carry the town's shape from one to the
+    // other -- and a building with doors on two streets lands between
+    // them because the streets are where they were.
+    let _ = (groups, anchors, edges);
+    let min = Cell {
+        x: skeleton.iter().map(|c| c.x).min().unwrap_or(0),
+        y: skeleton.iter().map(|c| c.y).min().unwrap_or(0),
     };
-    let xs = widen(&|c| c.x);
-    let ys = widen(&|c| c.y);
     let cells: Vec<Cell> = skeleton
         .iter()
         .map(|c| Cell {
-            x: xs[&c.x],
-            y: ys[&c.y],
+            x: (c.x - min.x) * TOWN_SCALE,
+            y: (c.y - min.y) * TOWN_SCALE,
         })
         .collect();
     cells
@@ -1470,6 +1470,13 @@ mod tests {
         assert!(
             echoes.windows(2).all(|w| w[0].x < w[1].x),
             "the street's rooms came out of order: {echoes:?}"
+        );
+        // And at one scale throughout: the same picture as outdoors, only
+        // larger, not a street stretched where the buildings are and
+        // squeezed where they are not.
+        assert!(
+            echoes.windows(2).all(|w| w[1].x - w[0].x == TOWN_SCALE),
+            "the street is not uniformly scaled: {echoes:?}"
         );
 
         // Every shop beside its own street room.
