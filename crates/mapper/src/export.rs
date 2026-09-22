@@ -73,9 +73,12 @@ pub struct Export {
     /// with the outdoor sheet beside it.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub map_membership: BTreeMap<i64, String>,
-    /// Map slug -> display name, for the plates the membership names.
+    /// Map slug -> the plate it names.
+    ///
+    /// Each carries the area it is a sheet of, so the combiner knows
+    /// where a plate attaches rather than treating it as a map adrift.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub maps: BTreeMap<String, String>,
+    pub maps: BTreeMap<String, ExportedPlate>,
     /// Room uid -> the area it belongs to, for every room the export
     /// puts on a plate.
     ///
@@ -86,6 +89,16 @@ pub struct Export {
     /// `plan/21` §3f keeps the same pair apart, as `location` and `map`.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub area: BTreeMap<i64, String>,
+}
+
+/// A plate as the combiner receives it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExportedPlate {
+    /// What to show it as.
+    pub name: String,
+    /// The area it is a sheet of.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub area: Option<String>,
 }
 
 /// A correction that could not be exported, and why -- reported rather
@@ -180,8 +193,14 @@ pub fn build(
     // Only the plates the export actually references, so a plate that was
     // minted and left empty does not travel as a map with no rooms.
     for plate in export.map_membership.values() {
-        if let Some(name) = store.custom_maps.get(plate) {
-            export.maps.insert(plate.clone(), name.clone());
+        if let Some(entry) = store.custom_maps.get(plate) {
+            export.maps.insert(
+                plate.clone(),
+                ExportedPlate {
+                    name: entry.name.clone(),
+                    area: entry.area.clone(),
+                },
+            );
         }
     }
 
@@ -374,9 +393,9 @@ mod tests {
     fn plates_export_with_their_rooms() {
         let map = Map::from_rooms(vec![room(1, Some(7120))]).expect("one room");
         let mut store = MapOverrides::default();
-        let key = store.create_map("landing.well");
+        let key = store.create_map("landing.well", Some("the town of Wehnimer's Landing"));
         store.move_room(RoomKey::Uid(7120), Some(&key));
-        store.create_map("landing.empty");
+        store.create_map("landing.empty", None);
 
         let (export, _) = build(&store, &map, None, &[], &|_| None);
         assert_eq!(export.map_membership[&7120], "landing.well");
@@ -412,7 +431,7 @@ mod tests {
     fn a_plated_room_keeps_its_area() {
         let map = Map::from_rooms(vec![room(1, Some(7122))]).expect("one room");
         let mut store = MapOverrides::default();
-        let key = store.create_map("landing.well");
+        let key = store.create_map("landing.well", Some("the town of Wehnimer's Landing"));
         store.move_room(RoomKey::Uid(7122), Some(&key));
 
         let (export, _) = build(&store, &map, None, &[], &|_| {
@@ -431,7 +450,7 @@ mod tests {
     fn a_plate_move_beats_the_interiors_shelf() {
         let map = Map::from_rooms(vec![room(1, Some(7120))]).expect("one room");
         let mut store = MapOverrides::default();
-        let key = store.create_map("landing.well");
+        let key = store.create_map("landing.well", Some("the town of Wehnimer's Landing"));
         store.move_room(RoomKey::Uid(7120), Some(&key));
         let interiors = vec![("town".to_owned(), vec![RoomId(1)])];
 

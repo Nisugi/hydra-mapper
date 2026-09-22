@@ -154,6 +154,20 @@ pub struct LocationOverrides {
     pub edges: Vec<EdgeCorrection>,
 }
 
+/// A plate: a sheet of one area.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Plate {
+    /// What the picker shows.
+    pub name: String,
+    /// The area this plate is a sheet of, by the name the picker uses.
+    ///
+    /// Optional because a plate can outlive the area it was made under --
+    /// a map rebuild can rename one -- and an orphaned plate is still
+    /// browsable rather than lost.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub area: Option<String>,
+}
+
 /// One saved edge correction.
 ///
 /// Keyed by [`RoomKey`] rather than the room ids
@@ -226,10 +240,16 @@ pub struct MapOverrides {
     /// would otherwise hold it and listed under this plate instead.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub membership_moves: BTreeMap<RoomKey, String>,
-    /// Plate key -> the name shown in the picker. These are the areas a
-    /// person makes: `landing.well`, `landing.treehouse`.
+    /// Plate key -> the plate.
+    ///
+    /// A plate is a **sheet of one area**, not a free-floating map: it is
+    /// created while looking at an area, shown beside that area's Outdoor
+    /// and Interiors sheets, and exported saying which area it hangs off.
+    /// That is what lets a town's satellites -- the well, the treehouse,
+    /// a shop's back rooms -- be drawn apart from its main sheet while
+    /// still belonging to it.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub custom_maps: BTreeMap<String, String>,
+    pub custom_maps: BTreeMap<String, Plate>,
 }
 
 impl MapOverrides {
@@ -328,12 +348,37 @@ impl MapOverrides {
         self.locations.remove(area);
     }
 
-    /// Mint a plate. Returns its key, which is derived from the name so
-    /// the same name always names the same plate.
-    pub fn create_map(&mut self, name: &str) -> String {
+    /// Mint a plate under `area`. Returns its key, which is derived from
+    /// the name so the same name always names the same plate.
+    pub fn create_map(&mut self, name: &str, area: Option<&str>) -> String {
         let key = plate_key(name);
-        self.custom_maps.insert(key.clone(), name.trim().to_owned());
+        self.custom_maps.insert(
+            key.clone(),
+            Plate {
+                name: name.trim().to_owned(),
+                area: area.map(ToOwned::to_owned),
+            },
+        );
         key
+    }
+
+    /// The plates that are sheets of `area`, as (key, name).
+    #[must_use]
+    pub fn plates_of(&self, area: &str) -> Vec<(&str, &str)> {
+        self.custom_maps
+            .iter()
+            .filter(|(_, plate)| plate.area.as_deref() == Some(area))
+            .map(|(key, plate)| (key.as_str(), plate.name.as_str()))
+            .collect()
+    }
+
+    /// A plate's display name, falling back to its key for one that
+    /// arrived in a hand-edited file.
+    #[must_use]
+    pub fn plate_name<'a>(&'a self, key: &'a str) -> &'a str {
+        self.custom_maps
+            .get(key)
+            .map_or(key, |plate| plate.name.as_str())
     }
 
     /// Whether this room is drawn on a plate rather than with its area.
@@ -558,7 +603,7 @@ mod tests {
     #[test]
     fn deleting_a_plate_releases_its_rooms() {
         let mut store = MapOverrides::default();
-        let key = store.create_map("Landing Well");
+        let key = store.create_map("Landing Well", Some("town"));
         store.move_room(RoomKey::Uid(7120), Some(&key));
         store.move_room(RoomKey::Uid(9999), Some("landing.treehouse"));
         store.delete_map(&key);
@@ -638,11 +683,29 @@ mod tests {
         }
     }
 
+    /// A plate belongs to the area it was made under, and only that
+    /// area's sheets list it.
+    #[test]
+    fn plates_belong_to_their_area() {
+        let mut store = MapOverrides::default();
+        let well = store.create_map("landing.well", Some("wehnimers-landing-town"));
+        store.create_map("elsewhere", Some("some-other-area"));
+        store.create_map("orphan", None);
+
+        let sheets = store.plates_of("wehnimers-landing-town");
+        assert_eq!(sheets.len(), 1, "an unrelated plate was listed as a sheet");
+        assert_eq!(sheets[0].0, well);
+        assert_eq!(store.plate_name(&well), "landing.well");
+        // A plate with no owner is not a sheet of anything, but is still
+        // named -- it stays browsable rather than becoming unreachable.
+        assert_eq!(store.plate_name("orphan"), "orphan");
+    }
+
     /// A store survives a round trip through its file format.
     #[test]
     fn a_store_round_trips() {
         let mut store = MapOverrides::default();
-        let key = store.create_map("Landing Well");
+        let key = store.create_map("Landing Well", Some("town"));
         store.move_room(RoomKey::Uid(7120), Some(&key));
         store.move_room(RoomKey::Id(4242), Some(&key));
         store.nudge_group("town", RoomKey::Uid(500), Cell { x: 1, y: 2 });

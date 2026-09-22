@@ -158,6 +158,9 @@ pub struct MapperApp {
     drag: Option<DragState>,
     /// Name being typed for a new plate.
     new_plate: String,
+    /// A room to inspect once its area is on screen, from a room-number
+    /// search. Applied after `show_selected`, which clears the selection.
+    pending_inspect: Option<RoomId>,
     /// What the last export did, shown until the next one.
     export_note: Option<String>,
 }
@@ -216,6 +219,7 @@ impl MapperApp {
             edit_mode: false,
             drag: None,
             new_plate: String::new(),
+            pending_inspect: None,
             export_note: None,
         }
     }
@@ -256,6 +260,62 @@ impl MapperApp {
             }
         }
         out
+    }
+
+    /// The bar above everything: the export button, and whatever the
+    /// corrections as a whole have to say. Returns whether to export.
+    fn corrections_bar(&mut self, ui: &mut egui::Ui, can_edit: bool) -> bool {
+        // A store that will not load or save is said once, at the top,
+        // because it means corrections are not being kept. The export
+        // note shares the bar: both are about the corrections as a whole,
+        // not about whatever area is on screen.
+        let mut export_now = false;
+        if self.store_problem.is_some() || self.export_note.is_some() || can_edit {
+            egui::Panel::top("corrections").show(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                let count = self.store.locations.values().map(crate::overrides::LocationOverrides::len).sum::<usize>()
+                    + self.store.membership_moves.len();
+                ui.add_enabled_ui(can_edit && count > 0, |ui| {
+                    export_now = ui
+                        .button("Export for combiner")
+                        .on_hover_text(
+                            "Write the corrections as a dirto patch the combiner                                  can merge into the map",
+                        )
+                        .clicked();
+                });
+                if let Some(problem) = &self.store_problem {
+                    ui.colored_label(IMPASSABLE_COLOR, format!("Corrections: {problem}"));
+                } else if let Some(note) = &self.export_note {
+                    ui.label(note);
+                } else {
+                    ui.weak(format!("{count} correction(s)"));
+                }
+            });
+        });
+        }
+        export_now
+    }
+
+    /// Show a plate, from its key -- what the header's dropdown does.
+    ///
+    /// Selecting by name so the Plates tab's own index does not have to
+    /// be threaded through the header.
+    fn show_plate(&mut self, key: &str) {
+        let name = self.store.plate_name(key).to_owned();
+        let Some(index) = self
+            .areas
+            .list(AreaKind::Plates)
+            .iter()
+            .position(|a| a.name == name)
+        else {
+            return;
+        };
+        self.tab = AreaKind::Plates;
+        self.selected = Some(Selection {
+            kind: AreaKind::Plates,
+            index,
+        });
+        self.show_selected();
     }
 
     /// Write the corrections out for the map combiner.
@@ -537,7 +597,7 @@ impl MapperApp {
                 membership_changed = true;
             }
             EditAction::NewPlate { name, keys } => {
-                let plate = self.store.create_map(&name);
+                let plate = self.store.create_map(&name, area.as_deref());
                 for key in keys {
                     self.store.move_room(key, Some(&plate));
                 }
@@ -567,6 +627,10 @@ impl MapperApp {
         let new_plate = &mut self.new_plate;
         let edit_mode = self.edit_mode && can_edit;
 
+        let whole = self.map.as_ref().ok();
+        let visiting = shown.subset.room(id).is_none();
+        let mut follow = None;
+
         egui::Panel::right("inspector").show(ui, |ui| {
             ui.horizontal(|ui| {
                 if ui
@@ -579,7 +643,23 @@ impl MapperApp {
                 ui.label("Inspector");
             });
             ui.separator();
-            inspector(ui, shown, id);
+            if visiting {
+                // A room reached through an exit out of this area. It is
+                // not laid out here, so there are no layout diagnostics
+                // to show -- but it can still be put on one of this
+                // area's plates, which is the whole point of following
+                // the exit.
+                let Some(whole) = whole else { return };
+                visiting_room(ui, whole, id, &mut follow);
+                if edit_mode
+                    && let Some(action) =
+                        visiting_membership(ui, shown, store, whole, id, new_plate)
+                {
+                    *edit_out = Some(action);
+                }
+                return;
+            }
+            inspector(ui, shown, id, whole, &mut follow);
             if !edit_mode {
                 return;
             }
@@ -608,6 +688,8 @@ impl MapperApp {
         });
         if !open {
             self.inspected = None;
+        } else if let Some(next) = follow {
+            self.inspected = Some(next);
         }
         edit
     }
@@ -615,6 +697,9 @@ impl MapperApp {
     /// The left panel: the two list tabs, a filter box, and the list.
     fn picker(&mut self, ui: &mut egui::Ui) -> bool {
         let mut changed = false;
+        // Set when a room-number search is followed: the area to show,
+        // and the room to inspect once it is on screen.
+        let mut goto: Option<(AreaKind, usize, RoomId)> = None;
 
         ui.heading("Areas");
         ui.horizontal(|ui| {
@@ -625,7 +710,38 @@ impl MapperApp {
                 }
             }
         });
-        ui.add(egui::TextEdit::singleline(&mut self.filter).hint_text("Filter"));
+        ui.add(egui::TextEdit::singleline(&mut self.filter).hint_text("Filter, or a room number"));
+        // A bare number is a room, not a name: with 356 areas there is
+        // otherwise no way to answer "which area holds room 7562", and
+        // that is exactly the question an exit leading out of an area
+        // provokes.
+        if let Some(found) = self.filter.trim().parse::<u32>().ok().map(RoomId) {
+            let held_by = |kind: AreaKind| {
+                self.areas
+                    .list(kind)
+                    .iter()
+                    .position(|a| a.rooms.contains(&found))
+                    .map(|index| (kind, index))
+            };
+            match held_by(AreaKind::Plates)
+                .or_else(|| held_by(AreaKind::Official))
+                .or_else(|| held_by(AreaKind::Mapdb))
+            {
+                Some((kind, index)) => {
+                    let area = &self.areas.list(kind)[index];
+                    if ui
+                        .link(format!("room {} is in {}", found.0, area.name))
+                        .on_hover_text("Show that area and inspect the room")
+                        .clicked()
+                    {
+                        goto = Some((kind, index, found));
+                    }
+                }
+                None => {
+                    ui.weak(format!("room {} is not in this map", found.0));
+                }
+            }
+        }
         ui.separator();
 
         let needle = self.filter.to_lowercase();
@@ -666,6 +782,12 @@ impl MapperApp {
                 }
             }
         });
+        if let Some((kind, index, room)) = goto {
+            self.tab = kind;
+            self.selected = Some(Selection { kind, index });
+            self.pending_inspect = Some(room);
+            changed = true;
+        }
         changed
     }
 }
@@ -675,8 +797,14 @@ impl MapperApp {
 ///
 /// A free function rather than a method so it borrows only the `Shown` it
 /// reads, leaving the rest of the app free for the canvas beside it.
-fn inspector(ui: &mut egui::Ui, shown: &Shown, id: RoomId) {
-    let Some(facts) = RoomFacts::gather(id, &shown.subset, &shown.layout) else {
+fn inspector(
+    ui: &mut egui::Ui,
+    shown: &Shown,
+    id: RoomId,
+    whole: Option<&Map>,
+    follow: &mut Option<RoomId>,
+) {
+    let Some(facts) = RoomFacts::gather_in(id, &shown.subset, &shown.layout, whole) else {
         ui.label(format!("Room {} is not in this area.", id.0));
         return;
     };
@@ -727,29 +855,7 @@ fn inspector(ui: &mut egui::Ui, shown: &Shown, id: RoomId) {
 
         // --- exits ---
         ui.add_space(8.0);
-        ui.strong(format!("Exits ({})", facts.exits.len()));
-        for exit in &facts.exits {
-            ui.horizontal_wrapped(|ui| {
-                match &exit.command {
-                    Some(command) => ui.label(command),
-                    None => ui.label("-"),
-                };
-                match &exit.to_title {
-                    Some(title) => ui.weak(format!("-> {title}")),
-                    // Outside this area: the subset cannot name it, and
-                    // saying so beats printing a bare id with no hint why.
-                    None => ui.weak(format!("-> room {} (outside area)", exit.to.0)),
-                };
-                if exit.crossed != Crossed::Command {
-                    let color = if exit.crossed == Crossed::Impassable {
-                        IMPASSABLE_COLOR
-                    } else {
-                        SCRIPTED_COLOR
-                    };
-                    ui.colored_label(color, exit.crossed.label());
-                }
-            });
-        }
+        exit_list(ui, &facts, follow);
 
         // --- how the layout placed it ---
         ui.add_space(8.0);
@@ -782,6 +888,161 @@ fn inspector(ui: &mut egui::Ui, shown: &Shown, id: RoomId) {
             ));
         }
     });
+}
+
+/// The exit list, with rooms outside this area as links to follow.
+fn exit_list(ui: &mut egui::Ui, facts: &RoomFacts, follow: &mut Option<RoomId>) {
+    ui.strong(format!("Exits ({})", facts.exits.len()));
+    for exit in &facts.exits {
+        ui.horizontal_wrapped(|ui| {
+            match &exit.command {
+                Some(command) => ui.label(command),
+                None => ui.label("-"),
+            };
+            let label = match &exit.to_title {
+                Some(title) => format!("-> {title}"),
+                None => format!("-> room {}", exit.to.0),
+            };
+            if exit.outside {
+                // Clickable: an official area excludes its own
+                // interiors, so the only way to reach the well behind
+                // a town square is through the exit that names it.
+                if ui
+                    .link(label)
+                    .on_hover_text("Outside this area -- click to inspect it")
+                    .clicked()
+                {
+                    *follow = Some(exit.to);
+                }
+            } else {
+                ui.weak(label);
+            }
+            if exit.crossed != Crossed::Command {
+                let color = if exit.crossed == Crossed::Impassable {
+                    IMPASSABLE_COLOR
+                } else {
+                    SCRIPTED_COLOR
+                };
+                ui.colored_label(color, exit.crossed.label());
+            }
+        });
+    }
+}
+
+/// A room reached by following an exit out of the shown area.
+///
+/// It is not laid out here, so this shows what the map knows about it and
+/// its own exits -- enough to tell a well from a treehouse and to walk on
+/// to the next room.
+fn visiting_room(ui: &mut egui::Ui, whole: &Map, id: RoomId, follow: &mut Option<RoomId>) {
+    let Some(room) = whole.room(id) else {
+        ui.label(format!("Room {} is not in this map.", id.0));
+        return;
+    };
+    ui.heading(
+        room.title
+            .first()
+            .cloned()
+            .unwrap_or_else(|| format!("Room {}", id.0)),
+    );
+    ui.label(format!("Room {}", id.0));
+    ui.weak("Outside the area on screen");
+    ui.separator();
+    if let Some(location) = &room.location {
+        ui.label(format!("Location: {location}"));
+    }
+    if let Some(description) = room.description.first() {
+        ui.add_space(4.0);
+        ui.small(description);
+    }
+    ui.add_space(8.0);
+    ui.strong(format!("Exits ({})", room.exits.len()));
+    for exit in &room.exits {
+        ui.horizontal_wrapped(|ui| {
+            match &exit.crossing {
+                cena_map::Crossing::Command(cmd) => ui.label(cmd),
+                _ => ui.label("-"),
+            };
+            let title = whole
+                .room(exit.to)
+                .and_then(|r| r.title.first())
+                .cloned()
+                .unwrap_or_else(|| format!("room {}", exit.to.0));
+            if ui.link(format!("-> {title}")).clicked() {
+                *follow = Some(exit.to);
+            }
+        });
+    }
+}
+
+/// Putting a visited room -- one outside the shown area -- onto one of
+/// that area's plates.
+///
+/// This is the case the editor could not reach before: an official area
+/// excludes its own interiors, so the well and treehouse behind a town
+/// square were unselectable and therefore unplateable.
+fn visiting_membership(
+    ui: &mut egui::Ui,
+    shown: &Shown,
+    store: &MapOverrides,
+    whole: &Map,
+    id: RoomId,
+    new_plate: &mut String,
+) -> Option<EditAction> {
+    let mut edit = None;
+    let key = RoomKey::of(id, whole);
+
+    ui.add_space(8.0);
+    ui.strong("Plate");
+    if let Some(plate) = store.membership_moves.get(&key) {
+        ui.label(format!("On: {}", store.plate_name(plate)));
+        if ui.button("Send back").clicked() {
+            edit = Some(EditAction::MoveRooms {
+                keys: vec![key],
+                to: None,
+            });
+        }
+    }
+
+    let plates = store.plates_of(&shown.name);
+    if !plates.is_empty() {
+        egui::ComboBox::from_id_salt("visit_move_to_plate")
+            .selected_text(format!("Add to a {} plate...", shown.name))
+            .show_ui(ui, |ui| {
+                for (plate, name) in plates {
+                    if store.membership_moves.get(&key).map(String::as_str) == Some(plate) {
+                        continue;
+                    }
+                    if ui.selectable_label(false, name).clicked() {
+                        edit = Some(EditAction::MoveRooms {
+                            keys: vec![key],
+                            to: Some(plate.to_owned()),
+                        });
+                    }
+                }
+            });
+    }
+
+    ui.horizontal(|ui| {
+        ui.add(
+            egui::TextEdit::singleline(new_plate)
+                .hint_text("new plate name")
+                .desired_width(120.0),
+        );
+        let named = !new_plate.trim().is_empty();
+        if ui
+            .add_enabled(named, egui::Button::new("+ room"))
+            .on_hover_text("Make this plate under the shown area and move this room onto it")
+            .clicked()
+        {
+            edit = Some(EditAction::NewPlate {
+                name: new_plate.trim().to_owned(),
+                keys: vec![key],
+            });
+            new_plate.clear();
+        }
+    });
+    edit
 }
 
 /// The ten compass bearings a person can force, in the order the combo
@@ -905,8 +1166,7 @@ fn membership(
     ui.strong("Plate");
     match store.membership_moves.get(&key) {
         Some(plate) => {
-            let name = store.custom_maps.get(plate).unwrap_or(plate);
-            ui.label(format!("On: {name}"));
+            ui.label(format!("On: {}", store.plate_name(plate)));
             if ui
                 .button("Send back")
                 .on_hover_text("Return this room to the area it came from")
@@ -927,11 +1187,11 @@ fn membership(
         egui::ComboBox::from_id_salt("move_to_plate")
             .selected_text("Move to plate...")
             .show_ui(ui, |ui| {
-                for (plate, name) in &store.custom_maps {
+                for (plate, entry) in &store.custom_maps {
                     if store.membership_moves.get(&key) == Some(plate) {
                         continue;
                     }
-                    if ui.selectable_label(false, name).clicked() {
+                    if ui.selectable_label(false, &entry.name).clicked() {
                         edit = Some(EditAction::MoveRooms {
                             keys: vec![key],
                             to: Some(plate.clone()),
@@ -992,37 +1252,13 @@ impl eframe::App for MapperApp {
 
         let mut edit: Option<EditAction> = None;
         let edit_out = &mut edit;
+        // A plate picked from the header's dropdown, jumped to after the
+        // frame's panels have let go of their borrows.
+        let mut jump: Option<String> = None;
+        let go_to_plate = &mut jump;
         let can_edit = self.store_path.is_some() && self.store_problem.is_none();
 
-        // A store that will not load or save is said once, at the top,
-        // because it means corrections are not being kept. The export
-        // note shares the bar: both are about the corrections as a whole,
-        // not about whatever area is on screen.
-        let mut export_now = false;
-        if self.store_problem.is_some() || self.export_note.is_some() || can_edit {
-            egui::Panel::top("corrections").show(ui, |ui| {
-                ui.horizontal_wrapped(|ui| {
-                    let count = self.store.locations.values().map(crate::overrides::LocationOverrides::len).sum::<usize>()
-                        + self.store.membership_moves.len();
-                    ui.add_enabled_ui(can_edit && count > 0, |ui| {
-                        export_now = ui
-                            .button("Export for combiner")
-                            .on_hover_text(
-                                "Write the corrections as a dirto patch the combiner                                  can merge into the map",
-                            )
-                            .clicked();
-                    });
-                    if let Some(problem) = &self.store_problem {
-                        ui.colored_label(IMPASSABLE_COLOR, format!("Corrections: {problem}"));
-                    } else if let Some(note) = &self.export_note {
-                        ui.label(note);
-                    } else {
-                        ui.weak(format!("{count} correction(s)"));
-                    }
-                });
-            });
-        }
-        if export_now {
+        if self.corrections_bar(ui, can_edit) {
             self.export_corrections();
         }
 
@@ -1032,6 +1268,10 @@ impl eframe::App for MapperApp {
         });
         if changed {
             self.show_selected();
+            // After, because switching areas clears the inspected room.
+            if let Some(room) = self.pending_inspect.take() {
+                self.inspected = Some(room);
+            }
         }
 
         // Before the central panel, which egui gives whatever space the
@@ -1056,6 +1296,7 @@ impl eframe::App for MapperApp {
                 &mut self.edit_mode,
                 can_edit,
                 edit_out,
+                go_to_plate,
             );
 
             // Fit on the first frame after a change, when the canvas size
@@ -1091,6 +1332,9 @@ impl eframe::App for MapperApp {
                 *edit_out = self.handle_drag(&hit);
             }
         });
+        if let Some(plate) = jump {
+            self.show_plate(&plate);
+        }
         if let Some(edit) = edit {
             self.commit(edit);
         }
@@ -1112,6 +1356,7 @@ fn canvas_header(
     edit_mode: &mut bool,
     can_edit: bool,
     edit_out: &mut Option<EditAction>,
+    go_to_plate: &mut Option<String>,
 ) {
     ui.horizontal(|ui| {
         ui.heading(&shown.name);
@@ -1131,6 +1376,21 @@ fn canvas_header(
                     shown.needs_fit = true;
                 }
             });
+        }
+        // This area's own plates, beside its other two sheets: a plate is
+        // a sheet of this area, so it belongs here rather than only in a
+        // separate tab.
+        let plates = store.plates_of(&shown.name);
+        if !plates.is_empty() {
+            egui::ComboBox::from_id_salt("area_plates")
+                .selected_text(format!("Plates ({})", plates.len()))
+                .show_ui(ui, |ui| {
+                    for (key, name) in plates {
+                        if ui.selectable_label(false, name).clicked() {
+                            *go_to_plate = Some(key.to_owned());
+                        }
+                    }
+                });
         }
         ui.separator();
         if ui.button("Fit").clicked() {
@@ -1180,7 +1440,7 @@ fn plate_key_of(store: &MapOverrides, shown: &str) -> Option<String> {
     store
         .custom_maps
         .iter()
-        .find(|(key, name)| name.as_str() == shown || key.as_str() == shown)
+        .find(|(key, plate)| plate.name == shown || key.as_str() == shown)
         .map(|(key, _)| key.clone())
 }
 

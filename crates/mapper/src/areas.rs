@@ -157,11 +157,7 @@ fn plate_areas(map: &Map, store: &MapOverrides) -> Vec<Area> {
         .map(|(plate, rooms)| Area {
             // The display name if the plate was minted here; the key
             // itself for one that arrived in a hand-edited file.
-            name: store
-                .custom_maps
-                .get(plate)
-                .cloned()
-                .unwrap_or_else(|| plate.to_owned()),
+            name: store.plate_name(plate).to_owned(),
             kind: AreaKind::Plates,
             rooms,
         })
