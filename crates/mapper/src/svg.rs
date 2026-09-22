@@ -14,6 +14,9 @@
 
 use std::fmt::Write as _;
 
+use std::collections::HashSet;
+
+use cena_map::RoomId;
 use cena_map_layout::scene::{SceneEdgeKind, SheetScene};
 
 /// Pixels per cell, and the room square inside one. The canvas's own
@@ -63,10 +66,11 @@ impl std::fmt::Display for NotDrawn {
     }
 }
 
-/// Draw one sheet as a standalone SVG document.
+/// Draw the sheet as a standalone SVG document, with `focus` as squares
+/// and every other room as a dot on the roads, as the canvas draws it.
 ///
-/// `title` names the sheet inside the file, so one found on its own says
-/// what it is.
+/// `title` names the picture inside the file, so one found on its own
+/// says what it is.
 ///
 /// # Errors
 ///
@@ -77,13 +81,20 @@ impl std::fmt::Display for NotDrawn {
 /// would need a sheet 16 million cells across; the largest area on the
 /// real map is a few hundred, and [`MAX_ROOMS`] caps it far below that.
 #[allow(clippy::cast_precision_loss)]
-pub fn sheet(scene: &SheetScene, title: &str) -> Result<String, NotDrawn> {
+pub fn sheet(
+    scene: &SheetScene,
+    focus: &HashSet<RoomId>,
+    streets: &HashSet<RoomId>,
+    doors: &HashSet<RoomId>,
+    title: &str,
+) -> Result<String, NotDrawn> {
     if scene.rooms.is_empty() {
         return Err(NotDrawn::Empty);
     }
     if scene.rooms.len() > MAX_ROOMS {
         return Err(NotDrawn::TooBig(scene.rooms.len()));
     }
+    let in_focus = |id: RoomId| focus.contains(&id);
 
     // The sheet's own cell bounds, in pixels, with a margin.
     let cells_w = (scene.max.x - scene.min.x + 1) as f32;
@@ -112,8 +123,13 @@ pub fn sheet(scene: &SheetScene, title: &str) -> Result<String, NotDrawn> {
     );
 
     // Edges first, so rooms sit on top of them -- the canvas's own order.
+    // Roads and doors always; a building's inside only when it is in
+    // focus.
     let _ = writeln!(svg, r#"<g stroke-linecap="round">"#);
     for edge in &scene.edges {
+        if edge.unit.is_some() && !(in_focus(edge.a_room) && in_focus(edge.b_room)) {
+            continue;
+        }
         let (color, w) = match edge.kind {
             SceneEdgeKind::Directional | SceneEdgeKind::Stub => (DIRECTIONAL_LINE, 1.5),
             SceneEdgeKind::Connector => (CONNECTOR_LINE, 1.05),
@@ -129,8 +145,74 @@ pub fn sheet(scene: &SheetScene, title: &str) -> Result<String, NotDrawn> {
     }
     let _ = writeln!(svg, "</g>");
 
+    write_rooms(&mut svg, scene, &in_focus, streets, doors, &px, &py);
+
+    // Labels name what is in focus: a building's label draws when the
+    // building does. A label's unit is looked up by whether its group's
+    // rooms are in focus, which is what the canvas does too.
+    let labelled: Vec<_> = scene
+        .labels
+        .iter()
+        .filter(|l| {
+            scene
+                .rooms
+                .iter()
+                .any(|r| r.group == l.group && in_focus(r.id))
+        })
+        .collect();
+    if !labelled.is_empty() {
+        let _ = writeln!(
+            svg,
+            r#"<g fill="{LABEL_COLOR}" font-family="sans-serif" font-size="12">"#
+        );
+        for label in labelled {
+            let _ = writeln!(
+                svg,
+                r#"<text x="{:.1}" y="{:.1}">{}</text>"#,
+                px(label.cell.x) - ROOM_PX / 2.0,
+                py(label.cell.y) - ROOM_PX / 2.0 - 2.0,
+                escape(&label.text),
+            );
+        }
+        let _ = writeln!(svg, "</g>");
+    }
+
+    let _ = writeln!(svg, "</svg>");
+    Ok(svg)
+}
+
+/// The rooms: dots for those out of focus, squares for those in it.
+fn write_rooms(
+    svg: &mut String,
+    scene: &SheetScene,
+    in_focus: &dyn Fn(RoomId) -> bool,
+    streets: &HashSet<RoomId>,
+    doors: &HashSet<RoomId>,
+    px: &dyn Fn(i32) -> f32,
+    py: &dyn Fn(i32) -> f32,
+) {
+    // Rooms out of focus are dots on the road, larger where a door leads
+    // in.
+    let _ = writeln!(svg, r#"<g stroke="none">"#);
+    // A building out of focus is one dot where you enter it.
+    for room in scene
+        .rooms
+        .iter()
+        .filter(|r| !in_focus(r.id) && (streets.contains(&r.id) || doors.contains(&r.id)))
+    {
+        let r = if doors.contains(&room.id) { 5.4 } else { 3.2 };
+        let _ = writeln!(
+            svg,
+            r#"<circle cx="{:.1}" cy="{:.1}" r="{r}" fill="{ECHO_DOT}"><title>{}</title></circle>"#,
+            px(room.cell.x),
+            py(room.cell.y),
+            escape(&format!("{} — {}", room.id.0, room.title)),
+        );
+    }
+    let _ = writeln!(svg, "</g>");
+
     let _ = writeln!(svg, r#"<g fill="{ROOM_FILL}">"#);
-    for room in &scene.rooms {
+    for room in scene.rooms.iter().filter(|r| in_focus(r.id)) {
         let stroke = if room.entrance {
             ENTRANCE_STROKE
         } else {
@@ -150,64 +232,6 @@ pub fn sheet(scene: &SheetScene, title: &str) -> Result<String, NotDrawn> {
             stroke = stroke,
             tip = escape(&format!("{} — {}", room.id.0, room.title)),
         );
-    }
-    let _ = writeln!(svg, "</g>");
-
-    write_echoes(&mut svg, scene, &px, &py);
-
-    if !scene.labels.is_empty() {
-        let _ = writeln!(
-            svg,
-            r#"<g fill="{LABEL_COLOR}" font-family="sans-serif" font-size="12">"#
-        );
-        for label in &scene.labels {
-            let _ = writeln!(
-                svg,
-                r#"<text x="{:.1}" y="{:.1}">{}</text>"#,
-                px(label.cell.x) - ROOM_PX / 2.0,
-                py(label.cell.y) - ROOM_PX / 2.0 - 2.0,
-                escape(&label.text),
-            );
-        }
-        let _ = writeln!(svg, "</g>");
-    }
-
-    let _ = writeln!(svg, "</svg>");
-    Ok(svg)
-}
-
-/// Street rooms echoed among their buildings: signposts, drawn as the
-/// canvas draws them, with the street's name beside each.
-fn write_echoes(
-    svg: &mut String,
-    scene: &SheetScene,
-    px: &dyn Fn(i32) -> f32,
-    py: &dyn Fn(i32) -> f32,
-) {
-    if scene.anchors.is_empty() {
-        return;
-    }
-    // Street rooms echoed among their buildings: signposts, drawn as the
-    // canvas draws them, with the street's name beside each.
-    let _ = writeln!(svg, r#"<g stroke="none">"#);
-    for echo in &scene.anchors {
-        let r = if echo.has_door { 5.4 } else { 3.2 };
-        let _ = writeln!(
-            svg,
-            r#"<circle cx="{:.1}" cy="{:.1}" r="{r}" fill="{ECHO_DOT}" stroke="none"><title>{}</title></circle>"#,
-            px(echo.cell.x),
-            py(echo.cell.y),
-            escape(&format!("{} — {}", echo.id.0, echo.title)),
-        );
-        if echo.has_door && !echo.title.is_empty() {
-            let _ = writeln!(
-                svg,
-                r#"<text x="{:.1}" y="{:.1}" fill="{ENTRANCE_STROKE}" stroke="none" font-family="sans-serif" font-size="11">{}</text>"#,
-                px(echo.cell.x) + r + 4.0,
-                py(echo.cell.y) + 4.0,
-                escape(&echo.title),
-            );
-        }
     }
     let _ = writeln!(svg, "</g>");
 }
@@ -269,18 +293,43 @@ mod tests {
         build_scene("town", &generate_layout(map), map)
     }
 
+    /// Everything in focus, as the tests below want: every room a square.
+    fn all(scene: &cena_map_layout::MapScene) -> HashSet<RoomId> {
+        scene.sheet.rooms.iter().map(|r| r.id).collect()
+    }
+
     /// The file is well-formed SVG carrying every room and edge, at the
     /// size the sheet needs.
     #[test]
     fn a_sheet_draws_its_rooms_and_edges() {
         let map = town();
         let scene = scene_of(&map);
-        let svg = sheet(&scene.outdoor, "town").expect("draws");
+        let svg = sheet(
+            &scene.sheet,
+            &all(&scene),
+            &all(&scene),
+            &HashSet::new(),
+            "town",
+        )
+        .expect("draws");
 
         assert!(svg.starts_with("<svg xmlns=\"http://www.w3.org/2000/svg\""));
         assert!(svg.trim_end().ends_with("</svg>"));
-        assert_eq!(svg.matches("<rect").count(), 1 + scene.outdoor.rooms.len());
-        assert_eq!(svg.matches("<line").count(), scene.outdoor.edges.len());
+        assert_eq!(svg.matches("<rect").count(), 1 + scene.sheet.rooms.len());
+        assert_eq!(svg.matches("<line").count(), scene.sheet.edges.len());
+    }
+
+    /// With only one room in focus, the rest are dots and nothing inside
+    /// another building is drawn.
+    #[test]
+    fn a_room_out_of_focus_is_a_dot() {
+        let map = town();
+        let scene = scene_of(&map);
+        let one: HashSet<RoomId> = std::iter::once(scene.sheet.rooms[0].id).collect();
+        // Every room is a street here, so all the rest are dots.
+        let svg = sheet(&scene.sheet, &one, &all(&scene), &HashSet::new(), "town").expect("draws");
+        assert_eq!(svg.matches("<rect").count(), 1 + 1);
+        assert_eq!(svg.matches("<circle").count(), scene.sheet.rooms.len() - 1);
     }
 
     /// A room title is XML-escaped: titles carry `&` and angle brackets,
@@ -288,7 +337,15 @@ mod tests {
     #[test]
     fn markup_in_a_title_cannot_break_the_file() {
         let map = town();
-        let svg = sheet(&scene_of(&map).outdoor, "town").expect("draws");
+        let scene = scene_of(&map);
+        let svg = sheet(
+            &scene.sheet,
+            &all(&scene),
+            &all(&scene),
+            &HashSet::new(),
+            "town",
+        )
+        .expect("draws");
         assert!(
             svg.contains("Well &amp; &lt;Treehouse&gt;"),
             "a title was not escaped: {svg}"
@@ -304,17 +361,32 @@ mod tests {
     #[test]
     fn a_plate_name_is_escaped_in_the_title() {
         let map = town();
-        let svg = sheet(&scene_of(&map).outdoor, "Bob's <plate> & co").expect("draws");
+        let scene = scene_of(&map);
+        let svg = sheet(
+            &scene.sheet,
+            &all(&scene),
+            &all(&scene),
+            &HashSet::new(),
+            "Bob's <plate> & co",
+        )
+        .expect("draws");
         assert!(svg.contains("<title>Bob&apos;s &lt;plate&gt; &amp; co</title>"));
     }
 
     /// An empty sheet is reported rather than written as a blank file.
     #[test]
     fn an_empty_sheet_is_not_drawn() {
-        let map = town();
-        let scene = scene_of(&map);
-        // This fixture is all outdoor, so its interiors shelf is empty.
-        assert_eq!(sheet(&scene.interiors, "town"), Err(NotDrawn::Empty));
+        let empty = SheetScene::default();
+        assert_eq!(
+            sheet(
+                &empty,
+                &HashSet::new(),
+                &HashSet::new(),
+                &HashSet::new(),
+                "town"
+            ),
+            Err(NotDrawn::Empty)
+        );
     }
 
     /// The SVG's palette is the canvas's. Two renderers meant to agree

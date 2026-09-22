@@ -32,9 +32,9 @@
 //! Plate membership has no upstream field, so it is exported beside the
 //! `dirto` patch as its own section, in the `map` slug terms `plan/21` §3f
 //! already specifies for a room ("one map per room"). An area's interiors
-//! shelf exports as a separate slug rather than sharing one with its
-//! outdoor sheet: the two are packed as independent grids, and merging
-//! them puts 632 rooms of the real map on top of another room's cell.
+//! used to export as a separate slug, being packed as their own grid;
+//! they are laid out on the area's one sheet now, beside the streets they
+//! open off, and travel under no slug of their own.
 
 use std::collections::BTreeMap;
 
@@ -45,7 +45,9 @@ use serde::{Deserialize, Serialize};
 use crate::overrides::{MapOverrides, RoomKey};
 use crate::placement::{self, Placement, Resolved};
 
-/// The suffix an area's interiors shelf takes as its own map slug.
+/// The suffix of an area's second picture: the one with every building in
+/// focus. Once a map slug of its own, when the interiors were a separate
+/// grid; now only a picture's name.
 pub const INTERIORS_SUFFIX: &str = ".interiors";
 
 /// The correction format's current version.
@@ -96,12 +98,7 @@ pub struct Export {
     /// Merged into the room record's own `dirto` field.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub dirto: BTreeMap<i64, BTreeMap<i64, String>>,
-    /// Room uid -> map slug.
-    ///
-    /// Carries two things that both answer "which grid is this room laid
-    /// out on": the plates a person made, and every area's interiors
-    /// shelf, which is packed as its own grid and must not share a slug
-    /// with the outdoor sheet beside it.
+    /// Room uid -> map slug: the plates a person made.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub map_membership: BTreeMap<i64, String>,
     /// Map slug -> the plate it names.
@@ -190,7 +187,6 @@ pub fn build(
     store: &MapOverrides,
     map: &Map,
     source_map: Option<String>,
-    interiors: &[(String, Vec<RoomId>)],
     area_of: &dyn Fn(RoomId) -> Option<String>,
     placements: &[Resolved],
     pictures: BTreeMap<String, String>,
@@ -241,25 +237,6 @@ pub fn build(
                 what: format!("plate move of {key} to {plate}"),
                 why: reason(*key, *key, map),
             }),
-        }
-    }
-    // Every area's interiors shelf, as its own slug. A plate move wins
-    // over this: a room deliberately put on a plate belongs there,
-    // whichever sheet the layout would otherwise have drawn it on.
-    for (area, rooms) in interiors {
-        let slug = interiors_slug(area);
-        for &id in rooms {
-            let Some(uid) = map.room(id).and_then(|r| r.uid.first()).map(|u| u.0) else {
-                skipped.push(Skipped {
-                    what: format!("{area}: interior room {}", id.0),
-                    why: NO_UID,
-                });
-                continue;
-            };
-            export
-                .map_membership
-                .entry(uid)
-                .or_insert_with(|| slug.clone());
         }
     }
 
@@ -336,12 +313,6 @@ fn reason(a: RoomKey, b: RoomKey, map: &Map) -> &'static str {
     } else {
         NO_UID
     }
-}
-
-/// The map slug for an area's interiors shelf.
-#[must_use]
-pub fn interiors_slug(area: &str) -> String {
-    format!("{area}{INTERIORS_SUFFIX}")
 }
 
 impl Export {
@@ -424,7 +395,7 @@ mod tests {
             Some(EdgeAction::Direction(Dir::East)),
         );
 
-        let (export, skipped) = build(&store, &map, None, &[], &|_| None, &[], BTreeMap::new());
+        let (export, skipped) = build(&store, &map, None, &|_| None, &[], BTreeMap::new());
         assert!(skipped.is_empty());
         assert_eq!(export.dirto[&7_000_001][&7_000_002], "east");
         assert_eq!(
@@ -447,7 +418,7 @@ mod tests {
             Some(EdgeAction::Connector),
         );
 
-        let (export, _) = build(&store, &map, None, &[], &|_| None, &[], BTreeMap::new());
+        let (export, _) = build(&store, &map, None, &|_| None, &[], BTreeMap::new());
         assert_eq!(export.dirto[&7_000_001][&7_000_002], "cross-group");
         assert_eq!(export.dirto[&7_000_002][&7_000_001], "cross-group");
     }
@@ -466,7 +437,7 @@ mod tests {
             Some(EdgeAction::Connector),
         );
 
-        let (export, skipped) = build(&store, &map, None, &[], &|_| None, &[], BTreeMap::new());
+        let (export, skipped) = build(&store, &map, None, &|_| None, &[], BTreeMap::new());
         assert!(export.dirto.is_empty(), "exported an unusable key");
         assert_eq!(skipped.len(), 1);
         assert_eq!(skipped[0].why, NO_UID);
@@ -481,40 +452,10 @@ mod tests {
         store.move_room(RoomKey::Uid(7120), Some(&key));
         store.create_map("landing.empty", None);
 
-        let (export, _) = build(&store, &map, None, &[], &|_| None, &[], BTreeMap::new());
+        let (export, _) = build(&store, &map, None, &|_| None, &[], BTreeMap::new());
         assert_eq!(export.map_membership[&7120], "landing.well");
         assert_eq!(export.maps.len(), 1, "an empty plate travelled anyway");
         assert!(export.maps.contains_key("landing.well"));
-    }
-
-    #[test]
-    fn interiors_take_their_own_slug() {
-        assert_eq!(
-            interiors_slug("wehnimers-landing-town"),
-            "wehnimers-landing-town.interiors"
-        );
-    }
-
-    /// An interiors shelf gets its own grid slug, so its rooms cannot land
-    /// on the outdoor sheet's cells.
-    #[test]
-    fn shelved_rooms_export_onto_their_own_slug() {
-        let map = Map::from_rooms(vec![room(1, Some(7120)), room(2, Some(7121))]).expect("rooms");
-        let interiors = vec![("town".to_owned(), vec![RoomId(2)])];
-        let (export, _) = build(
-            &MapOverrides::default(),
-            &map,
-            None,
-            &interiors,
-            &|_| None,
-            &[],
-            BTreeMap::new(),
-        );
-        assert_eq!(export.map_membership[&7121], "town.interiors");
-        assert!(
-            !export.map_membership.contains_key(&7120),
-            "an outdoor room was given an interiors slug"
-        );
     }
 
     /// A plate is a grid, not a place: the room's area travels with it,
@@ -530,7 +471,6 @@ mod tests {
             &store,
             &map,
             None,
-            &[],
             &|_| Some("the town of Wehnimer's Landing".to_owned()),
             &[],
             BTreeMap::new(),
@@ -551,7 +491,6 @@ mod tests {
             &MapOverrides::default(),
             &map,
             None,
-            &[],
             &|_| None,
             &[],
             BTreeMap::new(),
@@ -592,7 +531,6 @@ mod tests {
             &MapOverrides::default(),
             &map,
             None,
-            &[],
             &|_| None,
             &placements,
             BTreeMap::new(),
@@ -627,7 +565,6 @@ mod tests {
             &MapOverrides::default(),
             &map,
             None,
-            &[],
             &|_| None,
             &placements,
             BTreeMap::new(),
@@ -651,7 +588,7 @@ mod tests {
         let mut pictures = BTreeMap::new();
         pictures.insert("landing.well".to_owned(), doc.to_owned());
 
-        let (export, _) = build(&store, &map, None, &[], &|_| None, &[], pictures);
+        let (export, _) = build(&store, &map, None, &|_| None, &[], pictures);
         let json = serde_json::to_string(&export).expect("serializes");
         let back: Export = serde_json::from_str(&json).expect("parses");
         assert_eq!(back.pictures["landing.well"], doc);
@@ -669,7 +606,6 @@ mod tests {
             &MapOverrides::default(),
             &map,
             None,
-            &[],
             &|_| None,
             &[],
             pictures,
@@ -686,27 +622,5 @@ mod tests {
     #[test]
     fn a_default_export_is_not_version_zero() {
         assert_eq!(Export::default().version, FORMAT_VERSION);
-    }
-
-    /// A deliberate plate move wins over the interiors shelf: the person
-    /// said where that room goes.
-    #[test]
-    fn a_plate_move_beats_the_interiors_shelf() {
-        let map = Map::from_rooms(vec![room(1, Some(7120))]).expect("one room");
-        let mut store = MapOverrides::default();
-        let key = store.create_map("landing.well", Some("the town of Wehnimer's Landing"));
-        store.move_room(RoomKey::Uid(7120), Some(&key));
-        let interiors = vec![("town".to_owned(), vec![RoomId(1)])];
-
-        let (export, _) = build(
-            &store,
-            &map,
-            None,
-            &interiors,
-            &|_| None,
-            &[],
-            BTreeMap::new(),
-        );
-        assert_eq!(export.map_membership[&7120], "landing.well");
     }
 }

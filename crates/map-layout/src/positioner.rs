@@ -251,7 +251,9 @@ pub fn position_rooms(map: &Map, dirs: &DirectionMap) -> Vec<Group> {
             // every direction it knows about, but `validate_component`
             // reads exits it does not constrain -- a one-way edge whose
             // reverse disagrees -- so this is checked rather than assumed.
-            if fixed.len() < violations.len() {
+            // Two rooms on one cell count against it as a violation
+            // would: it satisfies every bearing and draws as nothing.
+            if fixed.len() + stacked(&placed) < violations.len() + stacked(&positions) {
                 positions = placed;
                 compact_component(&mut positions);
                 violations = validate_component(&room_order, &positions, map, dirs);
@@ -631,6 +633,12 @@ fn reweld_violations(
 /// Collapse fully-empty rows and columns by rank-mapping the distinct x and
 /// y values to 0..n-1. Relative order is preserved, so every edge keeps its
 /// direction signs.
+/// How many rooms share a cell with an earlier one.
+fn stacked(positions: &HashMap<RoomId, Cell>) -> usize {
+    let mut seen: HashSet<Cell> = HashSet::new();
+    positions.values().filter(|&&c| !seen.insert(c)).count()
+}
+
 fn compact_component(positions: &mut HashMap<RoomId, Cell>) {
     if positions.is_empty() {
         return;

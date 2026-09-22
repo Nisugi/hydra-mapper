@@ -122,16 +122,16 @@ stays one-way.
 ### `map_membership` (object, optional) — which grid
 
 `room uid → map slug`. The grid a room is laid out on, when that is not
-its area's own sheet. Two things arrive here:
+its area's own sheet: the **plates** a person made to stop satellites
+crowding a town — the Town Well and treehouse hanging off Wehnimer's
+Town Square.
 
-- **Plates**, made by a person to stop satellites crowding a town — the
-  Town Well and treehouse hanging off Wehnimer's Town Square.
-- **Interiors shelves**, one per area, slug `<area>.interiors`. These are
-  automatic. An area's indoor rooms are packed as an independent grid from
-  its outdoor sheet, so they must not share a slug: merging them puts 632
-  rooms of the real map on top of another room's cell.
-
-A deliberate plate move wins over the interiors shelf.
+Earlier exports also sent every interior room to an `<area>.interiors`
+slug, because an area's indoor rooms were packed as a grid of their own.
+They are laid out on the area's one sheet now, each building beside the
+street it opens off, so nothing arrives here for them. A validator
+reading an older file may still meet the slug; it names no grid that
+still exists, and dropping those entries is the right reading.
 
 ### `maps` (object, optional) — what the plates are
 
@@ -201,7 +201,7 @@ checked by eye before it travels.
 
 ### `pictures` (object, optional) — review evidence
 
-`map slug → SVG document`. A drawing of each ticked area's sheet, and of
+`map slug → SVG document`. Two drawings of each ticked area's sheet, and one of
 every plate hanging off one.
 
 A corrections file says where rooms go; it does not show it. These let a
@@ -214,11 +214,13 @@ loop rather than an archive format.
 The values are plain SVG text, not base64 and not compressed, so a diff of
 the file is readable and an extractor needs no decoding step.
 
-Each sheet is a separate entry (`<slug>`, and `<slug>.interiors`), because
-the two are packed as independent grids and drawing them together would
-put rooms on another room's cell. A plate is drawn alongside the area it
-was carved out of, since judging "should these rooms be on their own
-sheet?" needs both halves of the question. Room number and title are
+An area is one sheet, and it is drawn twice: `<slug>` with the streets in
+focus — outdoor rooms as squares, every building a dot beside the street
+it opens off — and `<slug>.interiors` with every building in focus, the
+streets as dots. Same roads, same places, so the two can be laid over
+each other. A plate is drawn alongside the area it was carved out of,
+since judging "should these rooms be on their own sheet?" needs both
+halves of the question. Room number and title are
 `<title>` tooltips rather than drawn text, which keeps a dense sheet
 readable.
 
@@ -228,8 +230,8 @@ worth submitting — an export carrying only pictures reports itself as
 empty. A validator should ignore this field when deciding what to merge,
 and may drop it entirely once a submission is accepted.
 
-A sheet past 1500 rooms is not drawn: an interiors shelf can run to
-thousands, and that SVG is one nobody opens in a browser twice. The
+A sheet past 1500 rooms is not drawn: a town runs to thousands, and that
+SVG is one nobody opens in a browser twice. The
 mapper says which areas were skipped rather than writing something
 unusable.
 
@@ -244,8 +246,9 @@ For the `hydra-mapdb` issue form, a reasonable bar:
   current map (report which — this usually means a stale submission);
 - a `dirto` value is not one of the ten bearings or `cross-group`
   (`none`/`skip` are better dropped than refused);
-- a `map_membership` slug has no entry in `maps` and is not an
-  `<area>.interiors` slug;
+- a `map_membership` slug has no entry in `maps` (an `<area>.interiors`
+  slug from an older export is dropped, not refused — see
+  `map_membership`);
 - `dirto` entries are one-sided, or disagree with each other — `a → b`
   east with `b → a` anything but west.
 
