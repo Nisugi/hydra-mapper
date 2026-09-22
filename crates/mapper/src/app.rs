@@ -974,7 +974,7 @@ impl MapperApp {
     }
 
     /// The left panel: the two list tabs, a filter box, and the list.
-    fn picker(&mut self, ui: &mut egui::Ui, can_edit: bool) -> bool {
+    fn picker(&mut self, ui: &mut egui::Ui, edit_mode: bool) -> bool {
         let mut changed = false;
         // Set when a room-number search is followed: the area to show,
         // and the room to inspect once it is on screen.
@@ -1034,32 +1034,18 @@ impl MapperApp {
                     index,
                 };
                 let selected = self.selected == Some(selection);
-                // An area's count includes rooms drawn on a plate, which
-                // is the point -- they are still rooms of this place --
-                // so the ones that lay out elsewhere are called out
-                // rather than leaving the count looking wrong.
-                let plated = if self.tab == AreaKind::Plates {
-                    0
-                } else {
-                    area.rooms
-                        .iter()
-                        .filter(|&&id| {
-                            self.map
-                                .as_ref()
-                                .is_ok_and(|m| self.store.is_plated(RoomKey::of(id, m)))
-                        })
-                        .count()
-                };
-                let label = if plated > 0 {
-                    format!("{}  ({}, {plated} on plates)", area.name, area.rooms.len())
-                } else {
-                    format!("{}  ({})", area.name, area.rooms.len())
-                };
-                // The tick marks an area for the SVG export. It shares the
-                // row rather than living in its own list, because "which
-                // areas" is a question about these same entries.
-                ui.horizontal(|ui| {
-                    if can_edit {
+                let label = area_label(area, self.tab, self.map.as_ref().ok(), &self.store);
+                // The tick marks an area for the SVG export, and only
+                // while editing -- it is an editing tool, and a row that
+                // always carries one reads as a mode the window is stuck
+                // in.
+                //
+                // `horizontal_top` with a truncating label, rather than
+                // plain `horizontal`: a horizontal layout asks for its
+                // content's full width, which would stop the panel ever
+                // being dragged narrower than the longest area name.
+                ui.horizontal_top(|ui| {
+                    if edit_mode {
                         let mut ticked = self.svg_areas.contains(&area.name);
                         if ui
                             .checkbox(&mut ticked, "")
@@ -1073,7 +1059,15 @@ impl MapperApp {
                             }
                         }
                     }
-                    if ui.selectable_label(selected, label).clicked() {
+                    if ui
+                        .add(
+                            egui::Button::selectable(selected, &label)
+                                .truncate()
+                                .min_size(egui::vec2(ui.available_width(), 0.0)),
+                        )
+                        .on_hover_text(&label)
+                        .clicked()
+                    {
                         self.selected = Some(selection);
                         changed = true;
                     }
@@ -1586,7 +1580,7 @@ impl eframe::App for MapperApp {
 
         let mut changed = false;
         egui::Panel::left("areas").show(ui, |ui| {
-            changed = self.picker(ui, can_edit);
+            changed = self.picker(ui, self.edit_mode && can_edit);
         });
         if changed {
             self.show_selected();
@@ -1809,6 +1803,33 @@ fn walk(trail: &mut Vec<RoomId>, at: Option<RoomId>, next: RoomId) {
         trail.truncate(index);
     } else if let Some(from) = at {
         trail.push(from);
+    }
+}
+
+/// One area's row text: its name, its room count, and how many of those
+/// rooms lay out somewhere else.
+///
+/// The count includes rooms drawn on a plate, which is the point -- they
+/// are still rooms of this place -- so the ones that lay out elsewhere are
+/// called out rather than leaving the count looking wrong.
+fn area_label(
+    area: &crate::areas::Area,
+    tab: AreaKind,
+    map: Option<&Map>,
+    store: &MapOverrides,
+) -> String {
+    let plated = if tab == AreaKind::Plates {
+        0
+    } else {
+        area.rooms
+            .iter()
+            .filter(|&&id| map.is_some_and(|m| store.is_plated(RoomKey::of(id, m))))
+            .count()
+    };
+    if plated > 0 {
+        format!("{}  ({}, {plated} on plates)", area.name, area.rooms.len())
+    } else {
+        format!("{}  ({})", area.name, area.rooms.len())
     }
 }
 
