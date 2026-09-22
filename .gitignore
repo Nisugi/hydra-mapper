@@ -3,3 +3,8 @@
 # Map files: large binaries, supplied by the person running the tool
 # (CENA_MAP or a path argument), never part of the repo.
 *.map
+
+# Local editing state and its export: these belong beside a person's
+# own map file, not in the repository.
+*.overrides.json
+*.corrections.json

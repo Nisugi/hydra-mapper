@@ -69,9 +69,16 @@ pub struct ExitLine {
     /// crossings have no single command to show.
     pub command: Option<String>,
     pub crossed: Crossed,
-    /// The destination's title, when it is a room this area holds. `None`
-    /// for an exit leading out of the area, which is itself worth seeing.
+    /// The destination's title.
     pub to_title: Option<String>,
+    /// The exit leaves this area: the destination is a room of the wider
+    /// map, not of the subset being laid out.
+    ///
+    /// Worth saying, and worth being able to act on. An official area
+    /// excludes its own interiors -- 292 rooms hang off Wehnimer's
+    /// Landing alone -- so the well and the treehouse a town square opens
+    /// onto are reached only through one of these.
+    pub outside: bool,
 }
 
 /// A direction violation touching the inspected room, phrased from that
@@ -124,6 +131,19 @@ impl RoomFacts {
     /// the honest answer for a view that holds one area at a time.
     #[must_use]
     pub fn gather(id: RoomId, map: &Map, layout: &Layout) -> Option<RoomFacts> {
+        RoomFacts::gather_in(id, map, layout, None)
+    }
+
+    /// As [`RoomFacts::gather`], with `whole` consulted for the titles of
+    /// rooms outside this area, so an exit leading out of it can still be
+    /// named and acted on.
+    #[must_use]
+    pub fn gather_in(
+        id: RoomId,
+        map: &Map,
+        layout: &Layout,
+        whole: Option<&Map>,
+    ) -> Option<RoomFacts> {
         let room = map.room(id)?;
         let group = layout.groups.iter().find(|g| g.room_ids.contains(&id))?;
 
@@ -137,7 +157,7 @@ impl RoomFacts {
             terrain: room.terrain.clone(),
             climate: room.climate.clone(),
             tags: room.tags.clone(),
-            exits: exit_lines(room, map),
+            exits: exit_lines(room, map, whole),
             group: group.index,
             packing: group.packing,
             group_name: group.name.clone(),
@@ -158,17 +178,26 @@ impl RoomFacts {
     }
 }
 
-fn exit_lines(room: &Room, map: &Map) -> Vec<ExitLine> {
+fn exit_lines(room: &Room, map: &Map, whole: Option<&Map>) -> Vec<ExitLine> {
     room.exits
         .iter()
-        .map(|exit| ExitLine {
-            to: exit.to,
-            command: match &exit.crossing {
-                Crossing::Command(cmd) => Some(cmd.clone()),
-                _ => None,
-            },
-            crossed: Crossed::of(&exit.crossing),
-            to_title: map.room(exit.to).and_then(|r| r.title.first()).cloned(),
+        .map(|exit| {
+            let inside = map.room(exit.to);
+            let outside = inside.is_none();
+            let title = inside
+                .or_else(|| whole.and_then(|w| w.room(exit.to)))
+                .and_then(|r| r.title.first())
+                .cloned();
+            ExitLine {
+                to: exit.to,
+                command: match &exit.crossing {
+                    Crossing::Command(cmd) => Some(cmd.clone()),
+                    _ => None,
+                },
+                crossed: Crossed::of(&exit.crossing),
+                to_title: title,
+                outside,
+            }
         })
         .collect()
 }
