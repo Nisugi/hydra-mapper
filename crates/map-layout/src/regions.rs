@@ -33,7 +33,7 @@
 //! fragments; the guild courtyards join their guilds; Zul Logoth keeps
 //! its 670 rooms to itself.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use cena_map::{Map, Room, RoomId};
 
@@ -218,32 +218,47 @@ pub fn derive_areas(map: &Map) -> Vec<DerivedArea> {
 /// called Wehnimer's Landing. Any name still repeated gets its room count.
 fn name_satellites(areas: &mut [DerivedArea], map: &Map) {
     let mut seen_region: HashMap<String, usize> = HashMap::new();
-    for area in areas.iter_mut() {
+    let mut principal: HashSet<usize> = HashSet::new();
+    for (at, area) in areas.iter_mut().enumerate() {
         let Some(region) = area.region.clone() else {
             continue;
         };
         let nth = seen_region.entry(region.clone()).or_insert(0);
         *nth += 1;
-        if *nth > 1
-            && let Some(prefix) = commonest(
-                area.rooms
-                    .iter()
-                    .filter_map(|&id| map.room(id))
-                    .filter_map(title_prefix),
-            )
-        {
-            area.name = prefix;
+        if *nth == 1 || area.kind == AreaKind::Isolated {
+            principal.insert(at);
+            continue;
+        }
+        let titled = area.rooms.iter().filter_map(|&id| map.room(id));
+        // "[Icemule Trace, Exterior]" is prefixed with the town's own name,
+        // which says nothing; the whole title does.
+        let name = commonest(titled.clone().filter_map(title_prefix))
+            .filter(|p| *p != region)
+            .or_else(|| commonest(titled.filter_map(title_inner)));
+        if let Some(name) = name {
+            area.name = name;
         }
     }
+    // A satellite that still shares a name -- with the principal, or
+    // with another satellite -- says how big it is. The principal never
+    // changes: it is the name a person looks for.
     let mut seen_name: HashMap<String, usize> = HashMap::new();
-    for area in areas.iter() {
+    for area in areas.iter().filter(|a| a.kind != AreaKind::Isolated) {
         *seen_name.entry(area.name.clone()).or_default() += 1;
     }
-    for area in areas.iter_mut() {
-        if seen_name[&area.name] > 1 && area.kind != AreaKind::Isolated {
+    for (at, area) in areas.iter_mut().enumerate() {
+        if !principal.contains(&at) && area.kind != AreaKind::Isolated && seen_name[&area.name] > 1
+        {
             area.name = format!("{} ({} rooms)", area.name, area.rooms.len());
         }
     }
+}
+
+/// "[Moonglae Inn, Atrium]" -> "Moonglae Inn, Atrium".
+fn title_inner(room: &Room) -> Option<&str> {
+    let title = room.title.first()?;
+    let inner = title.strip_prefix('[')?.split(']').next()?.trim();
+    (!inner.is_empty()).then_some(inner)
 }
 
 /// Adjacency in both directions: a one-way door still says the two rooms
