@@ -1,5 +1,6 @@
 //! The window's state and its `eframe::App` implementation.
 
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use cena_map::{Map, RoomId};
@@ -12,6 +13,7 @@ use cena_map_layout::{
 use crate::areas::{AreaKind, Areas};
 use crate::camera::Camera;
 use crate::draw;
+use crate::export;
 use crate::inspect::{Crossed, RoomFacts, bearing};
 use crate::overrides::{self, MapOverrides, RoomKey};
 
@@ -142,6 +144,8 @@ pub struct MapperApp {
     drag: Option<DragState>,
     /// Name being typed for a new plate.
     new_plate: String,
+    /// What the last export did, shown until the next one.
+    export_note: Option<String>,
 }
 
 /// A drag in progress. Committed as one correction on release, so dragging
@@ -198,6 +202,90 @@ impl MapperApp {
             edit_mode: false,
             drag: None,
             new_plate: String::new(),
+            export_note: None,
+        }
+    }
+
+    /// Which rooms of each area land on its interiors shelf.
+    ///
+    /// Recomputed here rather than cached: exporting is rare, and a stale
+    /// answer would put rooms on the wrong grid.
+    fn interiors_by_area(&self, map: &Map) -> Vec<(String, Vec<RoomId>)> {
+        let mut out = Vec::new();
+        for kind in [AreaKind::Official, AreaKind::Mapdb, AreaKind::Plates] {
+            for area in self.areas.list(kind) {
+                let rooms: Vec<cena_map::Room> = area
+                    .rooms
+                    .iter()
+                    .filter_map(|&id| map.room(id).cloned())
+                    .collect();
+                let Ok(subset) = Map::from_rooms(rooms) else {
+                    continue;
+                };
+                let location = self.store.location(&area.name);
+                let edges = location
+                    .map(|l| l.edge_overrides(&subset))
+                    .unwrap_or_default();
+                let layout = if edges.is_empty() {
+                    generate_layout(&subset)
+                } else {
+                    generate_layout_with(&subset, &edges)
+                };
+                let shelved: Vec<RoomId> = layout
+                    .interiors
+                    .iter()
+                    .flat_map(|&i| layout.groups[i].room_ids.iter().copied())
+                    .collect();
+                if !shelved.is_empty() {
+                    out.push((area.name.clone(), shelved));
+                }
+            }
+        }
+        out
+    }
+
+    /// Write the corrections out for the map combiner.
+    ///
+    /// Separate from the store's own save: that file is this editor's
+    /// working state, keyed for its own use, whereas this is what another
+    /// program consumes -- uid-keyed, in the `dirto` vocabulary the layout
+    /// engine already reads.
+    fn export_corrections(&mut self) {
+        let (Ok(map), Some(store_path)) = (&self.map, self.store_path.as_deref()) else {
+            self.export_note = Some("Nothing to export: no map is loaded.".to_owned());
+            return;
+        };
+        let source = store_path
+            .file_name()
+            .map(|n| n.to_string_lossy().replace(".overrides.json", ".map"));
+        // Every area's interiors shelf, so the export can give it its own
+        // grid slug: the two sheets are packed independently and merging
+        // them puts 632 rooms of the real map on another room's cell.
+        let interiors = self.interiors_by_area(map);
+        let (export, skipped) = export::build(&self.store, map, source, &interiors);
+        if export.is_empty() {
+            self.export_note = Some("Nothing to export yet.".to_owned());
+            return;
+        }
+        let path = export::export_path(store_path);
+        match export.save(&path) {
+            Ok(()) => {
+                let mut note = format!(
+                    "Exported {} correction(s) to {}",
+                    export.len(),
+                    path.display()
+                );
+                if !skipped.is_empty() {
+                    // Said out loud: a correction that cannot be named
+                    // across a map rebuild did not travel, and a person
+                    // should know rather than find out downstream.
+                    let _ = write!(note, "; {} skipped ({})", skipped.len(), skipped[0].why);
+                }
+                self.export_note = Some(note);
+            }
+            Err(error) => {
+                self.export_note = Some(format!("Cannot write {}: {error}", path.display()));
+            }
         }
     }
 
@@ -827,11 +915,35 @@ impl eframe::App for MapperApp {
         let can_edit = self.store_path.is_some() && self.store_problem.is_none();
 
         // A store that will not load or save is said once, at the top,
-        // because it means corrections are not being kept.
-        if let Some(problem) = &self.store_problem {
-            egui::Panel::top("store_problem").show(ui, |ui| {
-                ui.colored_label(IMPASSABLE_COLOR, format!("Corrections: {problem}"));
+        // because it means corrections are not being kept. The export
+        // note shares the bar: both are about the corrections as a whole,
+        // not about whatever area is on screen.
+        let mut export_now = false;
+        if self.store_problem.is_some() || self.export_note.is_some() || can_edit {
+            egui::Panel::top("corrections").show(ui, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    let count = self.store.locations.values().map(crate::overrides::LocationOverrides::len).sum::<usize>()
+                        + self.store.membership_moves.len();
+                    ui.add_enabled_ui(can_edit && count > 0, |ui| {
+                        export_now = ui
+                            .button("Export for combiner")
+                            .on_hover_text(
+                                "Write the corrections as a dirto patch the combiner                                  can merge into the map",
+                            )
+                            .clicked();
+                    });
+                    if let Some(problem) = &self.store_problem {
+                        ui.colored_label(IMPASSABLE_COLOR, format!("Corrections: {problem}"));
+                    } else if let Some(note) = &self.export_note {
+                        ui.label(note);
+                    } else {
+                        ui.weak(format!("{count} correction(s)"));
+                    }
+                });
             });
+        }
+        if export_now {
+            self.export_corrections();
         }
 
         let mut changed = false;

@@ -1,0 +1,10 @@
+# One line ending in the repository, whatever the working tree uses.
+#
+# Without this the repo drifts: some files were committed CRLF and some
+# LF, so an editor that normalises a file it touches produces a diff of
+# hundreds of unchanged lines. Git now stores text as LF and leaves the
+# working copy to core.autocrlf.
+* text=auto
+
+# Data: tab-separated, LF, never "fixed" by a tool.
+*.tsv text eol=lf
