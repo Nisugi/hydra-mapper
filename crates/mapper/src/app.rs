@@ -5,7 +5,9 @@ use std::path::{Path, PathBuf};
 use cena_map::{Map, RoomId};
 use cena_map_layout::Cell;
 use cena_map_layout::scene::Sheet;
-use cena_map_layout::{Layout, MapScene, build_scene, generate_layout};
+use cena_map_layout::{
+    Dir, EdgeAction, Layout, MapScene, build_scene, generate_layout, generate_layout_with,
+};
 
 use crate::areas::{AreaKind, Areas};
 use crate::camera::Camera;
@@ -88,6 +90,12 @@ enum EditAction {
     ResetLocation,
     /// Delete a plate, releasing its rooms back to their own areas.
     DeletePlate { plate: String },
+    /// Set, replace or clear the correction on one edge.
+    SetEdge {
+        a: RoomKey,
+        b: RoomKey,
+        action: Option<EdgeAction>,
+    },
     /// Move rooms onto a plate, or (with `None`) back to their own area.
     MoveRooms {
         keys: Vec<RoomKey>,
@@ -257,10 +265,19 @@ impl MapperApp {
             return;
         };
         let name = area.name.clone();
-        let mut layout = generate_layout(&subset);
-        // Corrections are a diff on top of the solver's own output, so the
-        // generated layout stays the thing being corrected.
-        if let Some(location) = self.store.location(&name) {
+        let location = self.store.location(&name);
+        // Edge corrections go IN to the solve: they change what the solver
+        // does, so the rooms are placed by the corrected geometry. Moves
+        // and pins come after, as a diff on its result.
+        let edges = location
+            .map(|l| l.edge_overrides(&subset))
+            .unwrap_or_default();
+        let mut layout = if edges.is_empty() {
+            generate_layout(&subset)
+        } else {
+            generate_layout_with(&subset, &edges)
+        };
+        if let Some(location) = location {
             overrides::apply(&mut layout, &subset, location);
         }
         let scene = build_scene(&name, &layout, &subset);
@@ -361,6 +378,10 @@ impl MapperApp {
                 self.store.delete_map(&plate);
                 membership_changed = true;
             }
+            EditAction::SetEdge { a, b, action } => {
+                let Some(area) = area else { return };
+                self.store.set_edge(&area, a, b, action);
+            }
             EditAction::MoveRooms { keys, to } => {
                 for key in keys {
                     self.store.move_room(key, to.as_deref());
@@ -427,6 +448,11 @@ impl MapperApp {
                     .clicked()
             {
                 *edit_out = Some(EditAction::UnpinRoom { key });
+            }
+            if let Some(facts) = RoomFacts::gather(id, &shown.subset, &shown.layout)
+                && let Some(action) = edges_editor(ui, shown, store, &facts)
+            {
+                *edit_out = Some(action);
             }
             if let Some(action) = membership(ui, shown, store, id, new_plate) {
                 *edit_out = Some(action);
@@ -588,6 +614,89 @@ fn inspector(ui: &mut egui::Ui, shown: &Shown, id: RoomId) {
             ));
         }
     });
+}
+
+/// The ten compass bearings a person can force, in the order the combo
+/// lists them.
+const BEARINGS: [Dir; 10] = [
+    Dir::North,
+    Dir::Northeast,
+    Dir::East,
+    Dir::Southeast,
+    Dir::South,
+    Dir::Southwest,
+    Dir::West,
+    Dir::Northwest,
+    Dir::Up,
+    Dir::Down,
+];
+
+/// How an edge correction reads in the combo.
+fn edge_label(action: Option<EdgeAction>) -> String {
+    match action {
+        None => "auto".to_owned(),
+        Some(EdgeAction::Connector) => "passage".to_owned(),
+        Some(EdgeAction::Direction(dir)) => dir.name().to_owned(),
+    }
+}
+
+/// Per-exit edge corrections: the controls that fix a wrong layout rather
+/// than tidy a drawn one.
+///
+/// Both actions here are inputs to the solve, so choosing one re-runs the
+/// layout and the rooms move. `passage` un-welds two rooms the solver
+/// placed adjacent on bad data; a bearing forces what the exit should have
+/// said -- the answer to a direction violation.
+fn edges_editor(
+    ui: &mut egui::Ui,
+    shown: &Shown,
+    store: &MapOverrides,
+    facts: &RoomFacts,
+) -> Option<EditAction> {
+    let mut edit = None;
+    let here = RoomKey::of(facts.id, &shown.subset);
+    let saved = store.location(&shown.name);
+
+    ui.add_space(8.0);
+    ui.strong("Edges");
+    for exit in &facts.exits {
+        // An exit leading out of this area cannot be corrected here: the
+        // solver never saw the far room, so constraining it would mean
+        // nothing.
+        let Some(title) = &exit.to_title else {
+            continue;
+        };
+        let there = RoomKey::of(exit.to, &shown.subset);
+        let current = saved.and_then(|l| l.edge_action(here, there));
+        ui.horizontal(|ui| {
+            ui.label(exit.command.as_deref().unwrap_or("-"));
+            egui::ComboBox::from_id_salt(("edge", exit.to.0))
+                .selected_text(edge_label(current))
+                .width(110.0)
+                .show_ui(ui, |ui| {
+                    let mut choose = |ui: &mut egui::Ui, action: Option<EdgeAction>| {
+                        if ui
+                            .selectable_label(current == action, edge_label(action))
+                            .clicked()
+                        {
+                            edit = Some(EditAction::SetEdge {
+                                a: here,
+                                b: there,
+                                action,
+                            });
+                        }
+                    };
+                    choose(ui, None);
+                    choose(ui, Some(EdgeAction::Connector));
+                    ui.separator();
+                    for dir in BEARINGS {
+                        choose(ui, Some(EdgeAction::Direction(dir)));
+                    }
+                });
+        });
+        ui.small(format!("   -> {title}"));
+    }
+    edit
 }
 
 /// The editing half of the inspector: which plate this room is on, and the

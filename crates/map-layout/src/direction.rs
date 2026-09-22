@@ -3,10 +3,10 @@
 //! adapted to `cena_map::Exit`'s already-typed crossing (`plan/26` §3).
 //!
 //! Resolves the direction of an exit from its `ExitKind`/`Crossing` text, or
-//! the reverse edge. There is no `dirto`-equivalent override on `cena_map::
-//! Exit` yet (the override system is out of scope for v1, `plan/26` §0), so
-//! curated overrides are not read here; when they exist, they plug in ahead
-//! of step 1 exactly where Vellum's `dirto` check sits today.
+//! the reverse edge. Curated corrections
+//! ([`DirectionMap::apply_edge_overrides`]) are layered on top afterwards,
+//! the same seam Vellum's `dirto` check occupies, so a hand-fixed bearing
+//! is what the solver positions by.
 
 use std::collections::HashMap;
 
@@ -14,7 +14,7 @@ use cena_map::{Crossing, ExitKind, Map, RoomId};
 
 use serde::{Deserialize, Serialize};
 
-use crate::overrides::EdgeOverride;
+use crate::overrides::{EdgeAction, EdgeOverride};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -225,12 +225,41 @@ impl DirectionMap {
         self.map.get(&(from, to)).copied()
     }
 
-    /// Apply curation edge overrides (spec §8) before positioning. Not
-    /// wired to anything yet (`plan/26` §0: no editor in v1); kept as the
-    /// seam Vellum's own `apply_edge_overrides` occupies, so the future
-    /// override system has one obvious place to land.
-    pub fn apply_edge_overrides(&mut self, _map: &Map, edges: &[EdgeOverride]) {
-        debug_assert!(edges.is_empty(), "no override source exists yet");
+    /// Apply curated edge corrections, before positioning.
+    ///
+    /// This is the seam Vellum's own `apply_edge_overrides` occupies, and
+    /// the reason corrections land here rather than on the finished
+    /// layout: the solver reads this map, so a correction applied now is
+    /// one the rooms are *placed by*, not one they are shoved into
+    /// afterwards.
+    ///
+    /// [`EdgeAction::Connector`] forgets the edge's direction in both
+    /// senses, leaving it a passage that constrains nothing.
+    /// [`EdgeAction::Direction`] sets it, and sets the reverse to the
+    /// opposite -- but only for the senses the map actually has an exit
+    /// for, so a one-way exit does not gain a return the game does not
+    /// offer.
+    pub fn apply_edge_overrides(&mut self, map: &Map, edges: &[EdgeOverride]) {
+        for edge in edges {
+            let has = |from: RoomId, to: RoomId| {
+                map.room(from)
+                    .is_some_and(|r| r.exits.iter().any(|e| e.to == to))
+            };
+            match edge.action {
+                EdgeAction::Connector => {
+                    self.map.remove(&(edge.a, edge.b));
+                    self.map.remove(&(edge.b, edge.a));
+                }
+                EdgeAction::Direction(dir) => {
+                    if has(edge.a, edge.b) {
+                        self.map.insert((edge.a, edge.b), dir);
+                    }
+                    if has(edge.b, edge.a) {
+                        self.map.insert((edge.b, edge.a), dir.opposite());
+                    }
+                }
+            }
+        }
     }
 }
 

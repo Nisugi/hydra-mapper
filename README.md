@@ -108,6 +108,23 @@ where no artist ever drew one.
   release. `Reset (n)` forgets an area's corrections; `Unpin room` returns
   one room to where the solver put it.
 
+  **Edge corrections** are the tool for a layout that is wrong rather than
+  untidy. The inspector's Edges section gives every exit a combo: `auto`,
+  `passage`, or one of the ten bearings. `passage` un-welds two rooms the
+  solver placed adjacent on bad data; a bearing forces what the exit should
+  have said. Both are **inputs to the solve** — applied to the direction
+  map before positioning, so the rooms are laid out *by* the corrected
+  geometry rather than nudged afterwards, and packing, classification and
+  violation counts all follow from it.
+
+  This is what answers a direction violation. In
+  `elven-nations-old-tafaendryl-west`, rooms 11988 and 11989 are joined by
+  exits claiming *both* east and west; one correction takes that area from
+  36 violations to 34, with overlaps still at zero. Vellum's other three
+  edge actions (`Hide`, `Dash`, `Dots`) only restyle a drawn line and are
+  deliberately not ported — that is a renderer's concern, not the layout
+  engine's.
+
   **Plates** are the answer to a crowded town. Wehnimer's Town Square
   Central has a well and a treehouse hanging off it; moving those onto
   `landing.well` and `landing.treehouse` takes them out of the town's own
@@ -124,8 +141,8 @@ where no artist ever drew one.
   survives a map rebuild, falling back to the map's room id for the 21%
   that do not.
 
-  This ports two of VellumFE's override kinds (`plan/26` §0 named its
-  `overrides.rs` as the reference). Its edge restyling, forced sheets and
+  This ports three of VellumFE's override kinds (`plan/26` §0 named its
+  `overrides.rs` as the reference). Its edge *restyling*, forced sheets and
   room-data edits are not ported; every field is `#[serde(default)]`, so
   they can arrive without a format change.
 

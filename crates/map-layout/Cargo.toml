@@ -19,5 +19,10 @@ publish.workspace = true
 cena-map.workspace = true
 serde.workspace = true
 
+# Tests only: the wire form of a saved correction is asserted here, so the
+# crate that has no file I/O still pins the format its callers persist.
+[dev-dependencies]
+serde_json.workspace = true
+
 [lints]
 workspace = true

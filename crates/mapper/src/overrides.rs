@@ -38,7 +38,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use cena_map::{Map, RoomId};
-use cena_map_layout::{Cell, Group};
+use cena_map_layout::{Cell, EdgeAction, EdgeOverride, Group};
 use serde::{Deserialize, Serialize};
 
 /// A room's stable identity across map builds.
@@ -145,18 +145,74 @@ pub struct LocationOverrides {
     /// delta: the last drag wins.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub room_pins: BTreeMap<RoomKey, Cell>,
+    /// Edge corrections, keyed by the unordered room pair they join.
+    ///
+    /// Unlike the other two, these are **inputs to generation**: they
+    /// change what the solver does rather than adjusting its result, so a
+    /// change here re-runs the layout.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub edges: Vec<EdgeCorrection>,
+}
+
+/// One saved edge correction.
+///
+/// Keyed by [`RoomKey`] rather than the room ids
+/// [`cena_map_layout::EdgeOverride`] uses, because this is the form that
+/// goes to disk and must survive a map rebuild. [`LocationOverrides::
+/// edge_overrides`] resolves it to ids for the layout crate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EdgeCorrection {
+    pub a: RoomKey,
+    pub b: RoomKey,
+    pub action: EdgeAction,
 }
 
 impl LocationOverrides {
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.group_offsets.is_empty() && self.room_pins.is_empty()
+        self.group_offsets.is_empty() && self.room_pins.is_empty() && self.edges.is_empty()
     }
 
     /// How many corrections this area carries, for the "Reset (n)" button.
     #[must_use]
     pub fn len(&self) -> usize {
-        self.group_offsets.len() + self.room_pins.len()
+        self.group_offsets.len() + self.room_pins.len() + self.edges.len()
+    }
+
+    /// The edge corrections as the layout crate takes them, resolved from
+    /// saved keys to this map's room ids.
+    ///
+    /// A correction naming a room this map does not have is dropped: a
+    /// saved file outlives the map it was written against, and the layout
+    /// crate skips what it cannot resolve anyway.
+    #[must_use]
+    pub fn edge_overrides(&self, map: &Map) -> Vec<EdgeOverride> {
+        let ids: BTreeMap<RoomKey, RoomId> = map
+            .rooms()
+            .iter()
+            .map(|r| (RoomKey::of(r.id, map), r.id))
+            .collect();
+        self.edges
+            .iter()
+            .filter_map(|edge| {
+                Some(EdgeOverride {
+                    a: *ids.get(&edge.a)?,
+                    b: *ids.get(&edge.b)?,
+                    action: edge.action,
+                })
+            })
+            .collect()
+    }
+
+    /// The action saved for the edge between `a` and `b`, either way
+    /// round, so the combo shows the current setting from either end.
+    #[must_use]
+    pub fn edge_action(&self, a: RoomKey, b: RoomKey) -> Option<EdgeAction> {
+        let (lo, hi) = ordered(a, b);
+        self.edges
+            .iter()
+            .find(|e| e.a == lo && e.b == hi)
+            .map(|e| e.action)
     }
 }
 
@@ -232,6 +288,38 @@ impl MapOverrides {
             Some(cell) => location.room_pins.insert(key, cell),
             None => location.room_pins.remove(&key),
         };
+        self.prune(area);
+    }
+
+    /// Set, replace or clear the correction on one edge.
+    ///
+    /// The pair is stored in a canonical order so the same edge is one
+    /// entry whichever room it was edited from. A
+    /// [`EdgeAction::Direction`] is *read* `a -> b`, so when the canonical
+    /// order reverses the pair the direction is flipped to match -- "east
+    /// from here" saved from the other end still means the same geometry.
+    pub fn set_edge(&mut self, area: &str, a: RoomKey, b: RoomKey, action: Option<EdgeAction>) {
+        let location = self.locations.entry(area.to_owned()).or_default();
+        let (lo, hi) = ordered(a, b);
+        location.edges.retain(|e| !(e.a == lo && e.b == hi));
+        if let Some(action) = action {
+            let action = if (lo, hi) == (a, b) {
+                action
+            } else {
+                match action {
+                    // Directional: reversing the pair reverses the sense.
+                    EdgeAction::Direction(dir) => EdgeAction::Direction(dir.opposite()),
+                    // Symmetric: the same either way round.
+                    EdgeAction::Connector => EdgeAction::Connector,
+                }
+            };
+            location.edges.push(EdgeCorrection {
+                a: lo,
+                b: hi,
+                action,
+            });
+            location.edges.sort_by_key(|e| (e.a, e.b));
+        }
         self.prune(area);
     }
 
@@ -346,6 +434,12 @@ impl std::fmt::Display for LoadError {
             LoadError::Malformed(error) => write!(f, "is not valid override JSON: {error}"),
         }
     }
+}
+
+/// The canonical order for an edge's two rooms, so one edge is one entry
+/// however it was written.
+fn ordered(a: RoomKey, b: RoomKey) -> (RoomKey, RoomKey) {
+    if a <= b { (a, b) } else { (b, a) }
 }
 
 /// A plate's key, derived from its display name: lowercased, with runs of
@@ -470,6 +564,74 @@ mod tests {
         );
     }
 
+    /// The same edge is one entry however it is written, and a direction
+    /// saved from the far end means the same geometry.
+    #[test]
+    fn an_edge_is_one_entry_from_either_end() {
+        use cena_map_layout::Dir;
+        let (a, b) = (RoomKey::Uid(100), RoomKey::Uid(200));
+        let mut store = MapOverrides::default();
+
+        // "east, from a to b"
+        store.set_edge("town", a, b, Some(EdgeAction::Direction(Dir::East)));
+        // The same statement made from b is "west, from b to a", and must
+        // not become a second entry.
+        store.set_edge("town", b, a, Some(EdgeAction::Direction(Dir::West)));
+        let location = store.location("town").expect("has corrections");
+        assert_eq!(location.edges.len(), 1, "one edge became two entries");
+        assert_eq!(
+            location.edge_action(a, b),
+            Some(EdgeAction::Direction(Dir::East))
+        );
+        // Read back from either end.
+        assert_eq!(location.edge_action(b, a), location.edge_action(a, b));
+
+        store.set_edge("town", b, a, None);
+        assert!(store.location("town").is_none(), "clearing left a trace");
+    }
+
+    /// Saved keys resolve to this map's room ids, and a correction naming
+    /// a room the map does not have is dropped rather than resolving to
+    /// the wrong one.
+    #[test]
+    fn edge_overrides_resolve_to_room_ids() {
+        use cena_map_layout::Dir;
+        let map = Map::from_rooms(vec![room_with_uid(RoomId(5), 900_001)]).expect("one room");
+        let mut store = MapOverrides::default();
+        store.set_edge(
+            "town",
+            RoomKey::Uid(900_001),
+            RoomKey::Uid(900_002),
+            Some(EdgeAction::Direction(Dir::North)),
+        );
+        let location = store.location("town").expect("has corrections");
+        assert!(
+            location.edge_overrides(&map).is_empty(),
+            "an override for a room this map lacks was resolved anyway"
+        );
+    }
+
+    /// A room carrying a uid, for key-resolution tests.
+    fn room_with_uid(id: RoomId, uid: i64) -> cena_map::Room {
+        cena_map::Room {
+            id,
+            uid: vec![cena_map::Uid(uid)],
+            title: vec![],
+            description: vec![],
+            paths: vec![],
+            location: None,
+            location_unknowable: false,
+            check_location: false,
+            unique_loot: vec![],
+            climate: None,
+            terrain: None,
+            tags: vec![],
+            meta: vec![],
+            image: None,
+            exits: vec![],
+        }
+    }
+
     /// A store survives a round trip through its file format.
     #[test]
     fn a_store_round_trips() {
@@ -479,6 +641,18 @@ mod tests {
         store.move_room(RoomKey::Id(4242), Some(&key));
         store.nudge_group("town", RoomKey::Uid(500), Cell { x: 1, y: 2 });
         store.pin_room("town", RoomKey::Id(9), Some(Cell { x: -4, y: 0 }));
+        store.set_edge(
+            "town",
+            RoomKey::Uid(11),
+            RoomKey::Uid(12),
+            Some(EdgeAction::Direction(cena_map_layout::Dir::Southwest)),
+        );
+        store.set_edge(
+            "town",
+            RoomKey::Uid(13),
+            RoomKey::Id(14),
+            Some(EdgeAction::Connector),
+        );
 
         let json = serde_json::to_string_pretty(&store).expect("serializes");
         // Keys must be strings to be JSON object keys at all -- a derived

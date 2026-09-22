@@ -44,8 +44,10 @@ pub mod scene;
 pub mod stats;
 
 pub use classifier::Classification;
+pub use direction::Dir;
+pub use overrides::{EdgeAction, EdgeOverride};
 pub use packer::PackInfo;
-pub use pipeline::{Layout, generate_layout, generate_layout_reference};
+pub use pipeline::{Layout, generate_layout, generate_layout_reference, generate_layout_with};
 pub use positioner::{Cell, Group, PackMethod, Violation};
 pub use scene::{MapScene, Sheet, SheetScene, build_scene};
 pub use stats::LayoutStats;

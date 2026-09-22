@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use cena_map::Map;
 
 use crate::classifier::Classification;
+use crate::overrides::EdgeOverride;
 use crate::packer::PackInfo;
 use crate::positioner::Group;
 use crate::{classifier, direction, interior_shelf, outdoor_packing, positioner};
@@ -38,7 +39,15 @@ pub struct Layout {
 /// Vellum's `generate_layout`).
 #[must_use]
 pub fn generate_layout(map: &Map) -> Layout {
-    generate_layout_impl(map, true)
+    generate_layout_impl(map, true, &[])
+}
+
+/// As [`generate_layout`], with curated edge corrections applied before
+/// positioning, so the rooms are laid out *by* the corrected geometry
+/// rather than nudged afterwards.
+#[must_use]
+pub fn generate_layout_with(map: &Map, edges: &[EdgeOverride]) -> Layout {
+    generate_layout_impl(map, true, edges)
 }
 
 /// The pipeline exactly as the reference runs it -- no try-inline pass.
@@ -46,11 +55,15 @@ pub fn generate_layout(map: &Map) -> Layout {
 /// reference-exported numbers; production always inlines.
 #[must_use]
 pub fn generate_layout_reference(map: &Map) -> Layout {
-    generate_layout_impl(map, false)
+    generate_layout_impl(map, false, &[])
 }
 
-fn generate_layout_impl(map: &Map, inline_interiors: bool) -> Layout {
-    let dirs = direction::DirectionMap::build(map);
+fn generate_layout_impl(map: &Map, inline_interiors: bool, edges: &[EdgeOverride]) -> Layout {
+    let mut dirs = direction::DirectionMap::build(map);
+    // Before positioning: a correction is an input to the solve, not a
+    // patch on its result.
+    dirs.apply_edge_overrides(map, edges);
+    let dirs = dirs;
 
     let mut groups = positioner::position_rooms(map, &dirs);
     let mut classification = classifier::classify(&groups, map);
