@@ -194,14 +194,24 @@ fn write_echoes(
         r#"<g fill="{ECHO_FILL}" stroke="{ENTRANCE_STROKE}" stroke-width="2">"#
     );
     for echo in &scene.anchors {
-        if !echo.has_door {
+        if !echo.building {
+            let r = if echo.has_door { 5.4 } else { 3.2 };
             let _ = writeln!(
                 svg,
-                r#"<circle cx="{:.1}" cy="{:.1}" r="3.2" fill="{ENTRANCE_STROKE}" stroke="none"><title>{}</title></circle>"#,
+                r#"<circle cx="{:.1}" cy="{:.1}" r="{r}" fill="{ENTRANCE_STROKE}" stroke="none"><title>{}</title></circle>"#,
                 px(echo.cell.x),
                 py(echo.cell.y),
                 escape(&format!("{} — {} (street)", echo.id.0, echo.title)),
             );
+            if echo.has_door && !echo.title.is_empty() {
+                let _ = writeln!(
+                    svg,
+                    r#"<text x="{:.1}" y="{:.1}" fill="{ENTRANCE_STROKE}" stroke="none" font-family="sans-serif" font-size="11">{}</text>"#,
+                    px(echo.cell.x) + r + 4.0,
+                    py(echo.cell.y) + 4.0,
+                    escape(&echo.title),
+                );
+            }
             continue;
         }
         let _ = writeln!(
@@ -217,7 +227,7 @@ fn write_echoes(
             x = px(echo.cell.x) - ROOM_PX / 2.0,
             y = py(echo.cell.y) - ROOM_PX / 2.0,
             side = ROOM_PX,
-            tip = escape(&format!("{} — {} (street)", echo.id.0, echo.title)),
+            tip = escape(&format!("{} — {}", echo.id.0, echo.title)),
             tx = px(echo.cell.x) + ROOM_PX / 2.0 + 4.0,
             ty = py(echo.cell.y) + 4.0,
             color = ENTRANCE_STROKE,

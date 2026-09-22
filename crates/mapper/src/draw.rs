@@ -314,11 +314,27 @@ fn draw_echoes(
         if !canvas.intersects(rect) {
             continue;
         }
-        // A street room nothing opens off is road, not a doorway: a dot
-        // on the line, so the street reads as a street and the doorways
-        // stand out from it.
-        if !echo.has_door {
-            painter.circle_filled(centre, (side * 0.18).max(1.5), ENTRANCE_STROKE);
+        // A street room is road, not a building: a dot on the line, so
+        // the street reads as a street among the squares that are the
+        // buildings. One with a doorway is a larger dot, and named, so
+        // the shops off it can be told which dot they hang from.
+        if !echo.building {
+            let r = if echo.has_door {
+                (side * 0.3).max(2.5)
+            } else {
+                (side * 0.18).max(1.5)
+            };
+            painter.circle_filled(centre, r, ENTRANCE_STROKE);
+            if echo.has_door && labels && camera.scale >= LABEL_MIN_SCALE && !echo.title.is_empty()
+            {
+                painter.text(
+                    centre + Vec2::new(r + 4.0, 0.0),
+                    Align2::LEFT_CENTER,
+                    &echo.title,
+                    FontId::proportional(11.0_f32.max(11.0 * camera.scale)),
+                    ENTRANCE_STROKE,
+                );
+            }
             continue;
         }
         painter.rect(
