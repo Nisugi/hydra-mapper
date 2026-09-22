@@ -50,6 +50,31 @@ impl Dir {
         })
     }
 
+    /// The abbreviations the game accepts as whole commands: `n`, `ne`,
+    /// `sw`, `u`, `d`.
+    ///
+    /// Deliberately separate from [`Dir::from_exact`], which also backs
+    /// the word-boundary scan over free text -- a bare `n` matched there
+    /// would fire on any command containing the letter as a word, and
+    /// `go n gate` is not a northward exit. These are only ever matched
+    /// against a command in its entirety.
+    #[must_use]
+    pub fn from_abbreviation(s: &str) -> Option<Dir> {
+        Some(match s {
+            "n" => Dir::North,
+            "s" => Dir::South,
+            "e" => Dir::East,
+            "w" => Dir::West,
+            "ne" => Dir::Northeast,
+            "nw" => Dir::Northwest,
+            "se" => Dir::Southeast,
+            "sw" => Dir::Southwest,
+            "u" => Dir::Up,
+            "d" => Dir::Down,
+            _ => return None,
+        })
+    }
+
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {
@@ -153,7 +178,7 @@ fn lower_trim(s: &str) -> String {
 /// hallway"` → nothing).
 fn direction_from_command(command: &str) -> Option<Dir> {
     let cmd = lower_trim(command);
-    if let Some(d) = Dir::from_exact(&cmd) {
+    if let Some(d) = Dir::from_exact(&cmd).or_else(|| Dir::from_abbreviation(&cmd)) {
         return Some(d);
     }
     SCAN_ORDER
@@ -178,7 +203,10 @@ fn direction_from_exit(kind: ExitKind, crossing: &Crossing) -> Option<Dir> {
     };
     match kind {
         ExitKind::Cardinal => direction_from_command(command),
-        ExitKind::Vertical => Dir::from_exact(&lower_trim(command)),
+        ExitKind::Vertical => {
+            let cmd = lower_trim(command);
+            Dir::from_exact(&cmd).or_else(|| Dir::from_abbreviation(&cmd))
+        }
         ExitKind::Out | ExitKind::Go | ExitKind::Climb | ExitKind::Other => {
             direction_from_command(command)
         }
@@ -272,12 +300,56 @@ fn infer_from_reverse(map: &Map, room: RoomId, target: RoomId) -> Option<Dir> {
     let Crossing::Command(command) = &back_exit.crossing else {
         return None;
     };
-    Dir::from_exact(&lower_trim(command)).map(Dir::opposite)
+    let cmd = lower_trim(command);
+    Dir::from_exact(&cmd)
+        .or_else(|| Dir::from_abbreviation(&cmd))
+        .map(Dir::opposite)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The game's own short forms are real movement commands and the
+    /// converter classifies them `Cardinal`. Measured on `gs.map`: ~360
+    /// edges use one, including rooms whose own title names the bearing
+    /// ("[The Annex, Northeast]" exits `sw` back to the entry), and every
+    /// one of them was being placed with no direction at all.
+    #[test]
+    fn abbreviations_are_directions() {
+        for (short, long) in [
+            ("n", Dir::North),
+            ("s", Dir::South),
+            ("e", Dir::East),
+            ("w", Dir::West),
+            ("ne", Dir::Northeast),
+            ("nw", Dir::Northwest),
+            ("se", Dir::Southeast),
+            ("sw", Dir::Southwest),
+            ("u", Dir::Up),
+            ("d", Dir::Down),
+        ] {
+            assert_eq!(
+                direction_from_command(short),
+                Some(long),
+                "{short:?} did not resolve"
+            );
+        }
+    }
+
+    /// An abbreviation is a whole command, never a word inside one: `go n
+    /// gate` is a gate, not a northward exit. This is why they are kept
+    /// out of the word-boundary scan.
+    #[test]
+    fn an_abbreviation_inside_a_command_is_not_a_direction() {
+        assert_eq!(direction_from_command("go n gate"), None);
+        assert_eq!(direction_from_command("go e door"), None);
+        // ...but a spelled-out one still is, as it always was.
+        assert_eq!(
+            direction_from_command("go northeast gate"),
+            Some(Dir::Northeast)
+        );
+    }
 
     #[test]
     fn word_boundaries() {
