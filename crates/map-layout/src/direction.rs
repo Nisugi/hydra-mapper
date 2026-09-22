@@ -10,6 +10,7 @@
 
 use std::collections::HashMap;
 
+use cena_map::step::{Action, Step};
 use cena_map::{Crossing, ExitKind, Map, RoomId};
 
 use serde::{Deserialize, Serialize};
@@ -196,9 +197,12 @@ fn direction_from_command(command: &str) -> Option<Dir> {
 /// settled that question once.
 fn direction_from_exit(kind: ExitKind, crossing: &Crossing) -> Option<Dir> {
     let Crossing::Command(command) = crossing else {
-        // Scripted, routine, pass-through, unported, unknown: none of these
-        // name a single command to scan, matching Vellum's treatment of a
-        // stringproc it cannot resolve without a dirto override.
+        // A ported script carries its movement as text, so a scripted
+        // exit that is really just `southwest` resolves like one. Routine,
+        // pass-through, unported and unknown name no single movement.
+        if let Crossing::Steps(steps) = crossing {
+            return direction_from_steps(steps);
+        }
         return None;
     };
     match kind {
@@ -212,6 +216,68 @@ fn direction_from_exit(kind: ExitKind, crossing: &Crossing) -> Option<Dir> {
         }
         ExitKind::Scripted => None,
     }
+}
+
+/// The bearing a ported script names, when its movement is a plain
+/// direction and nothing else.
+///
+/// The old format flattened a string proc to an opaque blob, so every
+/// scripted exit was directionless by necessity. The ported steps carry
+/// the movement as text, and 396 edges of `gs.map` turn out to be an
+/// ordinary cardinal wearing a script's clothes -- `Move("southwest")`,
+/// sometimes behind a guard.
+///
+/// **The guard is ignored deliberately.** `if the gate is open: north`
+/// asks whether the exit can be *walked*, not which way it *points*; the
+/// room lies north whether or not the gate is shut. Walkability is the
+/// walker's question, and answering it here would throw away geometry
+/// that is not in doubt.
+///
+/// Only the **first** action is read, and only when it is a plain
+/// [`Action::Move`]. A `KeepMoving` or `MoveUntilThere` names a heading
+/// but no distance -- rowing a boat, or fog that turns the walker round --
+/// and a later step may move again, so neither says where the room sits.
+/// Whether an action can leave the room.
+///
+/// Mirrors `cena_map::step::moves_whatever_is_known`'s list, but asks of
+/// one action and ignores its guard: a *guarded* second move still means
+/// the destination may be more than one bearing away, and a bearing that
+/// is only sometimes right is not one to place a room by.
+fn changes_rooms(action: &Action) -> bool {
+    matches!(
+        action,
+        Action::Move(_)
+            | Action::KeepMoving(_)
+            | Action::MoveUntilThere(_)
+            | Action::TryMove(_)
+            | Action::Moves(_)
+            | Action::KeepMovingAny(_)
+            | Action::CastAt(..)
+            | Action::MovesFromSetting(_)
+            | Action::MoveWhile(..)
+            | Action::MoveAnyWhile(..)
+            | Action::WanderWhile(_)
+            | Action::RoundWhile(..)
+            | Action::MoveByAnyExitBut(_)
+            | Action::AwaitArrival
+            | Action::AwaitAny(_)
+            | Action::Await(_)
+    )
+}
+
+fn direction_from_steps(steps: &[Step]) -> Option<Dir> {
+    let first = steps.first()?;
+    let Action::Move(command) = &first.action else {
+        return None;
+    };
+    // Every later step must leave the room where the first one put it: a
+    // second movement of any kind means the destination is not one
+    // bearing away, whatever the first step said.
+    if steps[1..].iter().any(|s| changes_rooms(&s.action)) {
+        return None;
+    }
+    let cmd = lower_trim(command);
+    Dir::from_exact(&cmd).or_else(|| Dir::from_abbreviation(&cmd))
 }
 
 /// Every edge's resolved direction, computed once up front. Direction
@@ -309,6 +375,80 @@ fn infer_from_reverse(map: &Map, room: RoomId, target: RoomId) -> Option<Dir> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn step(action: Action) -> Step {
+        Step { action, when: None }
+    }
+
+    /// A ported script whose movement is a plain bearing is an ordinary
+    /// directional exit. The old format flattened these to an opaque
+    /// blob, so all of them were placed with no direction; 244 edges of
+    /// `gs.map` are one.
+    #[test]
+    fn a_script_that_only_moves_names_its_direction() {
+        assert_eq!(
+            direction_from_steps(&[step(Action::Move("southwest".to_owned()))]),
+            Some(Dir::Southwest)
+        );
+        // The game's short forms too, same as a plain command.
+        assert_eq!(
+            direction_from_steps(&[step(Action::Move("ne".to_owned()))]),
+            Some(Dir::Northeast)
+        );
+    }
+
+    /// A guard asks whether the exit can be *walked*, not which way it
+    /// points: the room lies north whether or not the gate is shut, and
+    /// dropping the bearing would throw away geometry that is not in
+    /// doubt.
+    #[test]
+    fn a_guarded_move_still_names_its_direction() {
+        let guarded = Step {
+            action: Action::Move("north".to_owned()),
+            when: Some(cena_map::cond::Cond::StillHere),
+        };
+        assert_eq!(direction_from_steps(&[guarded]), Some(Dir::North));
+    }
+
+    /// A second movement means the destination is not one bearing away,
+    /// whatever the first step said -- so the whole script names nothing.
+    #[test]
+    fn a_script_that_moves_twice_names_nothing() {
+        assert_eq!(
+            direction_from_steps(&[
+                step(Action::Move("north".to_owned())),
+                step(Action::Move("east".to_owned())),
+            ]),
+            None,
+            "a two-step walk was read as a single bearing"
+        );
+    }
+
+    /// Steps that are not a plain move name a heading but no distance --
+    /// rowing a boat, or fog that turns the walker round -- so they place
+    /// nothing.
+    #[test]
+    fn only_a_plain_move_counts() {
+        assert_eq!(
+            direction_from_steps(&[step(Action::KeepMoving("south".to_owned()))]),
+            None
+        );
+        assert_eq!(
+            direction_from_steps(&[step(Action::MoveUntilThere("west".to_owned()))]),
+            None
+        );
+        assert_eq!(direction_from_steps(&[]), None);
+    }
+
+    /// A script whose move is a door rather than a bearing stays
+    /// directionless, exactly as `go door` does.
+    #[test]
+    fn a_scripted_door_names_no_direction() {
+        assert_eq!(
+            direction_from_steps(&[step(Action::Move("go oak door".to_owned()))]),
+            None
+        );
+    }
 
     /// The game's own short forms are real movement commands and the
     /// converter classifies them `Cardinal`. Measured on `gs.map`: ~360
