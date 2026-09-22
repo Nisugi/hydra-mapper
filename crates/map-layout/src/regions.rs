@@ -102,6 +102,29 @@ pub fn is_real_room(room: &Room) -> bool {
         .any(|t| t == VIRTUAL_ROOM_TAG || t == REMOVED_ROOM_TAG)
 }
 
+/// Whether anything at all connects a room to the rest of the map: an
+/// exit out, or an exit in.
+///
+/// A room with neither cannot be walked to, walked from, or drawn in
+/// relation to anything -- there is no geometry to place it by. **Why it
+/// has neither varies and does not matter**: a player shop nobody has
+/// visited since uids existed, a bookkeeping stub whose title is
+/// literally `duplicate of 2937`, a room with no title at all, something
+/// the game removed. The map cannot say where it goes, so it goes
+/// nowhere.
+///
+/// This is not a `gone` detector -- only 5 of the 714 such rooms carry
+/// that tag. It is the separate fact that there is nothing to draw.
+///
+/// Measured on `gs.map`: 790 rooms, 784 of which were reaching an area.
+/// All 186 rooms of "the sewers of Bloodriven Village" are this, which
+/// is why that area laid out 2,944 cells wide -- `gather_the_unwalkable`
+/// collected them by shared location and the packer had no geometry to
+/// place them by.
+fn is_connected(room: &Room, pointed_at: &HashSet<RoomId>) -> bool {
+    !room.exits.is_empty() || pointed_at.contains(&room.id)
+}
+
 /// Whether an exit is something a person can walk along, and so whether
 /// it says anything about where two rooms are in relation to each other.
 ///
@@ -178,12 +201,18 @@ pub fn region_of(location: &str) -> &str {
 /// Every area the map's rooms fall into, largest first.
 #[must_use]
 pub fn derive_areas(map: &Map) -> Vec<DerivedArea> {
-    // A menu is not a place: the hideouts never reach an area at all, so
+    // A menu is not a place, a removed room is not a place, and a room
+    // nothing reaches is nowhere. None of them reach an area at all, so
     // no consumer downstream has to know they exist.
+    let pointed_at: HashSet<RoomId> = map
+        .rooms()
+        .iter()
+        .flat_map(|r| r.exits.iter().map(|e| e.to))
+        .collect();
     let rooms: Vec<Room> = map
         .rooms()
         .iter()
-        .filter(|r| is_real_room(r))
+        .filter(|r| is_real_room(r) && is_connected(r, &pointed_at))
         .cloned()
         .collect();
     let rooms = rooms.as_slice();
@@ -836,6 +865,43 @@ mod tests {
         assert!(
             areas.iter().any(|a| a.rooms.contains(&RoomId(5))),
             "a closed room is still a place"
+        );
+    }
+
+    /// A room with no exits and nothing pointing at it has no geometry:
+    /// nothing says where it goes. Whether it is a player shop nobody
+    /// has visited since uids existed, a `duplicate of 2937` stub or a
+    /// titleless blank does not matter -- there is nothing to draw.
+    ///
+    /// A room reachable only one way is *not* this: a shop you can enter
+    /// and not leave is still somewhere, and still on its street.
+    #[test]
+    fn a_room_nothing_reaches_is_nowhere() {
+        let rooms = vec![
+            room(1, "[Street]", Some("the town of Wehn"), OUT, &[2]),
+            room(2, "[Street]", Some("the town of Wehn"), OUT, &[1]),
+            // Entered from the street, never leaves: still a place.
+            room(3, "[Oubliette]", Some("Wehn"), IN, &[]),
+            // Nothing in, nothing out.
+            room(4, "[Lwin's General Store]", Some("Wehn"), IN, &[]),
+        ];
+        let mut rooms = rooms;
+        rooms[1].exits.push(Exit {
+            to: RoomId(3),
+            kind: ExitKind::Cardinal,
+            crossing: Crossing::Command("go hole".to_owned()),
+            cost: Some(Cost::Fixed(1.0)),
+        });
+        let map = Map::from_rooms(rooms).expect("no duplicate ids");
+        let areas = derive_areas(&map);
+
+        assert!(
+            areas.iter().any(|a| a.rooms.contains(&RoomId(3))),
+            "a room you can enter and not leave is still a place"
+        );
+        assert!(
+            !areas.iter().any(|a| a.rooms.contains(&RoomId(4))),
+            "a room nothing reaches was given a cell"
         );
     }
 
