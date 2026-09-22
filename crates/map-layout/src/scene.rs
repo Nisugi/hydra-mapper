@@ -170,6 +170,11 @@ pub struct SceneAnchor {
     pub cell: Cell,
     /// First room title, for the label and hover text.
     pub title: String,
+    /// Whether any building opens off this street room. Most echoes are
+    /// street rooms carried along so the road stays continuous, and they
+    /// should read as road -- a dot -- not as another doorway.
+    #[serde(default)]
+    pub has_door: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -481,15 +486,59 @@ fn populate_labels(scene: &mut MapScene, layout: &Layout, map: &Map) {
 /// unrelated to anything. With the street room echoed beside its
 /// buildings, both ends share a sheet and the edge is an ordinary
 /// connector line.
-fn populate_anchors(scene: &mut MapScene, layout: &Layout, map: &Map) {
+fn populate_anchors(scene: &mut MapScene, layout: &Layout, map: &Map, dirs: &DirectionMap) {
+    // The road itself: an edge between two echoes wherever their street
+    // rooms are joined outdoors, drawn as the outdoor sheet draws it --
+    // solid where the exit names a bearing, a connector where it does
+    // not. Without these the street rooms are dots among the buildings
+    // and nothing says which way the street runs.
+    let echo_cell: HashMap<RoomId, Cell> =
+        layout.anchors.iter().map(|a| (a.room, a.cell)).collect();
+    let mut drawn: HashSet<(RoomId, RoomId)> = HashSet::new();
     for anchor in &layout.anchors {
         let Some(room) = map.room(anchor.room) else {
             continue;
         };
+        for exit in &room.exits {
+            let Some(&there) = echo_cell.get(&exit.to) else {
+                continue;
+            };
+            let key = (anchor.room.min(exit.to), anchor.room.max(exit.to));
+            if !drawn.insert(key) {
+                continue;
+            }
+            let len = (anchor.cell.x - there.x)
+                .abs()
+                .max((anchor.cell.y - there.y).abs());
+            if len > CONNECTOR_MAX_CELLS {
+                continue;
+            }
+            let kind = if dirs.get(anchor.room, exit.to).is_some() {
+                SceneEdgeKind::Directional
+            } else {
+                SceneEdgeKind::Connector
+            };
+            scene.interiors.edges.push(SceneEdge {
+                a: anchor.cell,
+                b: there,
+                a_room: anchor.room,
+                b_room: exit.to,
+                group: usize::MAX,
+                kind,
+                label: None,
+            });
+        }
+    }
+    for anchor in &layout.anchors {
+        let Some(room) = map.room(anchor.room) else {
+            continue;
+        };
+        let echo_at = scene.interiors.anchors.len();
         scene.interiors.anchors.push(SceneAnchor {
             id: anchor.room,
             cell: anchor.cell,
             title: room.title.first().cloned().unwrap_or_default(),
+            has_door: false,
         });
         // Every door from this street room to a room on the interiors
         // sheet, read from both ends so a one-way door still draws.
@@ -535,6 +584,7 @@ fn populate_anchors(scene: &mut MapScene, layout: &Layout, map: &Map) {
                 kind: SceneEdgeKind::Connector,
                 label: connector_label(cmd),
             });
+            scene.interiors.anchors[echo_at].has_door = true;
         }
     }
 }
@@ -585,7 +635,7 @@ pub fn build_scene(location: &str, layout: &Layout, map: &Map) -> MapScene {
 
     populate_rooms(&mut scene, layout, map, &sheet_of);
     populate_edges(&mut scene, layout, map, &dirs, &sheet_of);
-    populate_anchors(&mut scene, layout, map);
+    populate_anchors(&mut scene, layout, map, &dirs);
     populate_labels(&mut scene, layout, map);
     compute_sheet_bounds(&mut scene);
 

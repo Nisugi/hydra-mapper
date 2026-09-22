@@ -194,6 +194,16 @@ fn write_echoes(
         r#"<g fill="{ECHO_FILL}" stroke="{ENTRANCE_STROKE}" stroke-width="2">"#
     );
     for echo in &scene.anchors {
+        if !echo.has_door {
+            let _ = writeln!(
+                svg,
+                r#"<circle cx="{:.1}" cy="{:.1}" r="3.2" fill="{ENTRANCE_STROKE}" stroke="none"><title>{}</title></circle>"#,
+                px(echo.cell.x),
+                py(echo.cell.y),
+                escape(&format!("{} — {} (street)", echo.id.0, echo.title)),
+            );
+            continue;
+        }
         let _ = writeln!(
             svg,
             concat!(

@@ -293,8 +293,16 @@ fn draw_rooms(
 fn draw_echoes(painter: &egui::Painter, sheet: &SheetScene, camera: Camera, canvas: Rect) {
     let side = (ROOM_PX * camera.scale).max(2.0);
     for echo in &sheet.anchors {
-        let rect = Rect::from_center_size(camera.to_screen(echo.cell, canvas), Vec2::splat(side));
+        let centre = camera.to_screen(echo.cell, canvas);
+        let rect = Rect::from_center_size(centre, Vec2::splat(side));
         if !canvas.intersects(rect) {
+            continue;
+        }
+        // A street room nothing opens off is road, not a doorway: a dot
+        // on the line, so the street reads as a street and the doorways
+        // stand out from it.
+        if !echo.has_door {
+            painter.circle_filled(centre, (side * 0.18).max(1.5), ENTRANCE_STROKE);
             continue;
         }
         painter.rect(
