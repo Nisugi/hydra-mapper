@@ -169,8 +169,8 @@ pub fn recompute_entrances(classification: &mut Classification, groups: &[Group]
     classification.entrance_room_ids = entrance_room_ids;
 }
 
-#[derive(PartialEq)]
-enum Sense {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Sense {
     Indoor,
     Outdoor,
     Unknown,
@@ -181,7 +181,7 @@ enum Sense {
 /// Vellum's single joined string, so any variant naming one settles it; a
 /// room whose variants disagree is `Unknown`, same as a room with neither
 /// wording at all.
-fn room_sense(room: &Room) -> Sense {
+pub(crate) fn room_sense(room: &Room) -> Sense {
     let (mut indoor, mut outdoor) = (false, false);
     for line in &room.paths {
         let lowered = line.to_lowercase();

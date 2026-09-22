@@ -55,6 +55,9 @@ impl std::fmt::Display for LoadProblem {
 /// switching areas does not require holding every area's scene at once.
 struct Shown {
     name: String,
+    /// Where this area's corrections live in the store. See
+    /// [`Area::store_key`].
+    store_key: String,
     /// Read by the inspector panel, for the diagnostics the scene does not
     /// carry: group, pack method and direction violations.
     layout: Layout,
@@ -160,6 +163,9 @@ pub struct MapperApp {
     store_problem: Option<String>,
     /// Whether dragging moves rooms instead of panning the view.
     edit_mode: bool,
+    /// Whether room titles are drawn. Off, a dense interiors sheet reads
+    /// as shape instead of as overlapping text.
+    show_labels: bool,
     drag: Option<DragState>,
     /// Name being typed for a new plate.
     new_plate: String,
@@ -218,6 +224,7 @@ impl MapperApp {
             Err(_) => Areas {
                 official: Vec::new(),
                 mapdb: Vec::new(),
+                derived: Vec::new(),
                 plates: Vec::new(),
             },
         };
@@ -235,6 +242,7 @@ impl MapperApp {
             store_path,
             store_problem,
             edit_mode: false,
+            show_labels: false,
             drag: None,
             new_plate: String::new(),
             pending_inspect: None,
@@ -259,7 +267,7 @@ impl MapperApp {
         let mut out = Vec::new();
         for kind in [AreaKind::Official, AreaKind::Mapdb, AreaKind::Plates] {
             for area in self.areas.list(kind) {
-                let Some(location) = self.store.location(&area.name) else {
+                let Some(location) = self.store.location(&area.store_key()) else {
                     continue;
                 };
                 if location.group_offsets.is_empty() && location.room_pins.is_empty() {
@@ -290,7 +298,7 @@ impl MapperApp {
                 let Ok(subset) = Map::from_rooms(rooms) else {
                     continue;
                 };
-                let location = self.store.location(&area.name);
+                let location = self.store.location(&area.store_key());
                 let edges = location
                     .map(|l| l.edge_overrides(&subset))
                     .unwrap_or_default();
@@ -396,7 +404,7 @@ impl MapperApp {
         let mut drawn: BTreeMap<String, String> = BTreeMap::new();
         let mut problems: Vec<String> = Vec::new();
         for name in &wanted {
-            let Some(area) = [AreaKind::Official, AreaKind::Mapdb, AreaKind::Plates]
+            let Some(area) = AreaKind::ALL
                 .iter()
                 .find_map(|&kind| self.areas.list(kind).iter().find(|a| &a.name == name))
             else {
@@ -406,7 +414,7 @@ impl MapperApp {
             let Ok(subset) = Map::from_rooms(rooms) else {
                 continue;
             };
-            let location = self.store.location(name);
+            let location = self.store.location(&area.store_key());
             let edges = location
                 .map(|l| l.edge_overrides(&subset))
                 .unwrap_or_default();
@@ -518,7 +526,12 @@ impl MapperApp {
     /// listed. Plates are looked at first, since a plate's name is the
     /// more specific thing.
     fn show_named(&mut self, name: &str) {
-        for kind in [AreaKind::Plates, AreaKind::Official, AreaKind::Mapdb] {
+        for kind in [
+            AreaKind::Plates,
+            AreaKind::Official,
+            AreaKind::Mapdb,
+            AreaKind::Derived,
+        ] {
             if let Some(index) = self.areas.list(kind).iter().position(|a| a.name == name) {
                 self.tab = kind;
                 self.selected = Some(Selection { kind, index });
@@ -704,7 +717,8 @@ impl MapperApp {
             return;
         };
         let name = area.name.clone();
-        let location = self.store.location(&name);
+        let store_key = area.store_key();
+        let location = self.store.location(&store_key);
         // Edge corrections go IN to the solve: they change what the solver
         // does, so the rooms are placed by the corrected geometry. Moves
         // and pins come after, as a diff on its result.
@@ -741,11 +755,31 @@ impl MapperApp {
         }
         self.shown = Some(Shown {
             name,
+            store_key,
             layout,
             subset,
             scene,
             needs_fit: needs_fit_for(fit),
         });
+    }
+
+    /// A click on a room: inspect it, or close the panel if it was the
+    /// inspected one already. A click on an echo -- a doorway beside a
+    /// street, a street among its buildings -- goes to the room's own
+    /// sheet, with it in the middle of the view.
+    fn clicked(&mut self, id: RoomId) {
+        self.inspected = (self.inspected != Some(id)).then_some(id);
+        let Some(shown) = &self.shown else {
+            return;
+        };
+        if let Some(&(sheet, index)) = shown.scene.room_index.get(&id)
+            && sheet != self.sheet
+        {
+            self.sheet = sheet;
+            self.camera
+                .center_on(shown.scene.sheet(sheet).rooms[index].cell);
+            self.inspected = Some(id);
+        }
     }
 
     /// Track a drag across frames and turn a finished one into an edit.
@@ -773,7 +807,11 @@ impl MapperApp {
         }
 
         let drag = self.drag.take()?;
-        let delta = cells_dragged(drag, self.camera);
+        let scale = self
+            .shown
+            .as_ref()
+            .map_or(1, |shown| shown.scene.sheet(self.sheet).scale);
+        let delta = cells_dragged(drag, self.camera, scale);
         if delta.x == 0 && delta.y == 0 {
             return None;
         }
@@ -810,14 +848,19 @@ impl MapperApp {
 
     /// Apply an edit, save the store, and redraw whatever it changed.
     fn commit(&mut self, edit: EditAction) {
-        let area = self.shown.as_ref().map(|shown| shown.name.clone());
+        // Corrections are keyed by the store key; plate ownership by the
+        // area's name, which is what the header and the plate list show.
+        let area = self.shown.as_ref().map(|shown| shown.store_key.clone());
         // A plate made while looking at a plate belongs to that plate's
         // own area, not to the plate: plates are sheets of an area, never
         // of each other, and a plate owning itself is a dead end with no
         // way back to the town it hangs off.
-        let owning_area = area
-            .as_deref()
-            .map(|name| self.store.owner_of(name).unwrap_or(name).to_owned());
+        let owning_area = self.shown.as_ref().map(|shown| {
+            self.store
+                .owner_of(&shown.name)
+                .unwrap_or(&shown.name)
+                .to_owned()
+        });
         let mut membership_changed = false;
         match edit {
             EditAction::NudgeGroup { anchor, delta } => {
@@ -940,7 +983,7 @@ impl MapperApp {
                 shown,
                 id,
                 whole,
-                store.location(&shown.name),
+                store.location(&shown.store_key),
                 &mut follow,
             );
             if !edit_mode {
@@ -989,7 +1032,7 @@ impl MapperApp {
 
         ui.heading("Areas");
         ui.horizontal(|ui| {
-            for kind in [AreaKind::Official, AreaKind::Mapdb, AreaKind::Plates] {
+            for kind in AreaKind::ALL {
                 let label = format!("{} ({})", kind.title(), self.areas.list(kind).len());
                 if ui.selectable_label(self.tab == kind, label).clicked() {
                     self.tab = kind;
@@ -1406,7 +1449,7 @@ fn edges_editor(
 ) -> Option<EditAction> {
     let mut edit = None;
     let here = RoomKey::of(facts.id, &shown.subset);
-    let saved = store.location(&shown.name);
+    let saved = store.location(&shown.store_key);
 
     ui.add_space(8.0);
     ui.strong("Edges");
@@ -1619,6 +1662,7 @@ impl eframe::App for MapperApp {
                 self.tab,
                 &mut self.sheet,
                 &mut self.edit_mode,
+                &mut self.show_labels,
                 can_edit,
                 edit_out,
                 go_to_plate,
@@ -1637,22 +1681,33 @@ impl eframe::App for MapperApp {
             }
 
             // The in-flight drag, in whole cells, for the ghost preview.
-            let ghost = self
-                .drag
-                .map(|drag| (drag.group, drag.room, cells_dragged(drag, self.camera)));
+            let scale = shown.scene.sheet(self.sheet).scale;
+            let ghost = self.drag.map(|drag| {
+                let d = cells_dragged(drag, self.camera, scale);
+                // Drawn back at the sheet's spacing.
+                (
+                    drag.group,
+                    drag.room,
+                    Cell {
+                        x: d.x * scale,
+                        y: d.y * scale,
+                    },
+                )
+            });
             let hit = draw::scene(
                 ui,
                 &shown.scene,
                 self.sheet,
                 &mut self.camera,
                 self.inspected,
-                self.edit_mode,
+                draw::View {
+                    edit_mode: self.edit_mode,
+                    labels: self.show_labels,
+                },
                 ghost,
             );
             if let Some(id) = hit.clicked {
-                // Clicking the inspected room again closes the panel, so
-                // the canvas can be cleared without reaching for the x.
-                self.inspected = (self.inspected != Some(id)).then_some(id);
+                self.clicked(id);
             }
             if edit_out.is_none() {
                 *edit_out = self.handle_drag(&hit);
@@ -1680,6 +1735,7 @@ fn canvas_header(
     tab: AreaKind,
     sheet: &mut Sheet,
     edit_mode: &mut bool,
+    show_labels: &mut bool,
     can_edit: bool,
     edit_out: &mut Option<EditAction>,
     go_to_plate: &mut Option<String>,
@@ -1733,6 +1789,8 @@ fn canvas_header(
         if ui.button("Fit").clicked() {
             shown.needs_fit = true;
         }
+        ui.toggle_value(&mut *show_labels, "Labels")
+            .on_hover_text("Draw room titles (hover still shows them)");
         ui.separator();
         // Editing is refused outright while the store would not
         // load: the file holds hand curation, and saving over it
@@ -1873,8 +1931,11 @@ fn offset_phrase(dx: i32, dy: i32) -> String {
 /// A drag's pixel travel as whole grid cells, rounded, so a move snaps to
 /// the grid the layout is drawn on.
 #[allow(clippy::cast_possible_truncation)]
-fn cells_dragged(drag: DragState, camera: Camera) -> Cell {
-    let px = camera.cell_px();
+fn cells_dragged(drag: DragState, camera: Camera, scale: i32) -> Cell {
+    // A drawn cell is `scale` solver cells wide on a spread-out sheet;
+    // the edit is in the solver's cells.
+    #[allow(clippy::cast_precision_loss)] // a sheet scale is 1 or 2
+    let px = camera.cell_px() * scale.max(1) as f32;
     if px <= 0.0 {
         return Cell::default();
     }

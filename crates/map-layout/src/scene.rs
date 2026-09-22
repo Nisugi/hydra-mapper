@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use cena_map::{Map, RoomId};
 
 use crate::Layout;
-use crate::classifier::interior_clusters;
+use crate::classifier::{building_name, interior_clusters};
 use crate::direction::{Dir, DirectionMap};
 use crate::positioner::Cell;
 
@@ -28,6 +28,15 @@ use crate::positioner::Cell;
 pub const LONG_EDGE_CELLS: i32 = 8;
 /// Connectors longer than this are not drawn at all.
 pub const CONNECTOR_MAX_CELLS: i32 = 30;
+
+/// The outdoor sheet is drawn at the interiors sheet's scale, so the two
+/// are one picture: the same street is the same length on both, and a
+/// building's doorway dot on one sits where the building is on the
+/// other. Measured on gs.map for the doorway dots alone, twice the
+/// solver's spacing would do (442 of the Landing's 470 fit beside their
+/// street; at four times, all of them); the rest of the scale is for the
+/// match.
+pub const OUTDOOR_SCALE: i32 = crate::interior_shelf::TOWN_SCALE;
 /// On the interiors sheet, passages draw only when the rooms sit close
 /// together. Merged placement seats each component beside the room its
 /// anchoring passage connects to, so genuine doorways stay short; in huge
@@ -146,7 +155,7 @@ pub struct GroupLabel {
     pub group: usize,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SheetScene {
     pub rooms: Vec<SceneRoom>,
     pub edges: Vec<SceneEdge>,
@@ -157,8 +166,32 @@ pub struct SheetScene {
     /// the sheet can walk to.
     #[serde(default)]
     pub anchors: Vec<SceneAnchor>,
+    /// Scene cells per layout cell. The outdoor sheet is drawn at
+    /// [`OUTDOOR_SCALE`] so the doorway echoes fit beside the streets;
+    /// anything that turns a drawn distance back into layout cells -- a
+    /// drag -- divides by this.
+    #[serde(default = "one")]
+    pub scale: i32,
     pub min: Cell,
     pub max: Cell,
+}
+
+const fn one() -> i32 {
+    1
+}
+
+impl Default for SheetScene {
+    fn default() -> Self {
+        SheetScene {
+            rooms: Vec::new(),
+            edges: Vec::new(),
+            labels: Vec::new(),
+            anchors: Vec::new(),
+            scale: 1,
+            min: Cell::default(),
+            max: Cell::default(),
+        }
+    }
 }
 
 /// A street room drawn a second time, among the buildings that open off
@@ -486,48 +519,29 @@ fn populate_labels(scene: &mut MapScene, layout: &Layout, map: &Map) {
 /// unrelated to anything. With the street room echoed beside its
 /// buildings, both ends share a sheet and the edge is an ordinary
 /// connector line.
-fn populate_anchors(scene: &mut MapScene, layout: &Layout, map: &Map, dirs: &DirectionMap) {
-    // The road itself: an edge between two echoes wherever their street
-    // rooms are joined outdoors, drawn as the outdoor sheet draws it --
-    // solid where the exit names a bearing, a connector where it does
-    // not. Without these the street rooms are dots among the buildings
-    // and nothing says which way the street runs.
+fn populate_anchors(scene: &mut MapScene, layout: &Layout, map: &Map) {
+    // The road itself: the outdoor sheet's own edges, each one drawn
+    // again between the echoes of its two rooms, the same kind and the
+    // same label. Not re-derived from the exits -- the two sheets are
+    // one picture, and a road that is solid on one is solid on the
+    // other. Ordinary outdoor edges are one cell long, so at the
+    // interiors' scale they are `TOWN_SCALE`; a stub stays a stub.
     let echo_cell: HashMap<RoomId, Cell> =
         layout.anchors.iter().map(|a| (a.room, a.cell)).collect();
-    let mut drawn: HashSet<(RoomId, RoomId)> = HashSet::new();
-    for anchor in &layout.anchors {
-        let Some(room) = map.room(anchor.room) else {
+    for edge in &scene.outdoor.edges {
+        let (Some(&a), Some(&b)) = (echo_cell.get(&edge.a_room), echo_cell.get(&edge.b_room))
+        else {
             continue;
         };
-        for exit in &room.exits {
-            let Some(&there) = echo_cell.get(&exit.to) else {
-                continue;
-            };
-            let key = (anchor.room.min(exit.to), anchor.room.max(exit.to));
-            if !drawn.insert(key) {
-                continue;
-            }
-            let len = (anchor.cell.x - there.x)
-                .abs()
-                .max((anchor.cell.y - there.y).abs());
-            if len > CONNECTOR_MAX_CELLS {
-                continue;
-            }
-            let kind = if dirs.get(anchor.room, exit.to).is_some() {
-                SceneEdgeKind::Directional
-            } else {
-                SceneEdgeKind::Connector
-            };
-            scene.interiors.edges.push(SceneEdge {
-                a: anchor.cell,
-                b: there,
-                a_room: anchor.room,
-                b_room: exit.to,
-                group: usize::MAX,
-                kind,
-                label: None,
-            });
-        }
+        scene.interiors.edges.push(SceneEdge {
+            a,
+            b,
+            a_room: edge.a_room,
+            b_room: edge.b_room,
+            group: usize::MAX,
+            kind: edge.kind,
+            label: edge.label.clone(),
+        });
     }
     for anchor in &layout.anchors {
         let Some(room) = map.room(anchor.room) else {
@@ -590,6 +604,114 @@ fn populate_anchors(scene: &mut MapScene, layout: &Layout, map: &Map, dirs: &Dir
 }
 
 /// Each sheet's drawn bounds, from its placed rooms' cells and echoes.
+/// Spread a sheet out: every drawn cell times `scale`. Rooms keep their
+/// solver cells for everything that is not drawing.
+fn scale_sheet(sheet: &mut SheetScene, scale: i32) {
+    let up = |c: Cell| Cell {
+        x: c.x * scale,
+        y: c.y * scale,
+    };
+    for room in &mut sheet.rooms {
+        room.cell = up(room.cell);
+    }
+    for edge in &mut sheet.edges {
+        edge.a = up(edge.a);
+        edge.b = up(edge.b);
+    }
+    for label in &mut sheet.labels {
+        label.cell = up(label.cell);
+    }
+    for anchor in &mut sheet.anchors {
+        anchor.cell = up(anchor.cell);
+    }
+    sheet.scale = scale;
+}
+
+/// **The interiors, echoed onto the outdoor sheet.** Beside each street
+/// room, one cell per building that opens off it: the building's door
+/// room, drawn as a doorway and named for the building, joined to the
+/// street by a short connector. The mirror of the street echoes on the
+/// interiors sheet, and the thing a person reads a town map for -- what
+/// is here -- without leaving the streets.
+///
+/// A doorway takes the nearest free cell around its street room, one
+/// ring out and then two; the cells under the roads between adjacent
+/// street rooms are kept clear. A doorway with no free cell within two
+/// rings is left out rather than dropped somewhere misleading; the
+/// street room's own door marker still says a building is there.
+fn populate_doorways(scene: &mut MapScene, layout: &Layout, map: &Map) {
+    let scale = scene.outdoor.scale;
+    let street_cell: HashMap<RoomId, Cell> =
+        scene.outdoor.rooms.iter().map(|r| (r.id, r.cell)).collect();
+    let mut occupied: HashSet<Cell> = street_cell.values().copied().collect();
+    // Road cells: the line between two adjacent street rooms.
+    for edge in &scene.outdoor.edges {
+        let (dx, dy) = (edge.b.x - edge.a.x, edge.b.y - edge.a.y);
+        if dx.abs().max(dy.abs()) != scale {
+            continue;
+        }
+        for step in 1..scale {
+            occupied.insert(Cell {
+                x: edge.a.x + dx.signum() * step,
+                y: edge.a.y + dy.signum() * step,
+            });
+        }
+    }
+    // One doorway per (street room, building), in a stable order.
+    let mut doorways: Vec<(RoomId, RoomId, usize)> = Vec::new();
+    let mut seen: HashSet<(RoomId, usize)> = HashSet::new();
+    let mut entries: Vec<(&usize, &Vec<crate::classifier::Entrance>)> =
+        layout.classification.entrances.iter().collect();
+    entries.sort_by_key(|(idx, _)| **idx);
+    for (&idx, list) in entries {
+        let cluster = scene.group_cluster.get(&idx).copied().unwrap_or(idx);
+        for e in list {
+            if street_cell.contains_key(&e.outdoor_room_id)
+                && seen.insert((e.outdoor_room_id, cluster))
+            {
+                doorways.push((e.outdoor_room_id, e.interior_room_id, idx));
+            }
+        }
+    }
+    doorways.sort_by_key(|&(street, door, _)| (street, door));
+    for (street, door, idx) in doorways {
+        let at = street_cell[&street];
+        let mut found: Option<Cell> = None;
+        'rings: for r in 1..=2 {
+            let mut ring: Vec<Cell> = Vec::new();
+            crate::packer::for_ring(at, r, |c| ring.push(c));
+            for c in ring {
+                if !occupied.contains(&c) {
+                    found = Some(c);
+                    break 'rings;
+                }
+            }
+        }
+        let Some(cell) = found else {
+            continue;
+        };
+        occupied.insert(cell);
+        let title = building_name(&layout.groups[idx], map)
+            .or_else(|| map.room(door).and_then(|r| r.title.first().cloned()))
+            .unwrap_or_default();
+        scene.outdoor.anchors.push(SceneAnchor {
+            id: door,
+            cell,
+            title,
+            has_door: true,
+        });
+        scene.outdoor.edges.push(SceneEdge {
+            a: at,
+            b: cell,
+            a_room: street,
+            b_room: door,
+            group: idx,
+            kind: SceneEdgeKind::Connector,
+            label: None,
+        });
+    }
+}
+
 fn compute_sheet_bounds(scene: &mut MapScene) {
     for sheet in [&mut scene.outdoor, &mut scene.interiors] {
         let mut min = Cell {
@@ -635,8 +757,10 @@ pub fn build_scene(location: &str, layout: &Layout, map: &Map) -> MapScene {
 
     populate_rooms(&mut scene, layout, map, &sheet_of);
     populate_edges(&mut scene, layout, map, &dirs, &sheet_of);
-    populate_anchors(&mut scene, layout, map, &dirs);
+    populate_anchors(&mut scene, layout, map);
     populate_labels(&mut scene, layout, map);
+    scale_sheet(&mut scene.outdoor, OUTDOOR_SCALE);
+    populate_doorways(&mut scene, layout, map);
     compute_sheet_bounds(&mut scene);
 
     scene
@@ -852,5 +976,60 @@ mod tests {
             b.min,
             b.max
         );
+
+        the_mirror(&scene, &map);
+    }
+
+    /// **And the mirror.** Both of the corner's shops are echoed on the
+    /// outdoor sheet as doorways beside the corner, named for the shop,
+    /// each joined to the corner by a connector; the corner's own cell
+    /// is a multiple of the sheet's scale, so the street is spread out
+    /// enough for them to fit.
+    fn the_mirror(scene: &MapScene, map: &Map) {
+        // Both of the corner's shops are echoed on the
+        // outdoor sheet as doorways beside the corner, named for the
+        // shop, each joined to the corner by a connector; the corner's
+        // own cell is a multiple of the sheet's scale, so the street is
+        // spread out enough for them to fit.
+        let corner = scene
+            .outdoor
+            .rooms
+            .iter()
+            .find(|r| r.id == RoomId(1000))
+            .expect("street room 1000 is on the outdoor sheet");
+        assert_eq!(scene.outdoor.scale, OUTDOOR_SCALE);
+        assert_eq!(corner.cell.x % OUTDOOR_SCALE, 0);
+        assert_eq!(corner.cell.y % OUTDOOR_SCALE, 0);
+        for shop in [0u32, 1] {
+            let doorway = scene
+                .outdoor
+                .anchors
+                .iter()
+                .find(|a| a.id == RoomId(shop))
+                .unwrap_or_else(|| panic!("shop {shop} has no doorway echo on the outdoor sheet"));
+            let apart = (doorway.cell.x - corner.cell.x)
+                .abs()
+                .max((doorway.cell.y - corner.cell.y).abs());
+            assert!(
+                apart <= 2,
+                "shop {shop}'s doorway is {apart} cells from its street"
+            );
+            assert!(doorway.has_door);
+            assert_eq!(doorway.title, format!("Shop {shop}"));
+            assert!(
+                scene
+                    .outdoor
+                    .edges
+                    .iter()
+                    .any(|e| e.kind == SceneEdgeKind::Connector
+                        && e.a_room == RoomId(1000)
+                        && e.b_room == RoomId(shop)
+                        && e.a == corner.cell
+                        && e.b == doorway.cell),
+                "no connector from the corner to shop {shop}'s doorway"
+            );
+        }
+        // A doorway is not a room either.
+        assert!(scene.room_index.len() == map.rooms().len());
     }
 }

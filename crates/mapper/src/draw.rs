@@ -28,10 +28,10 @@ const ZOOM_PER_NOTCH: f32 = 1.0015;
 pub(crate) const ROOM_FILL: Color32 = Color32::from_rgb(60, 90, 130);
 pub(crate) const ROOM_STROKE: Color32 = Color32::from_rgb(140, 180, 220);
 pub(crate) const ENTRANCE_STROKE: Color32 = Color32::from_rgb(230, 170, 60);
-/// A street room echoed among its buildings on the interiors sheet: the
-/// entrance amber, on a dimmer fill, so it reads as a signpost to the
-/// street rather than a room of the building.
-pub(crate) const ECHO_FILL: Color32 = Color32::from_rgb(70, 60, 35);
+/// An echo's dot: the doorway amber, dimmed well below the rooms, so a
+/// town's worth of dots reads as road under the squares rather than as a
+/// field of bright points over them.
+pub(crate) const ECHO_DOT: Color32 = Color32::from_rgb(120, 90, 35);
 pub(crate) const DIRECTIONAL_LINE: Color32 = Color32::from_rgb(120, 150, 180);
 pub(crate) const CONNECTOR_LINE: Color32 = Color32::from_rgb(150, 120, 90);
 pub(crate) const LABEL_COLOR: Color32 = Color32::from_rgb(220, 220, 200);
@@ -59,6 +59,15 @@ pub struct Hit {
     pub drag_stopped: bool,
 }
 
+/// How the canvas behaves and what it draws, beyond the sheet itself.
+#[derive(Clone, Copy, Debug)]
+pub struct View {
+    /// Dragging moves rooms instead of panning.
+    pub edit_mode: bool,
+    /// Room titles are drawn beside the rooms.
+    pub labels: bool,
+}
+
 /// Draw one sheet into a pannable, zoomable canvas filling the panel,
 /// apply whatever drag and wheel input lands on it, and report what the
 /// pointer touched.
@@ -72,9 +81,10 @@ pub fn scene(
     sheet: Sheet,
     camera: &mut Camera,
     selected: Option<RoomId>,
-    edit_mode: bool,
+    view: View,
     ghost: Option<(usize, Option<RoomId>, Cell)>,
 ) -> Hit {
+    let View { edit_mode, labels } = view;
     let sheet = scene.sheet(sheet);
     if sheet.rooms.is_empty() {
         ui.label("This sheet has no rooms to show.");
@@ -111,8 +121,8 @@ pub fn scene(
     let painter = painter.with_clip_rect(canvas);
     draw_edges(&painter, sheet, *camera, canvas);
     draw_rooms(&painter, sheet, *camera, canvas, selected, hovered);
-    draw_echoes(&painter, sheet, *camera, canvas);
-    if camera.scale >= LABEL_MIN_SCALE {
+    draw_echoes(&painter, sheet, *camera, canvas, labels);
+    if labels && camera.scale >= LABEL_MIN_SCALE {
         draw_labels(&painter, sheet, *camera, canvas);
     }
     if let Some((group, room, delta)) = ghost {
@@ -290,7 +300,13 @@ fn draw_rooms(
 /// Street rooms echoed among their buildings, drawn as signposts: the
 /// entrance amber on a dim fill, and the street's name beside it whenever
 /// the zoom leaves room for text.
-fn draw_echoes(painter: &egui::Painter, sheet: &SheetScene, camera: Camera, canvas: Rect) {
+fn draw_echoes(
+    painter: &egui::Painter,
+    sheet: &SheetScene,
+    camera: Camera,
+    canvas: Rect,
+    labels: bool,
+) {
     let side = (ROOM_PX * camera.scale).max(2.0);
     for echo in &sheet.anchors {
         let centre = camera.to_screen(echo.cell, canvas);
@@ -298,23 +314,20 @@ fn draw_echoes(painter: &egui::Painter, sheet: &SheetScene, camera: Camera, canv
         if !canvas.intersects(rect) {
             continue;
         }
-        // A street room nothing opens off is road, not a doorway: a dot
-        // on the line, so the street reads as a street and the doorways
-        // stand out from it.
-        if !echo.has_door {
-            painter.circle_filled(centre, (side * 0.18).max(1.5), ENTRANCE_STROKE);
-            continue;
-        }
-        painter.rect(
-            rect,
-            2.0 * camera.scale,
-            ECHO_FILL,
-            Stroke::new((camera.scale * 2.0).max(1.0), ENTRANCE_STROKE),
-            StrokeKind::Outside,
-        );
-        if camera.scale >= LABEL_MIN_SCALE && !echo.title.is_empty() {
+        // An echo is a dot, whichever sheet it is on: a street room among
+        // its buildings, or a building's doorway beside its street. The
+        // squares are the rooms; an echo only says "this is over there".
+        // One with a doorway is a larger dot, and named when labels are
+        // on, so the shops off it can be told which dot they hang from.
+        let r = if echo.has_door {
+            (side * 0.3).max(2.5)
+        } else {
+            (side * 0.18).max(1.5)
+        };
+        painter.circle_filled(centre, r, ECHO_DOT);
+        if echo.has_door && labels && camera.scale >= LABEL_MIN_SCALE && !echo.title.is_empty() {
             painter.text(
-                rect.right_center() + Vec2::new(4.0, 0.0),
+                centre + Vec2::new(r + 4.0, 0.0),
                 Align2::LEFT_CENTER,
                 &echo.title,
                 FontId::proportional(11.0_f32.max(11.0 * camera.scale)),
