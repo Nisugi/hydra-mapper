@@ -1,0 +1,11 @@
+[toolchain]
+# Pinned exactly, not "stable". Clippy is part of the build contract here
+# (plan/06 section 4: -D warnings is required) and clippy adds lints every six
+# weeks; an unpinned toolchain turns CI red on untouched code, detached from
+# any change.
+#
+# This file is the single source of truth for the version. CI installs via
+# dtolnay/rust-toolchain@stable and lets rustup's toml override win, rather
+# than pinning the version in two places that can drift apart.
+channel = "1.96.1"
+components = ["rustfmt", "clippy"]

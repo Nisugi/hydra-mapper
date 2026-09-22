@@ -1,0 +1,23 @@
+[package]
+name = "cena-map-layout"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+# The map layout engine, ported from VellumFE's `src/core/layout_engine/`
+# (design rationale: `plan/26-mapper.md` in the Cena/Hydra client repo).
+# Rooms of one location in, a 2D grid `Layout` out: direction analysis, BFS
+# placement with grid rips, per-component hill-climb and compaction,
+# indoor/outdoor classification, and cluster packing onto a shared outdoor
+# sheet plus an interior shelf.
+#
+# Pure: no file I/O, no rendering toolkit, no window. This is deliberate --
+# the Hydra client (or any other embedder) depends on this crate directly,
+# with no coupling to whichever app draws it first. `cena-mapper`, in this
+# same repo, is the first such app; this crate knows nothing about it.
+[dependencies]
+cena-map.workspace = true
+serde.workspace = true
+
+[lints]
+workspace = true

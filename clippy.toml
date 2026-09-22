@@ -1,0 +1,14 @@
+# Scopes unwrap_used / expect_used / panic (denied in the root Cargo.toml's
+# [workspace.lints.clippy]) away from test targets.
+#
+# Without this, `cargo clippy --workspace --all-targets -- -D warnings` --
+# required by plan/06 section 4 item 2 -- fails to compile the first ordinary
+# unit test, because --all-targets applies the workspace lints to test code.
+# plan/12 section 7.2 requires unit, replay and interleave tests at M1, so that
+# break is not hypothetical.
+#
+# This is configuration, not per-file discipline: nothing can be forgotten at
+# the top of a new test file.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true

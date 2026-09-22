@@ -1,0 +1,78 @@
+# hydra-mapper
+
+The map layout engine and standalone map explorer for **Hydra** (working
+name **Cena**, the game client this feeds): computes a 2D room-graph
+layout from a `.map` file and renders it, for the (large) share of the
+GemStone IV map that has no hand-drawn artwork to fall back on.
+
+This is a separate repo from Cena/Hydra itself, the same way
+[`Nisugi/hydra-mapdb`](https://github.com/Nisugi/hydra-mapdb) is: it
+depends on `cena-map` — the room/exit record and the client's binary map
+format — as a **git dependency on the client's own repo**
+(`Nisugi/cena`), not a vendored copy, so there is one definition of the
+format instead of two that can drift. Nothing here needs a local Cena
+checkout to build, test, or run.
+
+The relationship runs both ways: this repo pulls `cena-map` from Cena to
+read a `.map` file, and Cena is expected to pull `cena-map-layout` from
+here once its own GUI (M4+) needs to draw a map inside the client itself —
+the same shape `cena-map` already has with `hydra-mapdb`'s two converter
+crates.
+
+## Why a layout engine at all
+
+Simutronics ships hand-drawn artwork for some of the map, positioned by a
+official layout file. But that covers a minority of walkable rooms
+(measured in Cena's own research: 48% of walkable rooms, and unevenly —
+71% of outdoor rooms but only 29% of indoor ones). Nearly a third of
+Cena's own hunting-ground exploration and most interiors have no art to
+show at all.
+
+`cena-map-layout` is the algorithmic fallback: given a location's rooms
+and their exits, it derives a 2D grid layout automatically — placing
+rooms by their stated compass directions, packing separate buildings and
+areas together by their connecting passages, and splitting indoor
+buildings onto their own shelf sheet — so a reasonable diagram exists even
+where no artist ever drew one.
+
+## The two crates
+
+- **`cena-map-layout`** — pure: no file I/O, no rendering toolkit, no
+  window. Rooms of one location in, a `Layout` (and from that, a drawable
+  `MapScene`) out. Ported from VellumFE's own layout engine
+  (`src/core/layout_engine/`), restructured to Cena's own code standard
+  rather than kept as a straight port. Pipeline: direction analysis → BFS
+  placement with grid rips → per-component hill-climb and compaction →
+  indoor/outdoor classification → cluster packing onto a shared outdoor
+  sheet, plus a shelf for whatever interior doesn't seat cleanly beside
+  its own doorway.
+- **`cena-mapper`** — the standalone window (`egui`/`eframe`, the same
+  fork Cena's future GUI is expected to use). Loads a `.map` file
+  (`CENA_MAP` env var, or a path as the first argument), lists every
+  distinct location, and draws the outdoor sheet for whichever one you
+  pick. Read-only: this is an explorer, not an editor — no write-back, no
+  way to hand-correct a bad layout yet. Vellum's own override system
+  (position pins, edge overrides, classification flips) is the reference
+  for what that becomes later; it is not ported.
+
+## Running it
+
+```powershell
+$env:CENA_MAP = "path\to\hydra.map"
+cargo run --release -p cena-mapper
+```
+
+or pass the path directly:
+
+```powershell
+cargo run --release -p cena-mapper -- path\to\hydra.map
+```
+
+## Status
+
+Verified against a hand-built fixture town (12 tests: BFS placement,
+indoor/outdoor classification, cluster packing, image-anchor seating, and
+the scene the window draws), not yet against the full real map at scale —
+reproducing VellumFE's own statistical targets (zone-by-zone room counts,
+violation counts, connector lengths) against a converted `hydra.map` is
+the next real check, named but not yet run.

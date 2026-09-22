@@ -1,0 +1,20 @@
+[package]
+name = "cena-mapper"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+# The standalone map explorer window (design rationale: `plan/26-mapper.md`
+# in the Cena/Hydra client repo). Thin: window setup, file loading, and
+# drawing `cena_map_layout::MapScene` -- no layout algorithm of its own,
+# which lives in `cena-map-layout` so an embedder (the Hydra client's own
+# GUI, eventually) can depend on it directly with no `egui`/`eframe` in its
+# dependency graph.
+[dependencies]
+cena-map.workspace = true
+cena-map-layout = { path = "../map-layout" }
+egui.workspace = true
+eframe.workspace = true
+
+[lints]
+workspace = true

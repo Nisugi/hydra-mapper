@@ -1,0 +1,44 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/map-layout",
+    "crates/mapper",
+]
+
+[workspace.package]
+edition = "2024"
+version = "0.1.0"
+publish = false
+
+# `cena-map` is the wire format Hydra's client also loads. Read from the
+# client's own repo rather than vendored here, so a format change cannot
+# drift between two copies (`plan/05`'s KISS/DRY rule -- the same reasoning
+# `Nisugi/hydra-mapdb` used for the same dependency). Pinned to a branch,
+# not a rev: this repo tracks Cena's map format as it moves, and the
+# loader's own version check (`cena_map::binary::LoadError::
+# UnsupportedVersion`) is what catches an actual incompatibility, not this
+# pin.
+[workspace.dependencies]
+cena-map = { git = "https://github.com/Nisugi/cena", branch = "main" }
+serde = { version = "1", features = ["derive"] }
+
+# The standalone window's own fork, the same one Vellum's GUI already uses
+# for this exact job (panels, custom canvas drawing).
+egui = { git = "https://github.com/Nisugi/egui.git", branch = "numpad-support", package = "egui" }
+eframe = { git = "https://github.com/Nisugi/egui.git", branch = "numpad-support", package = "eframe", default-features = false, features = ["default_fonts", "wgpu", "x11", "wayland"] }
+
+# Matches Cena's own workspace lints: this code was ported from Cena
+# already written to this standard, and staying consistent means it need
+# not be rewritten either direction if it moves again.
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.lints.rustdoc]
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+dbg_macro = "deny"
