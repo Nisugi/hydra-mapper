@@ -177,6 +177,10 @@ pub struct MapperApp {
     /// selection index, because the two lists are filtered independently
     /// and an index means nothing once the filter changes.
     svg_areas: BTreeSet<String>,
+    /// Whether the area list is showing its ticks. Its own toggle rather
+    /// than edit mode's: choosing what to draw happens while browsing,
+    /// and edit mode is only reachable once an area is already on screen.
+    picking_svgs: bool,
 }
 
 /// A drag in progress. Committed as one correction on release, so dragging
@@ -237,6 +241,7 @@ impl MapperApp {
             trail: Vec::new(),
             export_note: None,
             svg_areas: BTreeSet::new(),
+            picking_svgs: false,
         }
     }
 
@@ -336,12 +341,23 @@ impl MapperApp {
                         )
                         .clicked();
                 });
-                // Ticked areas ride along in the same file, so this says
-                // what the one button will carry rather than offering a
-                // second one.
+                // Picking which areas to draw is a question asked while
+                // browsing the list, so its toggle lives here rather than
+                // with the canvas: the canvas header only exists once an
+                // area is on screen, and that is too late to be choosing.
+                ui.add_enabled_ui(can_edit, |ui| {
+                    ui.toggle_value(&mut self.picking_svgs, "Pick areas to draw")
+                        .on_hover_text(
+                            "Tick areas in the list; their sheets and plates \
+                             are drawn into the export",
+                        );
+                });
                 let ticked = self.svg_areas.len();
                 if ticked > 0 {
                     ui.weak(format!("+ {ticked} area(s) drawn"));
+                    if ui.small_button("clear").clicked() {
+                        self.svg_areas.clear();
+                    }
                 }
                 if let Some(problem) = &self.store_problem {
                     ui.colored_label(IMPASSABLE_COLOR, format!("Corrections: {problem}"));
@@ -974,7 +990,7 @@ impl MapperApp {
     }
 
     /// The left panel: the two list tabs, a filter box, and the list.
-    fn picker(&mut self, ui: &mut egui::Ui, edit_mode: bool) -> bool {
+    fn picker(&mut self, ui: &mut egui::Ui, picking: bool) -> bool {
         let mut changed = false;
         // Set when a room-number search is followed: the area to show,
         // and the room to inspect once it is on screen.
@@ -1035,17 +1051,16 @@ impl MapperApp {
                 };
                 let selected = self.selected == Some(selection);
                 let label = area_label(area, self.tab, self.map.as_ref().ok(), &self.store);
-                // The tick marks an area for the SVG export, and only
-                // while editing -- it is an editing tool, and a row that
-                // always carries one reads as a mode the window is stuck
-                // in.
+                // The tick marks an area for the SVG export, and appears
+                // only while picking: a row that always carries one reads
+                // as a mode the window is stuck in.
                 //
                 // `horizontal_top` with a truncating label, rather than
                 // plain `horizontal`: a horizontal layout asks for its
                 // content's full width, which would stop the panel ever
                 // being dragged narrower than the longest area name.
                 ui.horizontal_top(|ui| {
-                    if edit_mode {
+                    if picking {
                         // Scoped by area name: every one of these
                         // checkboxes has an empty label, and egui derives
                         // a widget's id from its text and position, so
@@ -1583,7 +1598,7 @@ impl eframe::App for MapperApp {
 
         let mut changed = false;
         egui::Panel::left("areas").show(ui, |ui| {
-            changed = self.picker(ui, self.edit_mode && can_edit);
+            changed = self.picker(ui, self.picking_svgs && can_edit);
         });
         if changed {
             self.show_selected();
