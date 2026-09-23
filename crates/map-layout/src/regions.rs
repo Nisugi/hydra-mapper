@@ -152,7 +152,7 @@ fn is_connected(room: &Room, map: &Map, pointed_at: &HashSet<RoomId>) -> bool {
 }
 
 /// Every room worth placing on a map: a real room ([`is_real_room`])
-/// that something real connects it to ([`is_connected`]).
+/// that some real room connects it to, by an exit either way.
 ///
 /// Whole-map, because "nothing reaches it" cannot be read off a
 /// selection: a room whose only neighbour is in the next area is still

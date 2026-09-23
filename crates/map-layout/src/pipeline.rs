@@ -24,6 +24,11 @@ pub struct Layout {
     pub interiors: Vec<usize>,
     pub classification: Classification,
     pub pack_info: PackInfo,
+    /// The edge corrections this layout was solved with, so whatever
+    /// draws it reads the same directions the solver placed by: a
+    /// forced bearing draws as a line, an un-welded edge as a connector.
+    #[serde(default)]
+    pub edges: Vec<EdgeOverride>,
 }
 
 /// Run the full pipeline over one location's rooms, already filtered to
@@ -123,5 +128,6 @@ fn generate_layout_impl(map: &Map, edges: &[EdgeOverride]) -> Layout {
         interiors,
         classification,
         pack_info,
+        edges: edges.to_vec(),
     }
 }

@@ -5,7 +5,7 @@
 //! any later embedder both draw from the same scene. Rooms carry final
 //! sheet cells; edges are pre-classified: solid directional edges, stubs
 //! for directional edges stretched past `LONG_EDGE_CELLS`, and dashed
-//! labeled connectors (skipped past `CONNECTOR_MAX_CELLS`).
+//! labeled connectors (skipped past `CONNECTOR_MAX_CELLS` outdoor cells).
 //!
 //! **One sheet, and a focus.** Every room of an area has one cell, in one
 //! frame: the streets at [`OUTDOOR_SCALE`], each building hung beside the
@@ -15,11 +15,11 @@
 //! map whichever part of it is in focus. Nothing is laid out twice and
 //! nothing is echoed; changing focus moves no room.
 //!
-//! **v1 has no override source** (`plan/26` §0: no editor yet), so the edge
-//! restyling Vellum's `build_scene` takes (`Hide`/`Dash`/`Dots`/`Connector`
-//! overrides) is not ported: every edge draws as the solver and classifier
-//! decided. The seam is `crate::overrides`, not this module, when that
-//! system exists.
+//! **Edges draw by the directions the layout was solved with**:
+//! [`Layout::edges`] carries the curated edge corrections, and this reads
+//! them, so a forced bearing is a line and an un-welded edge is not.
+//! Vellum's pure restyling overrides (`Hide`/`Dash`/`Dots`) are not
+//! ported.
 
 use std::collections::{HashMap, HashSet};
 
@@ -285,7 +285,9 @@ fn connector_label(command: &str) -> Option<String> {
 /// Every room of the area on one sheet, its units, and its edges.
 #[must_use]
 pub fn build_scene(location: &str, layout: &Layout, map: &Map) -> MapScene {
-    let dirs = DirectionMap::build(map);
+    // The directions the solver placed by, corrections included.
+    let mut dirs = DirectionMap::build(map);
+    dirs.apply_edge_overrides(map, &layout.edges);
 
     let mut scene = MapScene {
         location: location.to_owned(),
@@ -764,6 +766,50 @@ mod tests {
         assert!(
             !scene.room(RoomId(2)).expect("drawn").entrance,
             "the street a teleport leaves from got a door marker"
+        );
+    }
+
+    /// The scene draws by the directions the layout was solved with. A
+    /// bearing forced onto a `go door` draws as a line; a compass edge
+    /// un-welded to a connector no longer draws as a solid one.
+    #[test]
+    fn edge_corrections_reach_the_drawing() {
+        use crate::overrides::{EdgeAction, EdgeOverride};
+        let map = Map::from_rooms(vec![
+            room(1, 1, &[(2, "go door"), (3, "north")]),
+            room(2, 2, &[(1, "go door")]),
+            room(3, 3, &[(1, "south")]),
+        ])
+        .expect("no duplicate ids");
+        let edges = [
+            EdgeOverride {
+                a: RoomId(1),
+                b: RoomId(2),
+                action: EdgeAction::Direction(Dir::East),
+            },
+            EdgeOverride {
+                a: RoomId(1),
+                b: RoomId(3),
+                action: EdgeAction::Connector,
+            },
+        ];
+        let layout = crate::generate_layout_with(&map, &edges);
+        let scene = build_scene("Test", &layout, &map);
+        let edge = |x: u32, y: u32| {
+            scene.sheet.edges.iter().find(|e| {
+                let pair = (e.a_room.0.min(e.b_room.0), e.a_room.0.max(e.b_room.0));
+                pair == (x, y)
+            })
+        };
+
+        assert_eq!(
+            edge(1, 2).map(|e| e.kind),
+            Some(SceneEdgeKind::Directional),
+            "the forced bearing did not draw"
+        );
+        assert!(
+            edge(1, 3).is_none_or(|e| e.kind != SceneEdgeKind::Directional),
+            "the un-welded edge still drew as a compass line"
         );
     }
 
