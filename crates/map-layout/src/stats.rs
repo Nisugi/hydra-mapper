@@ -55,7 +55,7 @@ impl LayoutStats {
             let scale = if interiors.contains(&group.index) {
                 1
             } else {
-                crate::scene::OUTDOOR_SCALE
+                layout.town_scale
             };
             for &id in &group.room_ids {
                 let c = group.final_cell(id);

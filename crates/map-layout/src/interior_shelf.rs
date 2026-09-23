@@ -47,6 +47,7 @@ fn shelf_items(
     map: &Map,
     entrances: &HashMap<usize, Vec<Entrance>>,
     outdoor: &[usize],
+    scale: i32,
 ) -> Vec<Item> {
     // Where each outdoor room sits, so a building can be shelved near the
     // others off the same street rather than at its group index.
@@ -81,6 +82,7 @@ fn shelf_items(
             map,
             entrances,
             &outdoor_cell,
+            scale,
         ));
     }
     for (&cluster, members) in &members_of {
@@ -92,6 +94,7 @@ fn shelf_items(
                 map,
                 entrances,
                 &outdoor_cell,
+                scale,
             ));
         }
     }
@@ -298,6 +301,7 @@ fn shelf_item(
     map: &Map,
     entrances: &HashMap<usize, Vec<Entrance>>,
     outdoor_cell: &HashMap<RoomId, Cell>,
+    scale: i32,
 ) -> Item {
     let mut local: HashMap<usize, Cell> = HashMap::new();
     if anchors.is_empty() && members.len() == 1 {
@@ -316,7 +320,7 @@ fn shelf_item(
         } else {
             Vec::new()
         };
-        merge_cluster_members(groups, &all, map, &mut local, anchors, &skeleton);
+        merge_cluster_members(groups, &all, map, &mut local, anchors, &skeleton, scale);
     }
     // Normalize the frame to a (0,0) top-left, the echoes included.
     let mut min = Cell {
@@ -397,12 +401,13 @@ pub fn pack_interior_shelf(
     map: &Map,
     entrances: &HashMap<usize, Vec<Entrance>>,
     outdoor: &[usize],
+    scale: i32,
 ) {
     if interior.is_empty() {
         return;
     }
 
-    let mut items = shelf_items(groups, interior, clusters, map, entrances, outdoor);
+    let mut items = shelf_items(groups, interior, clusters, map, entrances, outdoor, scale);
 
     // The town frame goes where it is: its cells are the outdoor sheet's
     // own, scaled, and moving it would break the one picture. Everything
@@ -416,9 +421,7 @@ pub fn pack_interior_shelf(
         .iter()
         .flat_map(|&o| {
             let g = &groups[o];
-            g.room_ids
-                .iter()
-                .map(move |&id| g.final_cell(id).y * TOWN_SCALE)
+            g.room_ids.iter().map(move |&id| g.final_cell(id).y * scale)
         })
         .max()
         .map_or(0, |y| y + 1 + GROUP_PADDING);
@@ -607,6 +610,7 @@ fn merge_cluster_members(
     local: &mut HashMap<usize, Cell>,
     anchors: &[RoomId],
     skeleton: &[Cell],
+    scale: i32,
 ) {
     let edges = passages_within(groups, members, map, anchors);
 
@@ -668,13 +672,13 @@ fn merge_cluster_members(
         local.insert(seed, Cell::default());
         place(seed, Cell::default(), &mut occupied);
     } else {
-        let cells = lay_street(groups, anchors, skeleton, &edges);
+        let cells = lay_street(skeleton, scale);
         for (i, &c) in cells.iter().enumerate() {
             let idx = anchor_index(i);
             local.insert(idx, c);
             place(idx, c, &mut occupied);
         }
-        reserve_roads(skeleton, &cells, &edges, &mut occupied);
+        reserve_roads(skeleton, &cells, &edges, &mut occupied, scale);
     }
 
     loop {
@@ -815,6 +819,7 @@ fn reserve_roads(
     cells: &[Cell],
     edges: &HashMap<usize, Vec<Edge>>,
     occupied: &mut HashSet<Cell>,
+    scale: i32,
 ) {
     for (i, &a) in skeleton.iter().enumerate() {
         for e in edges
@@ -829,7 +834,7 @@ fn reserve_roads(
                 continue;
             }
             let (dx, dy) = ((b.x - a.x).signum(), (b.y - a.y).signum());
-            for step in 1..TOWN_SCALE {
+            for step in 1..scale {
                 occupied.insert(Cell {
                     x: cells[i].x + dx * step,
                     y: cells[i].y + dy * step,
@@ -839,17 +844,15 @@ fn reserve_roads(
     }
 }
 
-/// How many cells one outdoor cell becomes on the interiors sheet.
+/// How many sheet cells one outdoor solver cell becomes, by default: the
+/// streets are laid at this scale so `TOWN_SCALE - 1` free cells sit
+/// between neighbouring street rooms for buildings. A layout parameter,
+/// not a zoom: [`crate::LayoutParams::town_scale`] overrides it.
 pub const TOWN_SCALE: i32 = 4;
 
 /// The town laid down in its own shape, scaled so the buildings fit
 /// between its rooms. See the comments inside for how.
-fn lay_street(
-    groups: &[Group],
-    anchors: &[RoomId],
-    skeleton: &[Cell],
-    edges: &HashMap<usize, Vec<Edge>>,
-) -> Vec<Cell> {
+fn lay_street(skeleton: &[Cell], scale: i32) -> Vec<Cell> {
     // **The town goes down first, at scale.** Every echo is placed at its
     // outdoor cell times `TOWN_SCALE`: exact directions, exact adjacency,
     // the outdoor sheet's own shape, with `TOWN_SCALE - 1` free cells
@@ -858,15 +861,13 @@ fn lay_street(
     // same picture -- a player can carry the town's shape from one to the
     // other -- and a building with doors on two streets lands between
     // them because the streets are where they were.
-    let _ = (groups, anchors, edges);
-    let cells: Vec<Cell> = skeleton
+    skeleton
         .iter()
         .map(|c| Cell {
-            x: c.x * TOWN_SCALE,
-            y: c.y * TOWN_SCALE,
+            x: c.x * scale,
+            y: c.y * scale,
         })
-        .collect();
-    cells
+        .collect()
 }
 
 /// The unplaced member with the most passages to placed ones, and those

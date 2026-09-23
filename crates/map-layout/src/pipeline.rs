@@ -29,6 +29,31 @@ pub struct Layout {
     /// forced bearing draws as a line, an un-welded edge as a connector.
     #[serde(default)]
     pub edges: Vec<EdgeOverride>,
+    /// Sheet cells per outdoor solver cell this layout was built at
+    /// ([`LayoutParams::town_scale`]), so the scene draws it at the same.
+    #[serde(default = "default_town_scale")]
+    pub town_scale: i32,
+}
+
+/// The knobs a layout is built with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LayoutParams {
+    /// Sheet cells per outdoor solver cell: the streets are laid at this
+    /// scale, leaving `town_scale - 1` free cells between neighbouring
+    /// street rooms for the buildings. Clamped to at least 1.
+    pub town_scale: i32,
+}
+
+impl Default for LayoutParams {
+    fn default() -> LayoutParams {
+        LayoutParams {
+            town_scale: interior_shelf::TOWN_SCALE,
+        }
+    }
+}
+
+fn default_town_scale() -> i32 {
+    interior_shelf::TOWN_SCALE
 }
 
 /// Run the full pipeline over one location's rooms, already filtered to
@@ -37,7 +62,7 @@ pub struct Layout {
 /// Vellum's `generate_layout`).
 #[must_use]
 pub fn generate_layout(map: &Map) -> Layout {
-    generate_layout_impl(map, &[])
+    generate_layout_impl(map, &[], LayoutParams::default())
 }
 
 /// As [`generate_layout`], with curated edge corrections applied before
@@ -45,7 +70,13 @@ pub fn generate_layout(map: &Map) -> Layout {
 /// rather than nudged afterwards.
 #[must_use]
 pub fn generate_layout_with(map: &Map, edges: &[EdgeOverride]) -> Layout {
-    generate_layout_impl(map, edges)
+    generate_layout_impl(map, edges, LayoutParams::default())
+}
+
+/// As [`generate_layout_with`], with the layout's knobs set.
+#[must_use]
+pub fn generate_layout_tuned(map: &Map, edges: &[EdgeOverride], params: LayoutParams) -> Layout {
+    generate_layout_impl(map, edges, params)
 }
 
 /// The pipeline as the reference runs it. Exists so fixture parity tests
@@ -54,10 +85,11 @@ pub fn generate_layout_with(map: &Map, edges: &[EdgeOverride]) -> Layout {
 /// its street rather than some being seated among the streets.
 #[must_use]
 pub fn generate_layout_reference(map: &Map) -> Layout {
-    generate_layout_impl(map, &[])
+    generate_layout_impl(map, &[], LayoutParams::default())
 }
 
-fn generate_layout_impl(map: &Map, edges: &[EdgeOverride]) -> Layout {
+fn generate_layout_impl(map: &Map, edges: &[EdgeOverride], params: LayoutParams) -> Layout {
+    let town_scale = params.town_scale.max(1);
     // A removed room and an urchin hideout are not places, whoever chose
     // the selection: they get no cell, and exits into them are exits out
     // of the selection. (Rooms nothing reaches need the whole map to see;
@@ -113,6 +145,7 @@ fn generate_layout_impl(map: &Map, edges: &[EdgeOverride]) -> Layout {
         map,
         &classification.entrances,
         &outdoor,
+        town_scale,
     );
 
     // Building names for interior groups (assigned after shelf packing so
@@ -129,5 +162,6 @@ fn generate_layout_impl(map: &Map, edges: &[EdgeOverride]) -> Layout {
         classification,
         pack_info,
         edges: edges.to_vec(),
+        town_scale,
     }
 }

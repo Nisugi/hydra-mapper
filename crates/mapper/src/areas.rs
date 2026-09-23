@@ -919,7 +919,10 @@ mod tests {
         ])
         .expect("no duplicate ids");
 
-        let ids: Vec<RoomId> = layout_rooms(&[a, b], &map, &placeable_rooms(&map)).iter().map(|r| r.id).collect();
+        let ids: Vec<RoomId> = layout_rooms(&[a, b], &map, &placeable_rooms(&map))
+            .iter()
+            .map(|r| r.id)
+            .collect();
         assert_eq!(ids.len(), 2, "pulled in a neighbour that was not needed");
         assert!(!ids.contains(&outside));
     }
@@ -936,7 +939,10 @@ mod tests {
         ])
         .expect("no duplicate ids");
 
-        let ids: Vec<RoomId> = layout_rooms(&[shop], &map, &placeable_rooms(&map)).iter().map(|r| r.id).collect();
+        let ids: Vec<RoomId> = layout_rooms(&[shop], &map, &placeable_rooms(&map))
+            .iter()
+            .map(|r| r.id)
+            .collect();
         assert!(
             ids.contains(&street),
             "a room reachable only one way was left stranded"

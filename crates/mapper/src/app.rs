@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use cena_map::{Map, RoomId};
 use cena_map_layout::Cell;
 use cena_map_layout::{
-    Dir, EdgeAction, Layout, MapScene, build_scene, generate_layout, generate_layout_with,
+    Dir, EdgeAction, Layout, LayoutParams, MapScene, build_scene, generate_layout_tuned,
 };
 
 use crate::areas::{self, AreaKind, Areas};
@@ -159,6 +159,9 @@ enum EditAction {
 }
 
 pub struct MapperApp {
+    /// The layout's knobs, set from the canvas header. A change re-solves
+    /// the shown area.
+    params: LayoutParams,
     /// `Err` once, at startup, and shown instead of a window full of
     /// nothing; loading never happens again from inside the app (v1 is a
     /// one-shot viewer, not a file-open dialog -- `plan/26` names that as
@@ -306,6 +309,7 @@ impl MapperApp {
             eprintln!("could not save the seeded areas: {error}");
         }
         MapperApp {
+            params: LayoutParams::default(),
             map,
             areas,
             tab: AreaKind::Location,
@@ -370,11 +374,7 @@ impl MapperApp {
                     continue;
                 };
                 let edges = location.edge_overrides(&subset);
-                let mut layout = if edges.is_empty() {
-                    generate_layout(&subset)
-                } else {
-                    generate_layout_with(&subset, &edges)
-                };
+                let mut layout = generate_layout_tuned(&subset, &edges, self.params);
                 overrides::apply(&mut layout, &subset, location);
                 out.extend(placement::resolve(&layout, &subset, location));
             }
@@ -494,11 +494,7 @@ impl MapperApp {
             let edges = location
                 .map(|l| l.edge_overrides(&subset))
                 .unwrap_or_default();
-            let mut layout = if edges.is_empty() {
-                generate_layout(&subset)
-            } else {
-                generate_layout_with(&subset, &edges)
-            };
+            let mut layout = generate_layout_tuned(&subset, &edges, self.params);
             if let Some(location) = location {
                 overrides::apply(&mut layout, &subset, location);
             }
@@ -892,11 +888,7 @@ impl MapperApp {
         let edges = location
             .map(|l| l.edge_overrides(&subset))
             .unwrap_or_default();
-        let mut layout = if edges.is_empty() {
-            generate_layout(&subset)
-        } else {
-            generate_layout_with(&subset, &edges)
-        };
+        let mut layout = generate_layout_tuned(&subset, &edges, self.params);
         if let Some(location) = location {
             overrides::apply(&mut layout, &subset, location);
         }
@@ -2586,6 +2578,18 @@ impl eframe::App for MapperApp {
             });
             return;
         }
+        // A knob moved last frame: re-solve what is shown, keeping focus
+        // and selection, and frame the new sheet.
+        if self
+            .shown
+            .as_ref()
+            .is_some_and(|s| s.layout.town_scale != self.params.town_scale.max(1))
+        {
+            self.rebuild_shown(Fit::Keep);
+            if let Some(shown) = &mut self.shown {
+                shown.needs_fit = true;
+            }
+        }
 
         let mut edit: Option<EditAction> = None;
         let edit_out = &mut edit;
@@ -2635,6 +2639,7 @@ impl eframe::App for MapperApp {
                 &self.store,
                 self.tab,
                 &mut self.view,
+                &mut self.params,
                 can_edit,
                 edit_out,
                 go_to_plate,
@@ -2708,6 +2713,7 @@ fn canvas_header(
     store: &MapOverrides,
     tab: AreaKind,
     view: &mut draw::View,
+    params: &mut LayoutParams,
     can_edit: bool,
     edit_out: &mut Option<EditAction>,
     go_to_plate: &mut Option<String>,
@@ -2768,6 +2774,8 @@ fn canvas_header(
             .on_hover_text("Draw room titles (hover still shows them)");
         ui.toggle_value(&mut view.interiors, "Interiors")
             .on_hover_text("Draw every interior room as a dot, not only each building's door");
+        ui.separator();
+        ui.add(egui::Slider::new(&mut params.town_scale, 1..=12).text("Town scale"));
         ui.separator();
         // Editing is refused outright while the store would not
         // load: the file holds hand curation, and saving over it

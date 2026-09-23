@@ -37,7 +37,8 @@ pub const LONG_EDGE_CELLS: i32 = 8;
 /// Connectors longer than this are not drawn at all.
 pub const CONNECTOR_MAX_CELLS: i32 = 30;
 
-/// Outdoor groups are drawn at this many cells per solver cell. The
+/// Outdoor groups are drawn at this many cells per solver cell by default
+/// ([`Layout::town_scale`] is the one a given layout was built at). The
 /// interiors are laid out in that frame already -- each building hung
 /// beside its street at [`crate::interior_shelf::TOWN_SCALE`] -- so
 /// scaling the streets to match puts every room of the area on one
@@ -300,7 +301,7 @@ pub fn build_scene(location: &str, layout: &Layout, map: &Map) -> MapScene {
         let scale = if interiors.contains(&group.index) {
             1
         } else {
-            OUTDOOR_SCALE
+            layout.town_scale
         };
         scene.group_scale.insert(group.index, scale);
     }
@@ -523,7 +524,7 @@ fn populate_edges(
                 if unit_a != STREETS && unit_b != STREETS && unit_a != unit_b {
                     continue;
                 }
-                if len > CONNECTOR_MAX_CELLS * OUTDOOR_SCALE {
+                if len > CONNECTOR_MAX_CELLS * layout.town_scale {
                     continue;
                 }
                 let cmd = match &exit.crossing {
@@ -905,13 +906,8 @@ mod tests {
         );
     }
 
-    /// A street of enough corners to be a town, each with shops behind
-    /// doors. **One sheet, one frame:** every room has one cell, the
-    /// street rooms at the outdoor scale, each shop beside its own
-    /// corner, joined to it by a door edge; the shops are building units
-    /// whose door rooms are the shops, and the corners are the streets.
-    #[test]
-    fn a_town_is_one_sheet_with_the_shops_beside_their_corners() {
+    /// Twelve street corners in a row, two shops behind doors at each.
+    fn corner_town() -> Map {
         const CORNERS: u32 = 12;
         let shop = |id: u32, street: u32| Room {
             id: RoomId(id),
@@ -950,6 +946,52 @@ mod tests {
             rooms.push(room(street, i64::from(street), &exits));
         }
         let map = Map::from_rooms(rooms).expect("no duplicate ids");
+        map
+    }
+
+    /// The town scale is a knob: at any scale the streets sit at
+    /// multiples of it, neighbours one scale apart, and no two rooms share
+    /// a cell.
+    #[test]
+    fn the_town_scale_re_lays_the_town() {
+        let map = corner_town();
+        for scale in [1, 2, 3, 6, 9] {
+            let params = crate::LayoutParams { town_scale: scale };
+            let layout = crate::generate_layout_tuned(&map, &[], params);
+            assert_eq!(layout.town_scale, scale);
+            let scene = build_scene("street", &layout, &map);
+            assert_eq!(scene.sheet.rooms.len(), map.rooms().len());
+            let mut cells: Vec<Cell> = scene.sheet.rooms.iter().map(|r| r.cell).collect();
+            cells.sort_unstable_by_key(|c| (c.x, c.y));
+            let before = cells.len();
+            cells.dedup();
+            assert_eq!(
+                cells.len(),
+                before,
+                "two rooms share a cell at scale {scale}"
+            );
+            let corner = scene.room(RoomId(1000)).expect("drawn");
+            let next = scene.room(RoomId(1001)).expect("drawn");
+            assert_eq!(scene.scale_of(corner.group), scale);
+            assert_eq!((corner.cell.x % scale, corner.cell.y % scale), (0, 0));
+            assert_eq!(
+                (next.cell.x - corner.cell.x)
+                    .abs()
+                    .max((next.cell.y - corner.cell.y).abs()),
+                scale,
+                "neighbouring corners are not one scale apart at scale {scale}"
+            );
+        }
+    }
+
+    /// A street of enough corners to be a town, each with shops behind
+    /// doors. **One sheet, one frame:** every room has one cell, the
+    /// street rooms at the outdoor scale, each shop beside its own
+    /// corner, joined to it by a door edge; the shops are building units
+    /// whose door rooms are the shops, and the corners are the streets.
+    #[test]
+    fn a_town_is_one_sheet_with_the_shops_beside_their_corners() {
+        let map = corner_town();
         let layout = crate::generate_layout(&map);
         assert!(!layout.interiors.is_empty(), "the shops did not shelve");
         let scene = build_scene("street", &layout, &map);

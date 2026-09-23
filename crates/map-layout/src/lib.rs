@@ -53,7 +53,10 @@ pub use classifier::Classification;
 pub use direction::{Dir, DirectionMap};
 pub use overrides::{EdgeAction, EdgeOverride};
 pub use packer::PackInfo;
-pub use pipeline::{Layout, generate_layout, generate_layout_reference, generate_layout_with};
+pub use pipeline::{
+    Layout, LayoutParams, generate_layout, generate_layout_reference, generate_layout_tuned,
+    generate_layout_with,
+};
 pub use positioner::{Cell, Group, PackMethod, Violation};
 pub use satisfiable::{Axis, Problem, is_satisfiable, place_by_order, problems};
 pub use scene::{MapScene, SheetScene, Unit, UnitKind, build_scene};
