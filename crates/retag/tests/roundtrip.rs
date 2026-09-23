@@ -427,15 +427,8 @@ fn every_region_written_is_one_the_curation_names() {
     }
     unknown.sort();
     unknown.dedup();
-    // 223 Talador rooms, and they are a finding rather than a tolerance.
-    // Talador was destroyed in 5116 and `status.toml` carries some forty
-    // rules for it, but these rooms come out `live`: the rules name the
-    // city by title and location, and the mapdb's `loc` groups a wider
-    // set under the same name. They are left out of the region decisions
-    // deliberately -- nobody should have to choose a region for a
-    // destroyed barony -- but they should be `gone`, and are not.
     assert!(
-        unknown.len() <= 223,
+        unknown.is_empty(),
         "{} rooms carry a region no curation names, e.g. {:?}",
         unknown.len(),
         &unknown[..unknown.len().min(8)]

@@ -3604,7 +3604,7 @@ room_id	uids	title	location	region	region_src	area	area_src	status	event	sense	d
 3620	412009	[Indigo Iris Table]	Wehnimer's Landing	Wehnimer's Landing	inferred	Wehnimer's Landing	mapdb location	live		indoor	0
 3621	412006	[Fragrant Freesia Table]	Wehnimer's Landing	Wehnimer's Landing	inferred	Wehnimer's Landing	mapdb location	live		indoor	0
 3622	346014	[Giant Thrak Table]	Wehnimer's Landing	Wehnimer's Landing	inferred	Wehnimer's Landing	mapdb location	live		indoor	0
-3623	42008	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
+3623	42008	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
 3624	4291006	[Thanatoph, Valley Ridge]	Stone Valley	Wehnimer's Landing	mapdb	wehnimers-landing-stronghold-and-thanatoph	official layout	live		outdoor	0
 3625	412001	[Aesthetic Aster Table]	Wehnimer's Landing	Wehnimer's Landing	inferred	Wehnimer's Landing	mapdb location	live		indoor	0
 3626	4043331	[Crumbly Tart Table]	Icemule Trace	Icemule Trace	mapdb	Icemule Trace	mapdb location	live		indoor	0
@@ -3666,44 +3666,44 @@ room_id	uids	title	location	region	region_src	area	area_src	status	event	sense	d
 3683	312030	[Entry Hall]	the Graveyard	Wehnimer's Landing	mapdb	the Graveyard	mapdb location	live		indoor	1
 3684	312027	[Hall of Brotherhood]	the Graveyard	Wehnimer's Landing	mapdb	the Graveyard	mapdb location	live		indoor	3
 3685	312032	[Master's Hall]	the Graveyard	Wehnimer's Landing	mapdb	the Graveyard	mapdb location	live		indoor	1
-3686	42019	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
-3687	42012	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-3688	42013	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-3689	42014	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-3690	42015	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-3691	42011	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-3692	42007	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-3693	42016	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-3694	42020	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-3695	42021	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-3696	42022	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-3697	42023	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-3698	388001	[Darkstone, Outer Chamber]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
-3699	388002	[Darkstone, A Dark Tunnel]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-3700	388003	[Darkstone, A Dark Tunnel]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-3701	388004	[Darkstone, A Dark Tunnel]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-3702	388005	[Darkstone, A Dark Tunnel]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-3703	388006	[Darkstone, A Dark Tunnel]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-3704	42025	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-3705	42026	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
-3706	42029	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-3707	42030	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
-3708	42033	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-3709	42034	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-3710	42031	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-3711	42027	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-3712	42005	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-3713	42004	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-3714	42017	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-3715	42002	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-3716	42003	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-3717	388007	[Darkstone, Winding Tunnel]	Darkstone Castle	Talador	mapdb	Darkstone Castle	mapdb location	live		indoor	0
-3718	388009	[Darkstone, Winding Tunnel]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-3719	388010	[Darkstone, Winding Tunnel]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-3720	388011	[Darkstone, Winding Tunnel]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-3721	388012	[Darkstone, Winding Tunnel]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-3722	388013	[Darkstone, Burrow]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-3723	388014	[A Dark Cavern]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+3686	42019	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
+3687	42012	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+3688	42013	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+3689	42014	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+3690	42015	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+3691	42011	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+3692	42007	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+3693	42016	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+3694	42020	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+3695	42021	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+3696	42022	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+3697	42023	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+3698	388001	[Darkstone, Outer Chamber]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
+3699	388002	[Darkstone, A Dark Tunnel]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+3700	388003	[Darkstone, A Dark Tunnel]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+3701	388004	[Darkstone, A Dark Tunnel]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+3702	388005	[Darkstone, A Dark Tunnel]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+3703	388006	[Darkstone, A Dark Tunnel]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+3704	42025	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+3705	42026	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
+3706	42029	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+3707	42030	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
+3708	42033	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+3709	42034	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+3710	42031	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+3711	42027	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+3712	42005	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+3713	42004	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+3714	42017	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+3715	42002	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+3716	42003	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+3717	388007	[Darkstone, Winding Tunnel]	Darkstone Castle	Wehnimer's Landing	mapdb	Darkstone Castle	mapdb location	live		indoor	0
+3718	388009	[Darkstone, Winding Tunnel]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+3719	388010	[Darkstone, Winding Tunnel]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+3720	388011	[Darkstone, Winding Tunnel]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+3721	388012	[Darkstone, Winding Tunnel]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+3722	388013	[Darkstone, Burrow]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+3723	388014	[A Dark Cavern]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
 3724	110011	[Wehnimer's Historical Society]	Wehnimer's Landing	Wehnimer's Landing	inferred	Wehnimer's Landing	mapdb location	live		indoor	1
 3726	4050005	[Icemule Defenses, North Wall]	Icemule Trace	Icemule Trace	mapdb	Icemule Trace	mapdb location	live		outdoor	1
 3727	14100003	[Ta'Vaalor, Amaranth Gate]	the city of Ta'Vaalor	Ta'Vaalor	mapdb	elven-nations-fearling-pass	official layout	live		outdoor	1
@@ -3779,26 +3779,26 @@ room_id	uids	title	location	region	region_src	area	area_src	status	event	sense	d
 3797	4291056	[Thanatoph, Eastern Peak]	Stone Valley	Wehnimer's Landing	mapdb	wehnimers-landing-stronghold-and-thanatoph	official layout	live		outdoor	0
 3798	4291055	[Thanatoph, Eastern Peak]	Stone Valley	Wehnimer's Landing	mapdb	wehnimers-landing-stronghold-and-thanatoph	official layout	live		outdoor	0
 3799	4291054	[Thanatoph, Eastern Peak]	Stone Valley	Wehnimer's Landing	mapdb	wehnimers-landing-stronghold-and-thanatoph	official layout	live		outdoor	0
-3800	42035	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-3801	42024	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-3802	42018	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-3803	42009	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-3804	42010	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-3805	42001	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-3806	42006	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+3800	42035	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+3801	42024	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+3802	42018	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+3803	42009	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+3804	42010	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+3805	42001	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+3806	42006	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
 3807	3040	[Land Tower East, Office]	Wehnimer's Landing	Wehnimer's Landing	mapdb	Wehnimer's Landing	mapdb location	live		indoor	2
 3808	346004	[Pink Thrak Table]	Wehnimer's Landing	Wehnimer's Landing	inferred	Wehnimer's Landing	mapdb location	live		indoor	0
 3809	4101	[Helga's Tavern, Barroom]	Wehnimer's Landing	Wehnimer's Landing	mapdb	Wehnimer's Landing	mapdb location	live		indoor	2
-3810	388033	[A Dark Cavern]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-3811	388032	[A Dark Cavern]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-3812	388031	[A Dark Cavern]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-3813	388035	[A Dark Cavern]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-3814	388034	[A Dark Cavern]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-3815	388030	[A Dark Cavern]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-3816	388015	[A Dark Cavern]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-3817	388016	[A Deep Mist]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-3818	388019	[A Deep Mist]	Darkstone Castle	Talador	mapdb	Darkstone Castle	mapdb location	live		indoor	0
-3819	388008	[Darkstone, Dark Lair]	Darkstone Castle	Talador	mapdb	Darkstone Castle	mapdb location	live		indoor	0
+3810	388033	[A Dark Cavern]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+3811	388032	[A Dark Cavern]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+3812	388031	[A Dark Cavern]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+3813	388035	[A Dark Cavern]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+3814	388034	[A Dark Cavern]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+3815	388030	[A Dark Cavern]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+3816	388015	[A Dark Cavern]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+3817	388016	[A Deep Mist]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+3818	388019	[A Deep Mist]	Darkstone Castle	Wehnimer's Landing	mapdb	Darkstone Castle	mapdb location	live		indoor	0
+3819	388008	[Darkstone, Dark Lair]	Darkstone Castle	Wehnimer's Landing	mapdb	Darkstone Castle	mapdb location	live		indoor	0
 3820	34301	[Our Colorful Place, Entry]	Icemule Trace	Icemule Trace	mapdb	Icemule Trace	mapdb location	live		indoor	2
 3821	4043230	[White Owl Table]	Icemule Trace	Icemule Trace	mapdb	Icemule Trace	mapdb location	live		indoor	0
 3822	4043228	[Spotted Owl Table]	Icemule Trace	Icemule Trace	mapdb	Icemule Trace	mapdb location	live		indoor	0
@@ -6927,209 +6927,209 @@ room_id	uids	title	location	region	region_src	area	area_src	status	event	sense	d
 6949		[Militia Barracks, Armory]	Wehnimer's Landing	Wehnimer's Landing	inferred			live		indoor	0
 6950		[Militia Barracks, Mess Hall]	Wehnimer's Landing	Wehnimer's Landing	inferred			live		indoor	0
 6951	251001	[Warrior Guild, Entryway]	the Warrior Guild	Wehnimer's Landing	mapdb	wehnimers-landing-town	official layout	live		outdoor	2
-6952	43002	[Forest Path]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-6953	43003	[Forest Path, Clearing]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-6954	43004	[Forest Path]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-6955	43062	[Gorge, Intersection]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-6956	43001	[Forest Path]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-6957	43070	[Forest Path]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
+6952	43002	[Forest Path]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+6953	43003	[Forest Path, Clearing]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+6954	43004	[Forest Path]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+6955	43062	[Gorge, Intersection]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+6956	43001	[Forest Path]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+6957	43070	[Forest Path]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
 6958	386030	[Lower Dragonsclaw, Wooded Hills]	the distant forest	Wehnimer's Landing	inferred	wehnimers-landing-outside-gates	official layout	live		outdoor	1
 6959	386031	[Lower Dragonsclaw, Rocky Trail]	the distant forest	Wehnimer's Landing	inferred	wehnimers-landing-outside-gates	official layout	live		outdoor	0
 6960	386032	[Lower Dragonsclaw, Summit]	the distant forest	Wehnimer's Landing	inferred	wehnimers-landing-outside-gates	official layout	live		outdoor	1
 6961	9069	[Lower Dragonsclaw, Slime Pit]	the Lower Dragonsclaw	Wehnimer's Landing	mapdb	wehnimers-landing-outside-gates	official layout	live		outdoor	1
-6962	43006	[Gorge, North Rim]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-6963	43007	[Gorge, North Rim]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-6964	43008	[Gorge, North Rim]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-6965	43009	[Gorge, North Rim]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
-6966	43010	[Gorge, South Rim]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
-6967	43049	[Gorge, South Rim]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-6968	43050	[Gorge, South Rim]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-6969	43051	[Gorge, South Rim]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-6970	43052	[Gorge, South Rim]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-6971	43053	[Darkstone, Derelict Road]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-6972	43054	[Darkstone, Derelict Road]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-6973	43055	[Darkstone, Derelict Road]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
-6974	43020	[Forest Clearing]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		outdoor	2
-6975	43019	[Cavern]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-6976	43018	[Cavern]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-6977	43021	[Cavern]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-6978	43023	[Cavern]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-6979	43022	[Cavern]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-6980	43017	[Behind the Waterfall]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-6981	43016	[Gorge, Waterfall]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
-6982	43015	[Gorge, Stairway Bottom]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-6983	43014	[Gorge, Stairway Top]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
-6984	43013	[Gorge, North Rim]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
-6985	43011	[Gorge, North Rim]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
-6986	43012	[Gorge, Rock Ledge]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-6987	43056	[Darkstone, Derelict Road]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-6988	43057	[Darkstone, Derelict Road]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-6989	43058	[Darkstone, Derelict Road]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-6990	43059	[Darkstone, Derelict Road]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-6991	43060	[Darkstone, Derelict Road]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-6992	43061	[Darkstone, Plateau]	Darkstone Castle			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-6993	45100	[Darkstone, Plateau]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-6994	45101	[Darkstone, Plateau]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-6995	45102	[Darkstone, Plateau]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-6996	45099	[Darkstone, Siege Tower]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-6997	45103	[Castle Darkstone]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-6998	45104	[Castle Darkstone]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
-6999	45105	[Castle Darkstone]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7000	45106	[Castle Darkstone, Outer Ward]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-7001	45107	[Castle Darkstone, Outer Ward]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-7002	45108	[Castle Darkstone, Outer Ward]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
-7003	45109	[Castle Darkstone, Outer Ward]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-7004	45110	[Castle Darkstone, Outer Ward]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-7005	45111	[Castle Darkstone, Outer Ward]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-7006	45112	[Castle Darkstone, Outer Ward]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-7007	45113	[Castle Darkstone, Outer Ward]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
-7008	45114	[Castle Darkstone, Outer Ward]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-7009	45140	[Castle Darkstone, Guardtower]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7010	45160	[Castle Darkstone, Guardtower]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
-7011	45161	[Castle Darkstone, Parapet]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-7012	45162	[Castle Darkstone, Parapet]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-7013	45163	[Castle Darkstone, Parapet]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-7014	45139	[Castle Darkstone, Guardtower]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7015	45158	[Castle Darkstone, Guardtower]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
-7016	45159	[Castle Darkstone, Parapet]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-7017	45157	[Castle Darkstone, Parapet]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-7018	45156	[Castle Darkstone, Gatehouse]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
-7019	45155	[Castle Darkstone, Gatehouse]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
-7020	45154	[Castle Darkstone, Parapet]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-7021	45153	[Castle Darkstone, Parapet]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-7022	45152	[Castle Darkstone, Guardtower]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
-7023	45151	[Castle Darkstone, Parapet]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-7024	45150	[Castle Darkstone, Parapet]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-7025	45115	[Castle Darkstone, Outer Ward]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
-7026	45116	[Castle Darkstone, Outer Ward]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-7027	45117	[Castle Darkstone, Outer Ward]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
-7028	45138	[Castle Darkstone, Guardtower]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7029	45119	[Castle Darkstone, Outer Ward]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-7030	45118	[Castle Darkstone, Outer Ward]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-7031	45120	[Castle Darkstone, Gatehouse]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
-7032	45121	[Castle Darkstone, Gatehouse]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
-7033	45122	[Castle Darkstone, Inner Keep]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	2
-7034	45123	[Castle Darkstone, Inner Keep]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	2
-7035	45133	[Castle Darkstone, Tower]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7036	45134	[Shrine of the Jackal]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7037	45128	[Castle Darkstone, Great Hall]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7038	45127	[Castle Darkstone, Great Hall]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7039	45124	[Castle Darkstone, Inner Keep]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	2
-7040	45125	[Castle Darkstone, Inner Keep]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
-7041	45136	[Castle Darkstone, Crypt]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7042	45126	[Castle Darkstone, Stables]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7043	45129	[Castle Darkstone, Tower]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7044	45130	[Castle Darkstone, Tower]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7045	45131	[Torture Chamber]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	3
-7046	45132	[Iron Maiden]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7047	42506	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7048	42507	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7049	42508	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7050	42509	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7051	42510	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7052	42511	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7053	42520	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7054	42519	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7055	42518	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7056	42517	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7057	42521	[Darkstone, Tunnel]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7058	42605	[Darkstone, Tunnel]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7059	42516	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7060	42515	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7061	42513	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7062	42514	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7063	42500	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7064	42501	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7065	42502	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7066	42503	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7067	42504	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7068	42505	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7069	42512	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7070	42600	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7071	44014	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
-7072	44046	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7073	44047	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7074	44048	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7075	44049	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7076	44050	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7077	44051	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7078	44013	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7079	44015	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7080	44016	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
-7081	44017	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7082	44018	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7083	44019	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7084	44020	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7085	44021	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
-7086	44022	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7087	44023	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7088	44024	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7089	44025	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7090	44026	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7091	44029	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7092	44030	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7093	44031	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7094	44032	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7095	44027	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
-7096	44028	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7097	44036	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7098	44035	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7099	44034	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7100	44037	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
-7101	44038	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7102	44039	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7103	44040	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7104	44033	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7105	44041	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7106	44042	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7107	44043	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7108	44044	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7109	44045	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7110	44001	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
-7111	44002	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
-7112	44003	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
-7113	44004	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7114	44005	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7115	44006	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7116	44011	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7117	44010	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7118	44007	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7119	44008	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7120	41049	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
-7121	41048	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
-7122	41050	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7123	41047	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7124	41045	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7125	41044	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7126	41043	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7127	41042	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7128	41036	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7129	41037	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7130	41035	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7131	41034	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7132	41038	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7133	41039	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7134	41040	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7135	41041	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7136	41046	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
-7137	41021	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
-7138	41022	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7139	41020	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7140	41029	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7141	41019	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7142	41028	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7143	41027	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7144	41024	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7145	41023	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7146	41025	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7147	41004,41009,41014	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7148	41002,41007,41012	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7149	41003,41008,41013,41017	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7150	41006,41011,41016	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7151	41005,41010,41015,41018	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-7152	44012	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7153	44009	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-7154	45135	[Castle Darkstone, Tower's Top]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+6962	43006	[Gorge, North Rim]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+6963	43007	[Gorge, North Rim]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+6964	43008	[Gorge, North Rim]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+6965	43009	[Gorge, North Rim]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
+6966	43010	[Gorge, South Rim]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
+6967	43049	[Gorge, South Rim]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+6968	43050	[Gorge, South Rim]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+6969	43051	[Gorge, South Rim]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+6970	43052	[Gorge, South Rim]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+6971	43053	[Darkstone, Derelict Road]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+6972	43054	[Darkstone, Derelict Road]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+6973	43055	[Darkstone, Derelict Road]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
+6974	43020	[Forest Clearing]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	2
+6975	43019	[Cavern]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+6976	43018	[Cavern]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+6977	43021	[Cavern]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+6978	43023	[Cavern]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+6979	43022	[Cavern]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+6980	43017	[Behind the Waterfall]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+6981	43016	[Gorge, Waterfall]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
+6982	43015	[Gorge, Stairway Bottom]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+6983	43014	[Gorge, Stairway Top]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
+6984	43013	[Gorge, North Rim]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
+6985	43011	[Gorge, North Rim]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
+6986	43012	[Gorge, Rock Ledge]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+6987	43056	[Darkstone, Derelict Road]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+6988	43057	[Darkstone, Derelict Road]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+6989	43058	[Darkstone, Derelict Road]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+6990	43059	[Darkstone, Derelict Road]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+6991	43060	[Darkstone, Derelict Road]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+6992	43061	[Darkstone, Plateau]	Darkstone Castle	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+6993	45100	[Darkstone, Plateau]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+6994	45101	[Darkstone, Plateau]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+6995	45102	[Darkstone, Plateau]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+6996	45099	[Darkstone, Siege Tower]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+6997	45103	[Castle Darkstone]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+6998	45104	[Castle Darkstone]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
+6999	45105	[Castle Darkstone]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7000	45106	[Castle Darkstone, Outer Ward]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+7001	45107	[Castle Darkstone, Outer Ward]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+7002	45108	[Castle Darkstone, Outer Ward]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
+7003	45109	[Castle Darkstone, Outer Ward]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+7004	45110	[Castle Darkstone, Outer Ward]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+7005	45111	[Castle Darkstone, Outer Ward]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+7006	45112	[Castle Darkstone, Outer Ward]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+7007	45113	[Castle Darkstone, Outer Ward]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
+7008	45114	[Castle Darkstone, Outer Ward]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+7009	45140	[Castle Darkstone, Guardtower]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7010	45160	[Castle Darkstone, Guardtower]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
+7011	45161	[Castle Darkstone, Parapet]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+7012	45162	[Castle Darkstone, Parapet]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+7013	45163	[Castle Darkstone, Parapet]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+7014	45139	[Castle Darkstone, Guardtower]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7015	45158	[Castle Darkstone, Guardtower]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
+7016	45159	[Castle Darkstone, Parapet]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+7017	45157	[Castle Darkstone, Parapet]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+7018	45156	[Castle Darkstone, Gatehouse]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
+7019	45155	[Castle Darkstone, Gatehouse]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
+7020	45154	[Castle Darkstone, Parapet]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+7021	45153	[Castle Darkstone, Parapet]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+7022	45152	[Castle Darkstone, Guardtower]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
+7023	45151	[Castle Darkstone, Parapet]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+7024	45150	[Castle Darkstone, Parapet]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+7025	45115	[Castle Darkstone, Outer Ward]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
+7026	45116	[Castle Darkstone, Outer Ward]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+7027	45117	[Castle Darkstone, Outer Ward]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
+7028	45138	[Castle Darkstone, Guardtower]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7029	45119	[Castle Darkstone, Outer Ward]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+7030	45118	[Castle Darkstone, Outer Ward]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+7031	45120	[Castle Darkstone, Gatehouse]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
+7032	45121	[Castle Darkstone, Gatehouse]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
+7033	45122	[Castle Darkstone, Inner Keep]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	2
+7034	45123	[Castle Darkstone, Inner Keep]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	2
+7035	45133	[Castle Darkstone, Tower]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7036	45134	[Shrine of the Jackal]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7037	45128	[Castle Darkstone, Great Hall]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7038	45127	[Castle Darkstone, Great Hall]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7039	45124	[Castle Darkstone, Inner Keep]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	2
+7040	45125	[Castle Darkstone, Inner Keep]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
+7041	45136	[Castle Darkstone, Crypt]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7042	45126	[Castle Darkstone, Stables]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7043	45129	[Castle Darkstone, Tower]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7044	45130	[Castle Darkstone, Tower]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7045	45131	[Torture Chamber]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	3
+7046	45132	[Iron Maiden]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7047	42506	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7048	42507	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7049	42508	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7050	42509	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7051	42510	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7052	42511	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7053	42520	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7054	42519	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7055	42518	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7056	42517	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7057	42521	[Darkstone, Tunnel]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7058	42605	[Darkstone, Tunnel]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7059	42516	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7060	42515	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7061	42513	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7062	42514	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7063	42500	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7064	42501	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7065	42502	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7066	42503	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7067	42504	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7068	42505	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7069	42512	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7070	42600	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7071	44014	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
+7072	44046	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7073	44047	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7074	44048	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7075	44049	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7076	44050	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7077	44051	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7078	44013	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7079	44015	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7080	44016	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
+7081	44017	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7082	44018	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7083	44019	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7084	44020	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7085	44021	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
+7086	44022	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7087	44023	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7088	44024	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7089	44025	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7090	44026	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7091	44029	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7092	44030	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7093	44031	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7094	44032	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7095	44027	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
+7096	44028	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7097	44036	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7098	44035	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7099	44034	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7100	44037	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
+7101	44038	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7102	44039	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7103	44040	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7104	44033	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7105	44041	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7106	44042	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7107	44043	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7108	44044	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7109	44045	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7110	44001	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
+7111	44002	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
+7112	44003	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
+7113	44004	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7114	44005	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7115	44006	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7116	44011	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7117	44010	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7118	44007	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7119	44008	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7120	41049	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
+7121	41048	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
+7122	41050	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7123	41047	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7124	41045	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7125	41044	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7126	41043	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7127	41042	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7128	41036	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7129	41037	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7130	41035	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7131	41034	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7132	41038	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7133	41039	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7134	41040	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7135	41041	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7136	41046	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
+7137	41021	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	2
+7138	41022	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7139	41020	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7140	41029	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7141	41019	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7142	41028	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7143	41027	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7144	41024	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7145	41023	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7146	41025	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7147	41004,41009,41014	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7148	41002,41007,41012	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7149	41003,41008,41013,41017	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7150	41006,41011,41016	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7151	41005,41010,41015,41018	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+7152	44012	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7153	44009	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+7154	45135	[Castle Darkstone, Tower's Top]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
 7155	4549154	[Upper Trollfang, Path]	Kestrel's Perch, outside the frontier town of Wehnimer's Landing	Wehnimer's Landing	mapdb	wehnimers-landing-sentoph	official layout	live		outdoor	1
 7156	15016	[Upper Trollfang]	the Upper Trollfang	Wehnimer's Landing	mapdb	wehnimers-landing-sentoph	official layout	live		outdoor	0
 7157	15017	[Upper Trollfang]	the Upper Trollfang	Wehnimer's Landing	mapdb	wehnimers-landing-sentoph	official layout	live		outdoor	1
@@ -17220,7 +17220,7 @@ room_id	uids	title	location	region	region_src	area	area_src	status	event	sense	d
 17373	109603	[White Table]	Wehnimer's Landing	Wehnimer's Landing	inferred	Wehnimer's Landing	mapdb location	live		indoor	0
 17374	109604	[Black Table]	Wehnimer's Landing	Wehnimer's Landing	inferred	Wehnimer's Landing	mapdb location	live		indoor	0
 17375	346012	[Skinny Thrak Table]	Wehnimer's Landing	Wehnimer's Landing	inferred	Wehnimer's Landing	mapdb location	live		indoor	0
-17376	45137	[Castle Darkstone, Tower]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
+17376	45137	[Castle Darkstone, Tower]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
 17377	13002100	[Khazar's Hold, Trading Post]	Khazar's Hold	Transport routes	mapdb	Khazar's Hold	mapdb location	live		indoor	1
 17378	4740067	[Girvahk's Shop, Upstairs Hall]	the free port of Solhaven	Solhaven / Vornavis	mapdb	the free port of Solhaven	mapdb location	live		indoor	1
 17379	34204	[Midrian's Dyes, Purple Stall]	Solhaven	Solhaven / Vornavis	mapdb	Solhaven	mapdb location	live		outdoor	1
@@ -21359,9 +21359,9 @@ room_id	uids	title	location	region	region_src	area	area_src	status	event	sense	d
 22226	3215140	[Annex, Booth]	Mist Harbor	Mist Harbor / Four Winds Isle	mapdb	Mist Harbor	mapdb location	live		indoor	1
 22227	3215139	[Annex, Cairnfang Manor Lobby]	Mist Harbor	Mist Harbor / Four Winds Isle	mapdb	Mist Harbor	mapdb location	live		indoor	2
 22228	3215008	[Atrium, Kitchen]	Mist Harbor	Mist Harbor / Four Winds Isle	mapdb	Mist Harbor	mapdb location	live		indoor	0
-22229	43063	[Pool]				wehnimers-landing-darkstone-castle	official layout	live			1
-22230	388017	[A Deep Mist]	Darkstone Castle	Talador	mapdb	Darkstone Castle	mapdb location	live		indoor	0
-22231	388018	[A Deep Mist]	Darkstone Castle	Talador	mapdb	Darkstone Castle	mapdb location	live		indoor	0
+22229	43063	[Pool]		Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live			1
+22230	388017	[A Deep Mist]	Darkstone Castle	Wehnimer's Landing	mapdb	Darkstone Castle	mapdb location	live		indoor	0
+22231	388018	[A Deep Mist]	Darkstone Castle	Wehnimer's Landing	mapdb	Darkstone Castle	mapdb location	live		indoor	0
 22232		[Drafix's Magic Shoppe]	Icemule Trace	Icemule Trace	inferred	Icemule Trace	mapdb location	live		indoor	1
 22233		[Drafix's Magic Shoppe]	Icemule Trace	Icemule Trace	inferred	Icemule Trace	mapdb location	live		indoor	0
 22234		[Drafix's Weaponry]	Icemule Trace	Icemule Trace	inferred	Icemule Trace	mapdb location	live		indoor	0
@@ -22183,7 +22183,7 @@ room_id	uids	title	location	region	region_src	area	area_src	status	event	sense	d
 23705		[Tapped Out]	Mist Harbor	Mist Harbor / Four Winds Isle	inferred	Mist Harbor	mapdb location	live		indoor	2
 23706		[Tapped Out, Alcove]	Mist Harbor	Mist Harbor / Four Winds Isle	inferred	Mist Harbor	mapdb location	live		indoor	1
 23707		[Sew Lovely]	Mist Harbor	Mist Harbor / Four Winds Isle	inferred			live		indoor	1
-23708	41001	[Darkstone, Dungeon]	Darkstone Castle	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+23708	41001	[Darkstone, Dungeon]	Darkstone Castle	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
 23709	336321	[Hendoran Outpost, Entry Way]	the town of Wehnimer's Landing	Wehnimer's Landing	mapdb	the town of Wehnimer's Landing	mapdb location	live		outdoor	2
 23710	336322	[Outpost, Outer Courtyard]	the town of Wehnimer's Landing	Wehnimer's Landing	mapdb	the town of Wehnimer's Landing	mapdb location	live		outdoor	2
 23711	336324	[Outpost, Outer Courtyard]	the town of Wehnimer's Landing	Wehnimer's Landing	mapdb	the town of Wehnimer's Landing	mapdb location	live		outdoor	1
@@ -31580,40 +31580,40 @@ room_id	uids	title	location	region	region_src	area	area_src	status	event	sense	d
 34486	8209445	[Merited Metalworks]	Rumor Woods	Events	mapdb			closed	rumor-woods	indoor	1
 34487	8209446	[Merited Metalworks, Tools]	Rumor Woods	Events	mapdb			closed	rumor-woods	indoor	0
 34488	12021100	[Zul Logoth, Crystalline Stables]	Zul Logoth	Zul Logoth / Kharag 'doth Dzulthu	mapdb	Zul Logoth	mapdb location	live		outdoor	1
-34489	474211	[Bleaklands, Storm Plains]	Bleaklands			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-34490	474212	[Bleaklands, Storm Plains]	Bleaklands			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-34491	474213	[Bleaklands, Storm Plains]	Bleaklands			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-34492	474214	[Bleaklands, Storm Plains]	Bleaklands			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-34493	474215	[Bleaklands, Storm Plains]	Bleaklands			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-34494	474218	[Bleaklands, Storm Plains]	Bleaklands			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-34495	474219	[Bleaklands, Storm Plains]	Bleaklands			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-34496	474220	[Bleaklands, Storm Plains]	Bleaklands			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-34497	474221	[Bleaklands, Storm Plains]	Bleaklands			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-34498	474222	[Bleaklands, Storm Plains]	Bleaklands			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-34499	474224	[Bleaklands, Storm Plains]	Bleaklands			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-34500	474225	[Bleaklands, Storm Plains]	Bleaklands			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-34501	474226	[Bleaklands, Storm Plains]	Bleaklands			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-34502	474227	[Bleaklands, Storm Plains]	Bleaklands			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-34503	474228	[Bleaklands, Storm Plains]	Bleaklands			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-34504	474229	[Bleaklands, Storm Plains]	Bleaklands			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-34505	474200	[Bleaklands, Storm Plains]	Bleaklands			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-34506	474201	[Bleaklands, Storm Plains]	Bleaklands			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-34507	474202	[Bleaklands, Storm Plains]	Bleaklands			wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
-34508	474203	[Bleaklands, Storm Plains]	Bleaklands			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-34509	474204	[Bleaklands, Storm Plains]	Bleaklands			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-34510	474205	[Bleaklands, Storm Plains]	Bleaklands			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-34511	474206	[Bleaklands, Storm Plains]	Bleaklands			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-34512	474207	[Bleaklands, Storm Plains]	Bleaklands			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-34513	474208	[Bleaklands, Storm Plains]	Bleaklands			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-34514	474209	[Bleaklands, Storm Plains]	Bleaklands			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-34515	474210	[Bleaklands, Storm Plains]	Bleaklands			wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-34516	474216	[Bleaklands, Storm Plains]	Bleaklands	Talador	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
-34517	474230	[Bleaklands, Nightmare Cavern]	Bleaklands			wehnimers-landing-darkstone-castle	official layout	live		indoor	1
-34518	474231	[Bleaklands, Nightmare Cavern]	Bleaklands			wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-34519	474234	[Bleaklands, Nightmare Cavern]	Bleaklands			wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-34520	474235	[Bleaklands, Nightmare Cavern]	Bleaklands			wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-34521	474236	[Shrine of Nightmares]	Bleaklands			wehnimers-landing-darkstone-castle	official layout	live		indoor	0
-34522	474232	[Bleaklands, Nightmare Cavern]	Bleaklands			wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+34489	474211	[Bleaklands, Storm Plains]	Bleaklands	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+34490	474212	[Bleaklands, Storm Plains]	Bleaklands	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+34491	474213	[Bleaklands, Storm Plains]	Bleaklands	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+34492	474214	[Bleaklands, Storm Plains]	Bleaklands	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+34493	474215	[Bleaklands, Storm Plains]	Bleaklands	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+34494	474218	[Bleaklands, Storm Plains]	Bleaklands	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+34495	474219	[Bleaklands, Storm Plains]	Bleaklands	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+34496	474220	[Bleaklands, Storm Plains]	Bleaklands	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+34497	474221	[Bleaklands, Storm Plains]	Bleaklands	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+34498	474222	[Bleaklands, Storm Plains]	Bleaklands	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+34499	474224	[Bleaklands, Storm Plains]	Bleaklands	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+34500	474225	[Bleaklands, Storm Plains]	Bleaklands	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+34501	474226	[Bleaklands, Storm Plains]	Bleaklands	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+34502	474227	[Bleaklands, Storm Plains]	Bleaklands	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+34503	474228	[Bleaklands, Storm Plains]	Bleaklands	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+34504	474229	[Bleaklands, Storm Plains]	Bleaklands	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+34505	474200	[Bleaklands, Storm Plains]	Bleaklands	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+34506	474201	[Bleaklands, Storm Plains]	Bleaklands	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+34507	474202	[Bleaklands, Storm Plains]	Bleaklands	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	1
+34508	474203	[Bleaklands, Storm Plains]	Bleaklands	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+34509	474204	[Bleaklands, Storm Plains]	Bleaklands	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+34510	474205	[Bleaklands, Storm Plains]	Bleaklands	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+34511	474206	[Bleaklands, Storm Plains]	Bleaklands	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+34512	474207	[Bleaklands, Storm Plains]	Bleaklands	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+34513	474208	[Bleaklands, Storm Plains]	Bleaklands	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+34514	474209	[Bleaklands, Storm Plains]	Bleaklands	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+34515	474210	[Bleaklands, Storm Plains]	Bleaklands	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+34516	474216	[Bleaklands, Storm Plains]	Bleaklands	Wehnimer's Landing	mapdb	wehnimers-landing-darkstone-castle	official layout	live		outdoor	0
+34517	474230	[Bleaklands, Nightmare Cavern]	Bleaklands	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		indoor	1
+34518	474231	[Bleaklands, Nightmare Cavern]	Bleaklands	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+34519	474234	[Bleaklands, Nightmare Cavern]	Bleaklands	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+34520	474235	[Bleaklands, Nightmare Cavern]	Bleaklands	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+34521	474236	[Shrine of Nightmares]	Bleaklands	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
+34522	474232	[Bleaklands, Nightmare Cavern]	Bleaklands	Wehnimer's Landing	inferred	wehnimers-landing-darkstone-castle	official layout	live		indoor	0
 34523	633362	[Penelopia's Outfitting]	Wehnimer's Landing	Wehnimer's Landing	inferred	Wehnimer's Landing	mapdb location	live		indoor	0
 34524	633361	[Penelopia's General Store]	Wehnimer's Landing	Wehnimer's Landing	inferred	Wehnimer's Landing	mapdb location	live		indoor	1
 34525	633363	[Penelopia's Outfitting]	Wehnimer's Landing	Wehnimer's Landing	inferred	Wehnimer's Landing	mapdb location	live		indoor	0

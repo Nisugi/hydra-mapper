@@ -197,6 +197,26 @@ Separate from `Instanced` because the distinction is real: a road between Solhav
 # than structural, it is stated.
 
 [[fold]]
+region = "Talador"
+into = "Wehnimer's Landing"
+note = """223 rooms, and every one of them is Castle Darkstone rather than the barony.
+
+The label is stale. `status.toml` establishes that Talador was destroyed in 5116 and marks the city, its mines and Doggoroth Keep `gone` -- but it scopes those rules by TITLE, because `location = "Talador"` also covers three live wildernesses. What is left carrying `region:Talador` is a different set again: rooms whose `location` is `Darkstone Castle`, filed by the mapdb under the barony that used to hold it.
+
+They are alive by every test that settled the others:
+
+  219 of 223 are reachable on foot from Wehnimer's Landing
+  223 of 223 have a uid -- against Talador's dead 438, of which NOT ONE
+      had a uid, the signal the curation calls "the game agreeing these
+      are not rooms any more"
+  218 of 223 are in `wehnimers-landing-darkstone-castle`, Simutronics'
+      own layout area, filed under Wehnimer's Landing
+
+Their titles say it too: [Castle Darkstone], [Torture Chamber], [Shrine of the Jackal]. It is a Landing dungeon.
+
+This fold says nothing about the barony. The barony is gone and its rooms were deleted or marked; this is about the label they left behind on a place that outlived them."""
+
+[[fold]]
 region = "Shadow Valley"
 into = "Wehnimer's Landing"
 note = """136 rooms with exactly four walkable edges to anywhere else, and they settle it.
