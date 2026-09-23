@@ -61,13 +61,8 @@ pub struct Hit {
     /// Ctrl was held on that click: pick this ONE room rather than
     /// inspecting it.
     pub ctrl: bool,
-    /// Shift was held on that click: pick the room's whole group.
-    pub shift: bool,
-    /// A Ctrl-drag box just closed: every square inside it, to pick.
-    ///
-    /// Squares only -- rooms in focus. A dot is a room of some other
-    /// building drawn out of focus, and sweeping a box across a street
-    /// should not quietly take the doorway of every shop along it.
+    /// A Ctrl-drag box just closed: every room drawn inside it, to pick --
+    /// dots included, the same rooms a click can hit.
     pub boxed: Vec<RoomId>,
     /// In edit mode: the room a drag just started on, and whether Alt was
     /// held (move one room rather than its whole group).
@@ -173,7 +168,6 @@ pub fn scene(
     let mut hit = Hit {
         clicked: response.clicked().then_some(hovered).flatten(),
         ctrl: ui.input(|i| i.modifiers.command),
-        shift: ui.input(|i| i.modifiers.shift),
         ..Hit::default()
     };
     let box_rect = box_origin.and_then(|origin| {

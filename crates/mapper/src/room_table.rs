@@ -13,29 +13,29 @@ use std::fmt::Write as _;
 
 use cena_map::Map;
 
-use crate::overrides::{MapOverrides, RoomKey};
+use crate::overrides::{Baseline, MapOverrides, RoomKey};
 
 const HEADER: &str = "room_id\tuid\ttitle\tlocation\tarea\tarea_key\tregion\tregion_src\tstatus";
 
 /// The table, header first, in map order.
 ///
-/// - `area` is the curated area the store puts the room in (its display
-///   name; `area_key` is the store's key for it).
+/// - `area` is the room's curated area -- the store's word where it has
+///   one, else the one baked into the map -- by name; `area_key` is its
+///   key.
 /// - `region` is a person's assignment when the store has one
 ///   (`region_src` = `assigned`), else the map's `meta region:`
 ///   (`mapdb`, or `inferred` where `retag` spread it into unregioned
 ///   ground).
 /// - `status` is `live`, or the map's verdict: `gone`, `closed`, `virtual`.
 #[must_use]
-pub fn areas_tsv(map: &Map, store: &MapOverrides) -> String {
+pub fn areas_tsv(map: &Map, store: &MapOverrides, baseline: &Baseline) -> String {
     let mut out = String::from(HEADER);
     out.push('\n');
     for room in map.rooms() {
         let key = RoomKey::of(room.id, map);
         let (area, area_key) = store
-            .area_moves
-            .get(&key)
-            .map_or(("", ""), |k| (store.area_name(k), k.as_str()));
+            .area_of(key, baseline)
+            .map_or(("", ""), |k| (store.area_title(k, baseline), k));
         let meta = |prefix: &str| room.meta.iter().find_map(|m| m.strip_prefix(prefix));
         let (region, region_src) = match store.region_of(key) {
             Some(region) => (region, "assigned"),
@@ -77,11 +77,16 @@ fn clean(field: &str) -> String {
 /// `curation/assignments.toml`: every curated area with its rooms, and
 /// every region a person assigned, for `retag` to bake into the map.
 ///
+/// **The whole curation, not the store alone.** A room's area is what the
+/// map carries, overridden by the store: so the file stays complete from
+/// a store holding only the latest edits, and a room taken out of its area
+/// is left out of every block, which is what makes `retag` drop it.
+///
 /// The whole file, every time, in a stable order -- areas by key, rooms
 /// by uid then id -- so a re-export that changes nothing changes no line,
 /// and a diff shows exactly the rooms that moved.
 #[must_use]
-pub fn assignments_toml(store: &MapOverrides) -> String {
+pub fn assignments_toml(map: &Map, store: &MapOverrides, baseline: &Baseline) -> String {
     use std::collections::BTreeMap;
 
     const PREAMBLE: &str = "\
@@ -125,14 +130,21 @@ pub fn assignments_toml(store: &MapOverrides) -> String {
     };
 
     let mut by_area: BTreeMap<&str, Vec<RoomKey>> = BTreeMap::new();
-    for (key, area) in &store.area_moves {
-        by_area.entry(area.as_str()).or_default().push(*key);
+    let mut seen: std::collections::HashSet<RoomKey> = std::collections::HashSet::new();
+    for room in map.rooms() {
+        let key = RoomKey::of(room.id, map);
+        if !seen.insert(key) {
+            continue;
+        }
+        if let Some(area) = store.area_of(key, baseline) {
+            by_area.entry(area).or_default().push(key);
+        }
     }
     for (area, keys) in &mut by_area {
         let (uids, ids) = split(keys);
         let _ = writeln!(out, "[[area]]");
         let _ = writeln!(out, "key = {area:?}");
-        let _ = writeln!(out, "name = {:?}", store.area_name(area));
+        let _ = writeln!(out, "name = {:?}", store.area_title(area, baseline));
         let _ = writeln!(out, "# {} rooms", keys.len());
         list(
             &mut out,
@@ -219,7 +231,7 @@ mod tests {
         );
         store.set_region(RoomKey::Uid(104), Some("Wehnimer's Landing"));
 
-        let tsv = areas_tsv(&map, &store);
+        let tsv = areas_tsv(&map, &store, &Baseline::of(&map));
         let rows: Vec<Vec<&str>> = tsv.lines().map(|l| l.split('\t').collect()).collect();
         assert_eq!(rows[0].join("\t"), HEADER);
         assert_eq!(rows.len(), 5, "one row per room, gone ones too");
