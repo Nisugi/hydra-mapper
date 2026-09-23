@@ -182,10 +182,14 @@ pub fn scene(
     });
     if box_origin.is_some() && response.drag_stopped() {
         if let Some(rect) = box_rect {
+            // Everything drawn is boxable -- dots too, the same rooms a
+            // click can hit -- so a building's rooms can be picked without
+            // entering it. (It took only the rooms in focus, which from the
+            // streets is no interior at all.)
             hit.boxed = sheet
                 .rooms
                 .iter()
-                .filter(|r| focus.has(r.id))
+                .filter(|r| focus.shows(r.id, interiors))
                 .filter(|r| rect.contains(camera.to_screen(r.cell, canvas)))
                 .map(|r| r.id)
                 .collect();
