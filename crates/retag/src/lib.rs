@@ -169,7 +169,7 @@ fn tag_regions(plan: &mut Plan, rooms: &[Room], curation: &Curation) {
                 });
             }
         }
-        if room.meta.iter().any(|m| *m == meta) {
+        if room.meta.contains(&meta) {
             continue;
         }
         plan.changes.push(Change::AddMeta {
@@ -230,7 +230,7 @@ fn fold_of(curation: &Curation, name: &str) -> String {
             .decisions
             .regions
             .iter()
-            .find(|r| r.members.iter().any(|m| *m == current))
+            .find(|r| r.members.contains(&current))
         {
             current = r.name.clone();
             continue;
@@ -290,10 +290,8 @@ fn spread_regions(plan: &mut Plan, rooms: &[Room], curation: &Curation) {
                     region.insert(*id, name.to_owned());
                 }
             }
-            Change::DropMeta { id, meta } => {
-                if meta.starts_with("region:") {
-                    region.remove(id);
-                }
+            Change::DropMeta { id, meta } if meta.starts_with("region:") => {
+                region.remove(id);
             }
             _ => {}
         }

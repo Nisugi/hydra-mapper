@@ -803,22 +803,3 @@ fn region_fills(plan: &Plan) -> std::collections::BTreeMap<u32, String> {
         })
         .collect()
 }
-
-/// Follow a fold chain to the region it ends in: `The Rift` ->
-/// `Pinefar / Aenatumgana` -> `Icemule Trace`. A uid listed under any
-/// name along the way agrees with the region finally written.
-fn resolve_fold(curation: &Curation, name: &str) -> String {
-    let mut current = name.to_owned();
-    for _ in 0..8 {
-        match curation
-            .decisions
-            .folds
-            .iter()
-            .find(|f| f.region == current)
-        {
-            Some(f) => current = f.into.clone(),
-            None => break,
-        }
-    }
-    current
-}

@@ -198,6 +198,24 @@ pub struct MapperApp {
     new_area: String,
     /// Regions whose areas are folded away in the Region tree.
     collapsed: BTreeSet<String>,
+    /// Rooms picked out to be assigned together.
+    ///
+    /// **Rooms, not groups.** It was groups first, and that was wrong: a
+    /// "group" is the solver's connected component, which on a town sheet
+    /// is every outdoor room drawn -- 246 of them on Mist Harbor. Picking
+    /// fifteen of those was impossible; Ctrl-click took all 246 or none.
+    /// So the unit is the room, and three gestures pick different amounts:
+    ///
+    ///   Ctrl-click   one room
+    ///   Shift-click  the room's whole group -- right for the hundred-odd
+    ///                two- and three-room groups that each want putting
+    ///                somewhere
+    ///   Ctrl-drag    every square inside the box
+    ///
+    /// Kept to the rooms of the shown sheet: a new area empties it, and a
+    /// room an edit takes off this sheet (a plate move) drops out, so
+    /// nothing off screen is assigned by a panel describing what is on it.
+    picked_rooms: BTreeSet<RoomId>,
     /// A room to inspect once its area is on screen, from a room-number
     /// search. Applied after `show_selected`, which clears the selection.
     pending_inspect: Option<RoomId>,
@@ -307,6 +325,7 @@ impl MapperApp {
             new_plate: String::new(),
             new_area: String::new(),
             collapsed,
+            picked_rooms: BTreeSet::new(),
             pending_inspect: None,
             trail: Vec::new(),
             export_note: None,
@@ -363,13 +382,15 @@ impl MapperApp {
     }
 
     /// The bar above everything: the export button, and whatever the
-    /// corrections as a whole have to say. Returns whether to export.
-    fn corrections_bar(&mut self, ui: &mut egui::Ui, can_edit: bool) -> bool {
+    /// corrections as a whole have to say. Returns which export was
+    /// asked for: the combiner submission, or the region assignments.
+    fn corrections_bar(&mut self, ui: &mut egui::Ui, can_edit: bool) -> (bool, bool) {
         // A store that will not load or save is said once, at the top,
         // because it means corrections are not being kept. The export
         // note shares the bar: both are about the corrections as a whole,
         // not about whatever area is on screen.
         let mut export_now = false;
+        let mut export_regions_now = false;
         if self.store_problem.is_some() || self.export_note.is_some() || can_edit {
             egui::Panel::top("corrections").show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
@@ -380,6 +401,18 @@ impl MapperApp {
                         .button("Export for combiner")
                         .on_hover_text(
                             "Write the corrections as a dirto patch the combiner                                  can merge into the map",
+                        )
+                        .clicked();
+                    // Separate button because it is a separate artefact
+                    // for a separate reader: the combiner takes layout
+                    // corrections, `retag` takes facts about places.
+                    export_regions_now = ui
+                        .add_enabled(
+                            !self.store.region_moves.is_empty(),
+                            egui::Button::new("Export regions"),
+                        )
+                        .on_hover_text(
+                            "Write the region assignments as [[assign]] blocks                              to paste into curation/regions.toml",
                         )
                         .clicked();
                 });
@@ -411,7 +444,7 @@ impl MapperApp {
             });
         });
         }
-        export_now
+        (export_now, export_regions_now)
     }
 
     /// Draw every ticked area, and every plate hanging off one, as SVG
@@ -880,6 +913,10 @@ impl MapperApp {
             // area just left would be worse than no button.
             self.inspected = None;
             self.trail.clear();
+            // Nor does a picked set: a region and an official area share
+            // rooms, and a selection made on one would otherwise follow
+            // into the other half-visible.
+            self.picked_rooms.clear();
         } else if self
             .inspected
             .is_some_and(|id| scene.room(id).is_none() && subset.room(id).is_none())
@@ -892,6 +929,9 @@ impl MapperApp {
             // the case the trail exists for.
             self.inspected = self.trail.pop();
         }
+        // The picked rooms survive a re-solve of the same area -- ids do
+        // not move -- but not onto a sheet that does not draw them.
+        self.picked_rooms.retain(|&id| scene.room(id).is_some());
         self.shown = Some(Shown {
             name,
             focus,
@@ -920,6 +960,99 @@ impl MapperApp {
             return;
         }
         self.inspected = (self.inspected != Some(id)).then_some(id);
+    }
+
+    /// The selection as the panel needs it: how many rooms, and every key
+    /// to assign.
+    fn picked(&self) -> (usize, Vec<RoomKey>) {
+        let keys: Vec<RoomKey> = self.map.as_ref().ok().map_or_else(Vec::new, |whole| {
+            let mut keys: Vec<RoomKey> = self
+                .picked_rooms
+                .iter()
+                .map(|&id| RoomKey::of(id, whole))
+                .collect();
+            keys.sort_unstable();
+            keys.dedup();
+            keys
+        });
+        (self.picked_rooms.len(), keys)
+    }
+
+    /// What a click or a box on the canvas does: inspect, or pick.
+    fn pointer(&mut self, hit: &draw::Hit) {
+        if let Some(id) = hit.clicked {
+            if hit.shift {
+                self.toggle_group(id);
+            } else if hit.ctrl {
+                self.toggle_room(id);
+            } else {
+                self.clicked(id);
+            }
+        }
+        // A box ADDS: sweeping a second box over part of the first should
+        // grow the selection, not punch holes in it. Ctrl-click is there
+        // for taking single rooms back out.
+        if let Some(&first) = hit.boxed.first() {
+            self.seed_with_inspected(first);
+            self.picked_rooms.extend(hit.boxed.iter().copied());
+        }
+    }
+
+    /// The room already clicked joins a selection being started.
+    ///
+    /// Click one room, Ctrl-click a second: two rooms are picked, which is
+    /// what everyone expects of Ctrl-click and what the first version did
+    /// not do -- the plain click inspected a room and the Ctrl-click then
+    /// started a selection without it.
+    fn seed_with_inspected(&mut self, clicked: RoomId) {
+        if self.picked_rooms.is_empty()
+            && let Some(first) = self.inspected
+            && first != clicked
+            && self
+                .shown
+                .as_ref()
+                .is_some_and(|s| s.scene.room(first).is_some())
+        {
+            self.picked_rooms.insert(first);
+        }
+    }
+
+    /// Ctrl-click: pick this one room, or unpick it.
+    ///
+    /// Toggling rather than adding, because the mistake someone makes
+    /// while picking fifteen rooms is clicking one twice, and having to
+    /// start again would be worse than the tedium it replaces.
+    fn toggle_room(&mut self, id: RoomId) {
+        self.seed_with_inspected(id);
+        if !self.picked_rooms.remove(&id) {
+            self.picked_rooms.insert(id);
+        }
+    }
+
+    /// Shift-click: pick the room's whole group, or unpick it if every
+    /// room of it is already picked.
+    ///
+    /// For the hundred-odd two- and three-room groups -- a shop, a back
+    /// room -- that each want putting somewhere. Not for a town's street
+    /// group, which is the whole sheet; that is what the box is for.
+    fn toggle_group(&mut self, id: RoomId) {
+        let Some(shown) = &self.shown else { return };
+        let Some(members) = shown
+            .scene
+            .room(id)
+            .and_then(|room| shown.layout.groups.get(room.group))
+            .map(|g| g.room_ids.clone())
+        else {
+            return;
+        };
+        self.seed_with_inspected(id);
+        if members.iter().all(|m| self.picked_rooms.contains(m)) {
+            for m in &members {
+                self.picked_rooms.remove(m);
+            }
+        } else {
+            self.picked_rooms.extend(members);
+        }
     }
 
     /// Track a drag across frames and turn a finished one into an edit.
@@ -1079,12 +1212,62 @@ impl MapperApp {
         }
     }
 
+    /// The inspector when there is a selection but no inspected room.
+    fn selection_only_panel(&mut self, ui: &mut egui::Ui, can_edit: bool) -> Option<EditAction> {
+        let (picked_rooms, picked_keys) = self.picked();
+        let mut edit = None;
+        let mut clear_selection = false;
+        let whole = self.map.as_ref().ok()?;
+        let store = &self.store;
+        let new_area = &mut self.new_area;
+        let new_plate = &mut self.new_plate;
+        let edit_out = &mut edit;
+        egui::Panel::right("inspector").show(ui, |ui| {
+            ui.heading("Selection");
+            if !can_edit {
+                ui.weak("Editing is off.");
+                return;
+            }
+            if let Some(action) = selection_panel(
+                ui,
+                store,
+                &Picked {
+                    rooms: picked_rooms,
+                    keys: &picked_keys,
+                },
+                whole,
+                new_area,
+                new_plate,
+                &mut clear_selection,
+            ) {
+                *edit_out = Some(action);
+            }
+        });
+        if clear_selection || edit.is_some() {
+            self.picked_rooms.clear();
+        }
+        edit
+    }
+
     /// The inspector panel, drawn before the central panel so egui gives
     /// the canvas whatever space is left.
     fn inspector_panel(&mut self, ui: &mut egui::Ui, can_edit: bool) -> Option<EditAction> {
+        // A selection with nothing inspected still needs somewhere to
+        // act. Picking fifteen rooms and finding no panel -- because the
+        // last click was a Ctrl-click, which selects rather than
+        // inspects -- is the state this avoids.
+        if self.inspected.is_none() && !self.picked_rooms.is_empty() {
+            return self.selection_only_panel(ui, can_edit);
+        }
         let (Some(shown), Some(id)) = (&self.shown, self.inspected) else {
             return None;
         };
+        // Gathered before the mutable borrows below: the panel closure
+        // holds `&mut self.new_area`, so nothing can call a `&self`
+        // method after that point.
+        let (picked_rooms, picked_keys) = self.picked();
+        let mut clear_selection = false;
+
         let mut edit = None;
         let edit_out = &mut edit;
         let mut open = true;
@@ -1160,6 +1343,24 @@ impl MapperApp {
             if !edit_mode {
                 return;
             }
+            // The selection acts on many rooms at once, so it comes
+            // before the controls for the one room being inspected.
+            if let Some(whole) = whole
+                && let Some(action) = selection_panel(
+                    ui,
+                    store,
+                    &Picked {
+                        rooms: picked_rooms,
+                        keys: &picked_keys,
+                    },
+                    whole,
+                    new_area,
+                    new_plate,
+                    &mut clear_selection,
+                )
+            {
+                *edit_out = Some(action);
+            }
             // Editing controls live below the facts, so the panel
             // reads the same whether or not Edit is on.
             ui.separator();
@@ -1197,6 +1398,24 @@ impl MapperApp {
             self.walk_to(next);
         } else if back {
             self.inspected = self.trail.pop();
+        }
+        // An assignment consumes the selection -- leaving it picked
+        // invites assigning the same rooms twice -- but only
+        // one made FROM the selection. Unpinning a room or fixing an
+        // edge is unrelated and must not throw the picking away.
+        let acted_on_selection = !picked_keys.is_empty()
+            && match &edit {
+                Some(
+                    EditAction::AssignArea { keys, .. }
+                    | EditAction::AssignRegion { keys, .. }
+                    | EditAction::NewArea { keys, .. }
+                    | EditAction::MoveRooms { keys, .. }
+                    | EditAction::NewPlate { keys, .. },
+                ) => *keys == picked_keys,
+                _ => false,
+            };
+        if clear_selection || acted_on_selection {
+            self.picked_rooms.clear();
         }
         edit
     }
@@ -1628,6 +1847,216 @@ fn visiting_membership(
     edit
 }
 
+/// What the selection covers.
+#[derive(Clone, Copy)]
+struct Picked<'a> {
+    rooms: usize,
+    keys: &'a [RoomKey],
+}
+
+/// The selection: what is picked, and what to do with it.
+///
+/// **Why this exists.** The per-room controls offer "- room" and
+/// "- group", and on a town sheet the group is the whole outdoor
+/// component -- 246 rooms on Mist Harbor -- so there was nothing between
+/// one room and all of them. Pick exactly the rooms meant, act once.
+///
+/// Shown only when something is picked, so the ordinary inspector is
+/// unchanged for anyone not doing a bulk pass.
+fn selection_panel(
+    ui: &mut egui::Ui,
+    store: &MapOverrides,
+    picked: &Picked<'_>,
+    whole: &Map,
+    new_area: &mut String,
+    new_plate: &mut String,
+    clear: &mut bool,
+) -> Option<EditAction> {
+    let Picked { rooms, keys } = *picked;
+    if rooms == 0 {
+        return None;
+    }
+    let mut edit = None;
+    ui.separator();
+    ui.strong(format!("Selected: {rooms} room(s)"));
+    ui.weak("Ctrl-click: a room.  Shift-click: its group.  Ctrl-drag: a box.");
+    if ui.button("Clear selection").clicked() {
+        *clear = true;
+    }
+
+    // Taking these OUT, before putting them anywhere. A group here is
+    // the solver's connected component -- for a town that is every
+    // outdoor room on the sheet -- so "- group" on one room means all of
+    // them, and "- room" means one. The whole reason to pick a selection
+    // is to name the ten in between, and it would be useless if it could
+    // only ever add.
+    let in_an_area = keys
+        .iter()
+        .filter(|k| store.area_moves.contains_key(k))
+        .count();
+    let on_a_plate = keys
+        .iter()
+        .filter(|k| store.membership_moves.contains_key(k))
+        .count();
+    if in_an_area > 0 || on_a_plate > 0 {
+        ui.horizontal(|ui| {
+            if ui
+                .add_enabled(in_an_area > 0, egui::Button::new("- from area"))
+                .on_hover_text(format!(
+                    "Take {in_an_area} selected room(s) out of their area"
+                ))
+                .clicked()
+            {
+                edit = Some(EditAction::AssignArea {
+                    keys: keys.to_vec(),
+                    to: None,
+                });
+            }
+            if ui
+                .add_enabled(on_a_plate > 0, egui::Button::new("- from plate"))
+                .on_hover_text(format!(
+                    "Take {on_a_plate} selected room(s) off their plate"
+                ))
+                .clicked()
+            {
+                edit = Some(EditAction::MoveRooms {
+                    keys: keys.to_vec(),
+                    to: None,
+                });
+            }
+        });
+    }
+
+    // Area first: putting these somewhere is what the selection is for.
+    if !store.custom_areas.is_empty() {
+        let mut chosen: Option<String> = None;
+        egui::ComboBox::from_id_salt("assign_selection_area")
+            .selected_text("Put all in an area...")
+            .show_ui(ui, |ui| {
+                for (area, curated) in &store.custom_areas {
+                    if ui
+                        .selectable_label(false, format!("{} ({rooms} rooms)", curated.name))
+                        .clicked()
+                    {
+                        chosen = Some(area.clone());
+                    }
+                }
+            });
+        if let Some(area) = chosen {
+            edit = Some(EditAction::AssignArea {
+                keys: keys.to_vec(),
+                to: Some(area),
+            });
+        }
+    }
+    ui.horizontal(|ui| {
+        ui.add(
+            egui::TextEdit::singleline(new_area)
+                .hint_text("new area name")
+                .desired_width(120.0),
+        );
+        if ui
+            .add_enabled(!new_area.trim().is_empty(), egui::Button::new("+ all"))
+            .on_hover_text(format!("Make this area and put all {rooms} rooms in it"))
+            .clicked()
+        {
+            edit = Some(EditAction::NewArea {
+                name: new_area.trim().to_owned(),
+                keys: keys.to_vec(),
+            });
+            new_area.clear();
+        }
+    });
+
+    if let Some(action) = selection_plate(ui, store, rooms, keys, new_plate) {
+        edit = Some(action);
+    }
+
+    // And the region, for the same reason: a hundred groups that share
+    // an area usually share a region too.
+    let mut chosen: Option<String> = None;
+    egui::ComboBox::from_id_salt("assign_selection_region")
+        .selected_text("Say the region for all...")
+        .show_ui(ui, |ui| {
+            for name in known_regions(whole) {
+                if ui
+                    .selectable_label(false, format!("{name} ({rooms} rooms)"))
+                    .clicked()
+                {
+                    chosen = Some(name);
+                }
+            }
+        });
+    if let Some(name) = chosen {
+        edit = Some(EditAction::AssignRegion {
+            keys: keys.to_vec(),
+            to: Some(name),
+        });
+    }
+    edit
+}
+
+/// Moving a picked set onto a plate, or onto a new one.
+///
+/// A plate is the other place a selection wants to go: carving a town's
+/// satellites off its sheet is the same act as assigning them, done
+/// with the same picking.
+fn selection_plate(
+    ui: &mut egui::Ui,
+    store: &MapOverrides,
+    rooms: usize,
+    keys: &[RoomKey],
+    new_plate: &mut String,
+) -> Option<EditAction> {
+    let mut edit = None;
+    if !store.custom_maps.is_empty() {
+        let mut chosen: Option<String> = None;
+        egui::ComboBox::from_id_salt("assign_selection_plate")
+            .selected_text("Move all onto a plate...")
+            .show_ui(ui, |ui| {
+                for plate in store.custom_maps.keys() {
+                    if ui
+                        .selectable_label(
+                            false,
+                            format!("{} ({rooms} rooms)", store.plate_name(plate)),
+                        )
+                        .clicked()
+                    {
+                        chosen = Some(plate.clone());
+                    }
+                }
+            });
+        if let Some(plate) = chosen {
+            edit = Some(EditAction::MoveRooms {
+                keys: keys.to_vec(),
+                to: Some(plate),
+            });
+        }
+    }
+    ui.horizontal(|ui| {
+        ui.add(
+            egui::TextEdit::singleline(new_plate)
+                .hint_text("new plate name")
+                .desired_width(120.0),
+        );
+        if ui
+            .add_enabled(!new_plate.trim().is_empty(), egui::Button::new("+ all"))
+            .on_hover_text(format!(
+                "Make this plate and move all {rooms} rooms onto it"
+            ))
+            .clicked()
+        {
+            edit = Some(EditAction::NewPlate {
+                name: new_plate.trim().to_owned(),
+                keys: keys.to_vec(),
+            });
+            new_plate.clear();
+        }
+    });
+
+    edit
+}
+
 /// Saying which region a room is in.
 ///
 /// **This is the field the whole region tier is trying to become.**
@@ -1953,7 +2382,49 @@ fn edges_editor(
     let saved = store.location(&shown.store_key);
 
     ui.add_space(8.0);
-    ui.strong("Edges");
+    // Collapsed past the same length as the exit list, for the same
+    // reason: an Elemental Confluence room has sixty-odd edges, and
+    // listing them inline put the Area and Plate controls out of reach.
+    // The header says how many carry a correction, so collapsing it
+    // cannot hide that anything was changed.
+    let editable = facts.exits.iter().filter(|e| e.to_title.is_some()).count();
+    if editable > EXITS_BEFORE_COLLAPSING {
+        let corrected = facts
+            .exits
+            .iter()
+            .filter(|e| e.to_title.is_some())
+            .filter(|e| {
+                saved.is_some_and(|l| {
+                    l.edge_action(here, RoomKey::of(e.to, &shown.subset))
+                        .is_some()
+                })
+            })
+            .count();
+        let title = if corrected > 0 {
+            format!("Edges ({editable}, {corrected} corrected)")
+        } else {
+            format!("Edges ({editable})")
+        };
+        egui::CollapsingHeader::new(title)
+            .id_salt("edges_collapsed")
+            .default_open(false)
+            .show(ui, |ui| edge_rows(ui, shown, facts, here, saved, &mut edit));
+    } else {
+        ui.strong("Edges");
+        edge_rows(ui, shown, facts, here, saved, &mut edit);
+    }
+    edit
+}
+
+/// One row per editable edge: the command, and the correction combo.
+fn edge_rows(
+    ui: &mut egui::Ui,
+    shown: &Shown,
+    facts: &RoomFacts,
+    here: RoomKey,
+    saved: Option<&crate::overrides::LocationOverrides>,
+    edit: &mut Option<EditAction>,
+) {
     for exit in &facts.exits {
         // An exit leading out of this area cannot be corrected here: the
         // solver never saw the far room, so constraining it would mean
@@ -1974,7 +2445,7 @@ fn edges_editor(
                             .selectable_label(current == action, edge_label(action))
                             .clicked()
                         {
-                            edit = Some(EditAction::SetEdge {
+                            *edit = Some(EditAction::SetEdge {
                                 a: here,
                                 b: there,
                                 action,
@@ -1991,7 +2462,6 @@ fn edges_editor(
         });
         ui.small(format!("   -> {title}"));
     }
-    edit
 }
 
 /// The editing half of the inspector: which plate this room is on, and the
@@ -2127,8 +2597,10 @@ impl eframe::App for MapperApp {
         let go_to_plate = &mut jump;
         let can_edit = self.store_path.is_some() && self.store_problem.is_none();
 
-        if self.corrections_bar(ui, can_edit) {
-            self.export_corrections();
+        match self.corrections_bar(ui, can_edit) {
+            (true, _) => self.export_corrections(),
+            (_, true) => self.export_regions(),
+            _ => {}
         }
 
         let mut changed = false;
@@ -2198,18 +2670,18 @@ impl eframe::App for MapperApp {
                 streets: shown.focus.streets(),
                 doors: shown.focus.doors(),
             };
+            let picked: HashSet<RoomId> = self.picked_rooms.iter().copied().collect();
             let hit = draw::scene(
                 ui,
                 &shown.scene,
                 &focus,
                 &mut self.camera,
                 self.inspected,
+                &picked,
                 self.view,
                 ghost,
             );
-            if let Some(id) = hit.clicked {
-                self.clicked(id);
-            }
+            self.pointer(&hit);
             if edit_out.is_none() {
                 *edit_out = self.handle_drag(&hit);
             }
@@ -2304,7 +2776,7 @@ fn canvas_header(
                 .on_hover_text("Drag a group to move it; hold Alt for one room");
         });
         if view.edit_mode {
-            ui.label("drag a group (Alt: one room)");
+            ui.label("drag a group (Alt: one room) · pick: Ctrl-click, Shift-click, Ctrl-drag");
             // Deleting is offered only where the plate itself is
             // on screen, so it cannot be hit while looking at a
             // town that merely lost rooms to one.
