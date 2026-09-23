@@ -13,7 +13,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use cena_map::{Map, RoomId};
 
 use crate::classifier::Entrance;
-use crate::packer::{Edge, GROUP_PADDING, find_free_offset, uid_delta};
+use crate::packer::{Edge, GROUP_PADDING, chebyshev, find_free_offset, uid_delta};
 use crate::positioner::{Cell, Group, PackMethod};
 
 /// One shelved building: member group -> cluster-local frame offset, and
@@ -690,31 +690,20 @@ fn merge_cluster_members(
             continue;
         };
 
-        // The door with the nearest uids is the one this building is
-        // entered by (the reference's rule). Between doors the uids cannot
-        // tell apart -- no uids at all, most often -- the one whose landing
-        // stretches the building's other placed doors least; then room
-        // ids. Never list order: the lists come from a hash map, and a shop
-        // entered from two street rooms hung beside either one, run to run.
-        let nearest = placed_edges
-            .iter()
-            .map(|e| e.uid_delta)
-            .min()
-            .unwrap_or_else(|| unreachable!("placed_edges is non-empty"));
-        let land = |edge: &Edge, occupied: &HashSet<Cell>| -> Cell {
-            let neighbor_room = room_at(edge.other_group, edge.other_room_id, local);
-            let internal = internal_of(idx, edge.room_id);
-            // Land the passage endpoints as close together as the frame
-            // allows.
-            let proposed = Cell {
-                x: neighbor_room.x - internal.x,
-                y: neighbor_room.y - internal.y,
-            };
-            // Nothing free near: past everything placed so far, at the
-            // passage's height -- stretched, but on cells of its own. (It
-            // was one width to the right, unchecked, and landed on street
-            // rooms in a dense grid.)
-            free_for(idx, proposed, occupied).unwrap_or_else(|| {
+        // A door's two ends: the member's room in its own frame, and the
+        // placed room it opens onto.
+        let ends = |e: &Edge| {
+            (
+                internal_of(idx, e.room_id),
+                room_at(e.other_group, e.other_room_id, local),
+            )
+        };
+        // Nothing free near: past everything placed so far, at the door's
+        // height -- stretched, but on cells of its own. (It was one width
+        // to the right, unchecked, and landed on street rooms in a dense
+        // grid.)
+        let settle = |proposed: Cell| {
+            free_for(idx, proposed, &occupied).unwrap_or_else(|| {
                 let max_x = occupied.iter().map(|c| c.x).max().unwrap_or(0);
                 Cell {
                     x: max_x + 2 - min_x_of(idx),
@@ -722,32 +711,61 @@ fn merge_cluster_members(
                 }
             })
         };
-        let stretch = |off: Cell| -> i32 {
-            placed_edges
-                .iter()
-                .map(|e| {
-                    let there = room_at(e.other_group, e.other_room_id, local);
-                    let here = internal_of(idx, e.room_id);
-                    (here.x + off.x - there.x)
-                        .abs()
-                        .max((here.y + off.y - there.y).abs())
-                })
-                .sum()
-        };
-        let mut tied: Vec<&Edge> = placed_edges
-            .iter()
-            .filter(|e| e.uid_delta == nearest)
-            .collect();
-        tied.sort_by_key(|e| (e.other_room_id, e.room_id));
-        tied.dedup_by_key(|e| (e.other_room_id, e.room_id));
-        let off = tied
-            .iter()
-            .map(|e| land(e, &occupied))
-            .min_by_key(|&off| stretch(off))
-            .unwrap_or_else(|| unreachable!("placed_edges is non-empty"));
+        let off = land_by_best_door(&placed_edges, ends, settle);
         local.insert(idx, off);
         place(idx, off, &mut occupied);
     }
+}
+
+/// Where a building lands, by the door it is entered through.
+///
+/// The door with the nearest uids is that one (the reference's rule).
+/// Between doors the uids cannot tell apart -- no uids at all, most often
+/// -- the one whose landing stretches the building's other placed doors
+/// least; then room ids. Never list order: the lists come from a hash map,
+/// and a shop entered from two street rooms hung beside either one, run to
+/// run.
+fn land_by_best_door(
+    placed_edges: &[Edge],
+    ends: impl Fn(&Edge) -> (Cell, Cell),
+    settle: impl Fn(Cell) -> Cell,
+) -> Cell {
+    let nearest = placed_edges
+        .iter()
+        .map(|e| e.uid_delta)
+        .min()
+        .unwrap_or_else(|| unreachable!("placed_edges is non-empty"));
+    let mut tied: Vec<&Edge> = placed_edges
+        .iter()
+        .filter(|e| e.uid_delta == nearest)
+        .collect();
+    tied.sort_by_key(|e| (e.other_room_id, e.room_id));
+    tied.dedup_by_key(|e| (e.other_room_id, e.room_id));
+    let shifted = |c: Cell, off: Cell| Cell {
+        x: c.x + off.x,
+        y: c.y + off.y,
+    };
+    // Every placed door's length once the member sits at `off`.
+    let stretch = |off: Cell| -> i32 {
+        placed_edges
+            .iter()
+            .map(|e| {
+                let (here, there) = ends(e);
+                chebyshev(shifted(here, off), there)
+            })
+            .sum()
+    };
+    tied.iter()
+        .map(|e| {
+            // Land the door's ends as close together as the frame allows.
+            let (here, there) = ends(e);
+            settle(Cell {
+                x: there.x - here.x,
+                y: there.y - here.y,
+            })
+        })
+        .min_by_key(|&off| stretch(off))
+        .unwrap_or_else(|| unreachable!("placed_edges is non-empty"))
 }
 
 /// One connected set of buildings and the street rooms they open onto,
