@@ -143,6 +143,19 @@ enum EditAction {
     NewArea { name: String, keys: Vec<RoomKey> },
     /// Delete a curated area, releasing its rooms.
     DeleteArea { area: String },
+    /// Say which region rooms are in, or (with `None`) stop saying.
+    ///
+    /// The end state this is for: every room carrying its region
+    /// outright, instead of the three mechanisms deriving one today --
+    /// a uid join onto the official mapdb, the `[[fold]]` table that
+    /// corrects it where `loc` named an area rather than a region, and
+    /// an inference that spreads a region into unregioned ground. A
+    /// quarter of the regioned rooms are currently a guess, marked
+    /// `map:region-inferred`. An assignment here outranks all of it.
+    AssignRegion {
+        keys: Vec<RoomKey>,
+        to: Option<String>,
+    },
 }
 
 pub struct MapperApp {
@@ -586,6 +599,95 @@ impl MapperApp {
     /// working state, keyed for its own use, whereas this is what another
     /// program consumes -- uid-keyed, in the `dirto` vocabulary the layout
     /// engine already reads.
+    /// Write the region assignments as a `curation/` block.
+    ///
+    /// **Why a separate export rather than the combiner one.** That file
+    /// is a submission of layout corrections -- drags, pins, plates,
+    /// pictures -- and its consumer is the combiner. A region assignment
+    /// is not a correction to a drawing; it is a fact about a place, and
+    /// its consumer is `retag`, which bakes it into `gs.map` where Hydra
+    /// and every other reader will find it.
+    ///
+    /// Written by **uid** where a room has one, because `[[assign]]`
+    /// blocks live in a file that outlives any single map build and our
+    /// own ids are renumbered when the map is rebuilt.
+    fn export_regions(&mut self) {
+        let (Ok(map), Some(store_path)) = (&self.map, self.store_path.as_deref()) else {
+            self.export_note = Some("Nothing to export: no map is loaded.".to_owned());
+            return;
+        };
+        if self.store.region_moves.is_empty() {
+            self.export_note = Some("No region assignments yet.".to_owned());
+            return;
+        }
+        let mut by_region: BTreeMap<&str, (Vec<i64>, Vec<u32>)> = BTreeMap::new();
+        for (key, region) in &self.store.region_moves {
+            let entry = by_region.entry(region.as_str()).or_default();
+            match key {
+                RoomKey::Uid(uid) => entry.0.push(*uid),
+                RoomKey::Id(id) => entry.1.push(*id),
+            }
+        }
+        let mut out = String::from(
+            "# Region assignments made in the mapper.
+             #
+             # Paste into `curation/regions.toml`. These outrank the mapdb
+             # join, the folds and the spread: a room named here says its
+             # region outright and needs none of that machinery.
+
+",
+        );
+        for (region, (uids, ids)) in &by_region {
+            let _ = writeln!(out, "[[assign]]");
+            let _ = writeln!(out, "region = {region:?}");
+            if !uids.is_empty() {
+                let mut sorted = uids.clone();
+                sorted.sort_unstable();
+                let _ = writeln!(out, "# {} rooms", sorted.len());
+                let _ = writeln!(out, "uids = [");
+                for chunk in sorted.chunks(12) {
+                    let line: Vec<String> = chunk.iter().map(i64::to_string).collect();
+                    let _ = writeln!(out, "  {},", line.join(", "));
+                }
+                let _ = writeln!(out, "]");
+            }
+            if !ids.is_empty() {
+                // A room the game has never numbered. Named by our id,
+                // which a map rebuild renumbers -- so it is written
+                // separately and said to be the weaker claim.
+                let mut sorted = ids.clone();
+                sorted.sort_unstable();
+                let _ = writeln!(
+                    out,
+                    "# {} rooms with no uid; ids do not survive a rebuild",
+                    sorted.len()
+                );
+                let _ = writeln!(out, "ids = [");
+                for chunk in sorted.chunks(12) {
+                    let line: Vec<String> = chunk.iter().map(u32::to_string).collect();
+                    let _ = writeln!(out, "  {},", line.join(", "));
+                }
+                let _ = writeln!(out, "]");
+            }
+            out.push('\n');
+        }
+        let path = store_path.with_extension("regions.toml");
+        match std::fs::write(&path, out) {
+            Ok(()) => {
+                let rooms = self.store.region_moves.len();
+                self.export_note = Some(format!(
+                    "Wrote {rooms} region assignment(s) in {} region(s) to {}",
+                    by_region.len(),
+                    path.display()
+                ));
+            }
+            Err(error) => {
+                self.export_note = Some(format!("Could not write {}: {error}", path.display()));
+            }
+        }
+        let _ = map;
+    }
+
     fn export_corrections(&mut self) {
         let (Ok(map), Some(store_path)) = (&self.map, self.store_path.as_deref()) else {
             self.export_note = Some("Nothing to export: no map is loaded.".to_owned());
@@ -943,6 +1045,12 @@ impl MapperApp {
                 }
                 membership_changed = true;
             }
+            EditAction::AssignRegion { keys, to } => {
+                for key in keys {
+                    self.store.set_region(key, to.as_deref());
+                }
+                membership_changed = true;
+            }
             EditAction::AssignArea { keys, to } => {
                 for key in keys {
                     self.store.set_area(key, to.as_deref());
@@ -1034,6 +1142,7 @@ impl MapperApp {
                             // A visited room is outside the shown area, so
                             // it is in no group of that area's layout: room
                             // at a time is all there is to offer here.
+                            .or_else(|| region_membership(ui, store, whole, id, None))
                             .or_else(|| area_membership(ui, store, whole, id, None, new_area))
                 {
                     *edit_out = Some(action);
@@ -1070,9 +1179,11 @@ impl MapperApp {
             {
                 *edit_out = Some(action);
             }
-            if let Some(action) = whole
-                .and_then(|w| area_membership(ui, store, w, id, group_keys(shown, id, w), new_area))
-            {
+            if let Some(action) = whole.and_then(|w| {
+                region_membership(ui, store, w, id, group_keys(shown, id, w)).or_else(|| {
+                    area_membership(ui, store, w, id, group_keys(shown, id, w), new_area)
+                })
+            }) {
                 *edit_out = Some(action);
             }
             if let Some(action) = membership(ui, shown, store, id, new_plate) {
@@ -1336,9 +1447,35 @@ fn inspector(
     });
 }
 
+/// A room with more exits than this gets a collapsing header instead of
+/// the list, shut by default.
+///
+/// The Elemental Confluence is why. Its rooms carry up to 359 exits --
+/// nine instances merged, every one of them a scripted hop to another
+/// town -- and rendering them inline pushed the Area and Plate panels
+/// off the bottom of the inspector, so the rooms that most need
+/// curating were the ones that could not be assigned.
+///
+/// Twelve, because a busy town square is nine or ten and should still
+/// read at a glance. Nothing is hidden: the header says how many there
+/// are and opens to the same list.
+const EXITS_BEFORE_COLLAPSING: usize = 12;
+
 /// The exit list, with rooms outside this area as links to follow.
 fn exit_list(ui: &mut egui::Ui, facts: &RoomFacts, follow: &mut Option<RoomId>) {
-    ui.strong(format!("Exits ({})", facts.exits.len()));
+    let count = facts.exits.len();
+    if count > EXITS_BEFORE_COLLAPSING {
+        egui::CollapsingHeader::new(format!("Exits ({count})"))
+            .id_salt("exits_collapsed")
+            .default_open(false)
+            .show(ui, |ui| exit_rows(ui, facts, follow));
+        return;
+    }
+    ui.strong(format!("Exits ({count})"));
+    exit_rows(ui, facts, follow);
+}
+
+fn exit_rows(ui: &mut egui::Ui, facts: &RoomFacts, follow: &mut Option<RoomId>) {
     for exit in &facts.exits {
         ui.horizontal_wrapped(|ui| {
             match &exit.command {
@@ -1491,6 +1628,133 @@ fn visiting_membership(
     edit
 }
 
+/// Saying which region a room is in.
+///
+/// **This is the field the whole region tier is trying to become.**
+/// Today a room's region is derived three ways over: joined from the
+/// official mapdb by uid, translated through `[[fold]]` where that
+/// field named an area rather than a region, then spread into
+/// unregioned ground by inference. 7,395 of the 31,685 regioned rooms
+/// -- a quarter -- carry `map:region-inferred` to say the answer is a
+/// guess. Every assignment made here is one room that no longer needs
+/// any of it.
+///
+/// The region is CHOSEN, never typed. The thirteen are decided in
+/// `curation/regions.toml` and a free-text box would let a typo mint a
+/// fourteenth silently, which is the opposite of the point. An area, by
+/// contrast, is minted here on purpose: nobody has decided the areas
+/// yet, and deciding them is the work.
+fn region_membership(
+    ui: &mut egui::Ui,
+    store: &MapOverrides,
+    whole: &Map,
+    id: RoomId,
+    group: Option<Vec<RoomKey>>,
+) -> Option<EditAction> {
+    let mut edit = None;
+    let key = RoomKey::of(id, whole);
+    let assigned = store.region_of(key);
+    let derived = whole
+        .room(id)
+        .and_then(|r| r.meta.iter().find_map(|m| m.strip_prefix("region:")));
+    let inferred = whole
+        .room(id)
+        .is_some_and(|r| r.meta.iter().any(|m| m == "map:region-inferred"));
+
+    ui.separator();
+    ui.strong("Region");
+    match (assigned, derived) {
+        // Said outright, and the map already agrees.
+        (Some(a), Some(d)) if a == d => {
+            ui.label(format!("{a} (assigned)"));
+        }
+        // Said outright, and the map has not caught up: `retag` has not
+        // run since. Worth showing both rather than pretending.
+        (Some(a), Some(d)) => {
+            ui.label(format!("{a} (assigned)"));
+            ui.weak(format!("map still says {d} -- run retag"));
+        }
+        (Some(a), None) => {
+            ui.label(format!("{a} (assigned)"));
+            ui.weak("map has none yet -- run retag");
+        }
+        (None, Some(d)) if inferred => {
+            ui.label(d);
+            ui.weak("inferred, not decided");
+        }
+        (None, Some(d)) => {
+            ui.label(d);
+        }
+        (None, None) => {
+            ui.weak("no region");
+        }
+    }
+
+    if assigned.is_some() {
+        ui.horizontal(|ui| {
+            if ui
+                .button("- room")
+                .on_hover_text("Stop saying which region this room is in")
+                .clicked()
+            {
+                edit = Some(EditAction::AssignRegion {
+                    keys: vec![key],
+                    to: None,
+                });
+            }
+            if let Some(keys) = &group
+                && ui
+                    .button("- group")
+                    .on_hover_text("Stop saying, for every room of this group")
+                    .clicked()
+            {
+                edit = Some(EditAction::AssignRegion {
+                    keys: keys.clone(),
+                    to: None,
+                });
+            }
+        });
+    }
+
+    // The regions to choose from are the ones already in the map, so the
+    // list cannot drift from `curation/regions.toml` and a typo cannot
+    // invent one.
+    let mut chosen: Option<String> = None;
+    egui::ComboBox::from_id_salt("assign_region")
+        .selected_text("Say the region...")
+        .show_ui(ui, |ui| {
+            for name in known_regions(whole) {
+                let label = match &group {
+                    Some(keys) => format!("{name} ({} in group)", keys.len()),
+                    None => name.clone(),
+                };
+                if ui.selectable_label(false, label).clicked() {
+                    chosen = Some(name);
+                }
+            }
+        });
+    if let Some(name) = chosen {
+        edit = Some(EditAction::AssignRegion {
+            keys: group.unwrap_or_else(|| vec![key]),
+            to: Some(name),
+        });
+    }
+    edit
+}
+
+/// Every region the map names, sorted. Cheap enough to walk the rooms
+/// for: it is a few dozen strings out of 34,000 rooms and this runs only
+/// while a combo is open.
+fn known_regions(map: &Map) -> Vec<String> {
+    let mut names: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for room in map.rooms() {
+        if let Some(name) = room.meta.iter().find_map(|m| m.strip_prefix("region:")) {
+            names.insert(name.to_owned());
+        }
+    }
+    names.into_iter().collect()
+}
+
 /// Putting a room in a curated area.
 ///
 /// Beside the plate controls and deliberately not merged with them. A
@@ -1500,9 +1764,11 @@ fn visiting_membership(
 /// curation is still being worked out it is cheaper to keep them apart
 /// than to discover later that one answer was overwriting the other.
 ///
-/// The region is not chosen here. It is read from the room's own
+/// An area does not record its region: that is read from its rooms' own
 /// `meta:region:`, so an area appears under the right region the moment
-/// it has a room, and the tree cannot disagree with the map.
+/// it has a room and the tree cannot disagree with the map. Correcting
+/// the region is a separate act, on the rooms -- see `region_membership`
+/// below.
 fn area_membership(
     ui: &mut egui::Ui,
     store: &MapOverrides,

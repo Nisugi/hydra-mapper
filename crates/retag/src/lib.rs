@@ -199,6 +199,14 @@ fn is_passage(exit: &cena_map::Exit) -> bool {
     )
 }
 
+/// Whether a room is somewhere, rather than a fake room the game uses
+/// to hold data. The sixteen urchin hideouts carry `map:virtual room`
+/// and their own descriptions say so: "This is a fake room used to hold
+/// wayto/timeto for urchin guide".
+fn is_a_place(room: &Room) -> bool {
+    !room.meta.iter().any(|m| m == "map:virtual room")
+}
+
 /// The region a `loc` value ends up as, following the `[[fold]]` chain:
 /// `The Rift` -> `Pinefar / Aenatumgana` -> `Icemule Trace`.
 fn fold_of(curation: &Curation, name: &str) -> String {
@@ -317,10 +325,38 @@ fn spread_regions(plan: &mut Plan, rooms: &[Room], curation: &Curation) {
         }
     }
 
+    // A room that is not a place gets no region, however enclosed it is.
+    // The urchin hideouts are the case: sixteen fake rooms holding
+    // `wayto` entries for the guide, marked `map:virtual room`, each
+    // reached only by a pass-through. `derive_areas` drops them, but the
+    // Region list is built from `meta:region:` rather than from areas,
+    // so filling one here is what put a hideout in the tree.
+    let unreal: BTreeSet<u32> = rooms
+        .iter()
+        .filter(|r| !is_a_place(r))
+        .map(|r| r.id.0)
+        .collect();
+    for id in &unreal {
+        region.remove(id);
+    }
+    // And take back any a previous run wrote. `AddMeta` alone would
+    // leave the stale one in place, because this pass only ever adds.
+    for room in rooms.iter().filter(|r| unreal.contains(&r.id.0)) {
+        for stale in room
+            .meta
+            .iter()
+            .filter(|m| m.starts_with("region:") || *m == "map:region-inferred")
+        {
+            plan.changes.push(Change::DropMeta {
+                id: room.id.0,
+                meta: stale.clone(),
+            });
+        }
+    }
     let blank: Vec<u32> = rooms
         .iter()
         .map(|r| r.id.0)
-        .filter(|id| !region.contains_key(id))
+        .filter(|id| !region.contains_key(id) && !unreal.contains(id))
         .collect();
     let blank_set: BTreeSet<u32> = blank.iter().copied().collect();
 
