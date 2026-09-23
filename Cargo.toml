@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "crates/map-layout",
     "crates/mapper",
+    "crates/retag",
 ]
 
 [workspace.package]

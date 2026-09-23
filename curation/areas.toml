@@ -1,0 +1,805 @@
+# Curated areas: which place each room belongs to.
+#
+# Seeded from Simutronics' own layout areas -- the 117 in
+# `crates/mapper/data/areas.tsv` marked `official layout`, covering 13,689
+# rooms. Those are hand-drawn and clean: `wehnimers-landing-catacombs`,
+# `-graveyard`, `-old-mine-road`, each a place with its own extent. They
+# are not repeated here; this file records only what they do not cover.
+#
+# # Why the derived areas could not be the seed
+#
+# `regions::derive_areas` merges adjacent units that share a region, and
+# one unlabelled corridor is enough to fuse two towns. Its "Wehnimer's
+# Landing" is 3,050 rooms spanning 28 locations -- including 186 rooms of
+# Talador, which is how [Road to Talador] came to be drawn in the middle
+# of the town square. The Official list splits the same ground into
+# `-town` (171), `-outside-gates` (143), `-catacombs` (176) and so on.
+#
+# # A cave is not a building
+#
+# The Official areas already make the distinction, and it is not one of
+# indoor versus outdoor:
+#
+#   wehnimers-landing-catacombs   176 indoor,   0 outdoor   an AREA
+#   wehnimers-landing-old-mines    57 indoor,   0 outdoor   an AREA
+#   wehnimers-landing-town          2 indoor, 169 outdoor   a town
+#
+# A cave system is a place with its own name and extent. A shop's back
+# room is a room of a building, and the building belongs to whatever area
+# its front door opens onto. Both are "indoor"; what separates them is
+# standing, not sense -- so `[[place]]` and `[[building]]` below are
+# different kinds of entry rather than a threshold on one number.
+#
+# # What is NOT here yet
+#
+# 214 groups have no verdict, and 36 more are marked `split` in
+# `analysis/area-triage.tsv`: several unrelated places welded into one
+# group by the interior-doorway grouping, like the 192-room group holding
+# Ta'Illistim Keep, the Moonglae Inn, Meazernis Villa and the Lost Home.
+# Splitting them by title prefix works cleanly for only 19 of 45, so they
+# are left for a person. See the triage sheet.
+
+# ============================================================ places
+#
+# Areas in their own right, reached from no Official area.
+#
+# A group is one place when a single title prefix holds half its rooms or
+# more. That test matters because a CHE house names every table in its
+# lounge: Cairnfang Manor is 64 rooms of 67, beside a Forsythia Table of
+# one. Counting bare prefixes made one house look like four places, so
+# prefixes of one or two rooms are ignored.
+#
+# Closed areas are here, and belong here. `closed` means draw but do not
+# route, so Grawood Farmstead and the Village of Velathae still need an
+# area to be drawn in; only `gone` is left out, and only when most of the
+# group is gone.
+
+[[place]]
+name = "Grawood Farmstead"
+rooms = 210
+indoor = 50
+outdoor = 160
+room_ids = "18380 18381 18382 18383 18384 18385 18386 18387 18388 18389 18390 18391 18392 18393 18394 18395 18396 18397 18398 18399 18400 18401 18402 18403 18404 18405 18406 18407 18408 18409 18410 18411 18412 18413 18414 18415 18416 18417 18418 18419 18420 18421 18422 18423 18424 18425 18426 18427 18428 18429 18430 18431 18432 18433 18434 18435 18436 18437 18438 18439 18440 18441 18442 18443 18444 18445 18446 18447 18448 18449 18450 18451 18452 18453 18454 18455 18456 18457 18458 18459 18460 18461 18462 18463 18464 18465 18466 18467 18468 18469 18470 18471 18472 18473 18474 18475 18476 18477 18478 18479 18480 18481 18482 18483 18484 18485 18486 18487 18488 18489 18490 18491 18492 18493 18494 18495 18496 18497 18498 18499 18501 18502 18503 18504 18505 18506 18507 18508 18509 18510 18511 18512 18513 18514 18515 18516 18517 18518 18519 18520 18521 18522 18523 18524 18525 18526 18527 18528 18529 18530 18531 18532 18533 18534 18535 18536 18537 18538 18539 18540 18541 18542 18543 18544 18545 18546 18547 18548 18549 18550 18551 18552 18553 18554 18555 18556 18557 18558 18559 18560 18561 18562 18563 18564 18565 18566 18567 18568 18569 18570 18571 18572 18573 18574 18575 18576 18577 18578 18579 18580 18581 18582 18583 18584 18585 18586 18587 18588 18589 18591"
+
+[[place]]
+name = "Nyessem"
+rooms = 70
+indoor = 54
+outdoor = 16
+room_ids = "36637 36638 36639 36640 36641 36642 36643 36644 36645 36646 36647 36648 36649 36650 36651 36652 36653 36654 36655 36656 36657 36658 36659 36660 36661 36662 36663 36664 36665 36666 36667 36668 36669 36670 36671 36672 36673 36674 36675 36676 36677 36678 36679 36680 36681 36682 36683 36684 36685 36686 36687 36688 36689 36690 36691 36692 36693 36694 36695 36696 36697 36698 36699 36700 36701 36702 36703 36704 36705 36706"
+
+[[place]]
+name = "Silvergate"
+rooms = 60
+indoor = 58
+outdoor = 2
+room_ids = "3734 3735 3736 3737 3738 3739 3740 3743 3744 13236 14674 15142 17371 17372 17373 17374 21225 21226 21250 21259 21265 21268 21280 21289 21295 21296 21297 22039 22040 22041 22042 22043 22044 22045 22046 22047 22048 22049 22050 22051 22052 22053 22054 22055 22056 22057 22058 22059 25649 25650 25651 26229 26794 26815 28324 30520 30521 30522 32361 36008"
+
+[[place]]
+name = "Velathae"
+rooms = 113
+indoor = 0
+outdoor = 113
+room_ids = "12863 12864 12865 12866 12867 12868 12869 12870 12871 12872 12873 12874 12875 12876 12877 12878 12879 12880 12881 12882 12883 12884 12885 12886 12887 12888 12889 12890 12891 12892 12893 12894 12895 12896 12897 12898 12899 12900 12901 12902 12903 12904 12905 12906 12907 12908 12909 12910 12911 12912 12913 12914 12915 12916 12917 12918 12919 12920 12921 12922 12923 12924 12925 12926 12927 12928 12929 12930 12931 12932 12933 12934 12935 12936 12937 12938 12939 12940 12941 12942 12943 12944 12945 12946 12947 12948 12949 12950 12951 12952 12953 12954 12955 12956 12957 12958 12959 12960 12961 12962 12963 12964 12965 12966 12967 12968 12969 12970 12971 12972 12973 12974 18683"
+
+[[place]]
+name = "Talador Mines"
+rooms = 57
+indoor = 57
+outdoor = 0
+room_ids = "21931 21932 21933 21934 21935 21936 21937 21938 21939 21940 21941 21942 21943 21944 21945 21946 21947 21948 21949 21950 21951 21952 21953 21954 21955 21956 21957 21958 21959 21960 21961 21962 21964 21965 21966 21967 21968 21969 21970 21971 21972 21973 21974 21975 21976 21977 21978 21979 21980 21981 21982 22005 22006 22007 22008 22009 22010"
+
+[[place]]
+name = "Endeltime Estates"
+rooms = 57
+indoor = 0
+outdoor = 57
+room_ids = "31981 31982 31983 31984 31985 31986 31987 31988 31989 31990 31991 31992 31993 31994 31995 31996 31997 31998 31999 32000 32001 32002 32003 32004 32005 32006 32007 32008 32009 32010 32011 32012 32013 32014 32015 32016 32017 32018 32019 32020 32021 32022 32023 32024 32025 32026 32027 32028 32029 32030 32031 32032 32033 32034 32035 32036 32038"
+
+[[place]]
+name = "Paupers"
+rooms = 52
+indoor = 51
+outdoor = 1
+room_ids = "7985 7986 7987 7988 7989 7990 7991 8747 8748 8749 8750 8751 15948 15950 15951 15952 15956 15995 22078 22079 22081 22082 22083 22084 22085 23248 23249 23251 23252 23253 23254 24052 24053 24054 24055 24056 24057 24058 24059 25648 26916 26917 26918 26919 32599 32853 32854 32855 32856 32857 36066 36067"
+
+[[place]]
+name = "Cairnfang Manor"
+rooms = 67
+indoor = 58
+outdoor = 9
+room_ids = "198 14095 14096 14097 14098 14099 17431 22111 22115 22116 22117 22118 22119 22120 22121 22122 22123 22124 22125 22126 22127 22128 22129 22130 22131 22132 22133 22134 22135 22136 22137 22138 22139 22140 22141 22142 22143 22144 22145 22146 22147 22148 22149 22150 22152 22153 22154 22155 22156 22157 22158 22159 22160 30952 30953 30954 30955 30956 30957 30958 36068 36069 36070 36071 36072 36073 36074"
+
+[[place]]
+name = "Willow Hall"
+rooms = 60
+indoor = 54
+outdoor = 6
+room_ids = "17424 19290 19291 19292 19293 19294 19295 19296 19297 19298 19299 19300 19301 19302 19303 19304 19305 19306 19307 19308 19309 19310 19311 19312 19313 19314 19315 19316 19317 19318 19319 19320 19321 19322 19323 19324 19325 19326 19327 19328 19329 19330 19331 19333 19334 19335 21302 21303 21307 21314 21315 21316 32968 32969 32970 32971 32972 32973 35233 36065"
+
+[[place]]
+name = "Rone Academy"
+rooms = 63
+indoor = 57
+outdoor = 6
+room_ids = "15545 15546 15547 15548 15549 15550 24407 24472 24473 24474 24475 24476 24477 24478 24479 24480 24481 24482 24483 24484 24485 24486 24487 24488 24489 24490 24491 24492 25270 25271 25272 25273 25274 25275 25276 25277 25278 25279 25280 25281 25282 25283 25284 25285 25286 25287 25288 25289 25290 25291 25292 25293 25294 29615 29616 29617 29618 29619 29620 29621 36081 36082 36083"
+
+[[place]]
+name = "Sablecross"
+rooms = 70
+indoor = 1
+outdoor = 69
+room_ids = "34607 34608 34609 34610 34611 34612 34613 34614 34615 34616 34617 34618 34619 34620 34621 34622 34623 34624 34625 34626 34627 34628 34629 34630 34631 34632 34633 34634 34635 34636 34637 34638 34639 34640 34641 34642 34643 34648 34651 34653 34657 34660 34670 34671 34672 34673 34675 34676 34691 34693 34694 34695 34701 34713 34714 34716 34717 34720 34722 34724 34725 34726 34728 34730 34733 34734 34735 34737 34739 34740"
+
+[[place]]
+name = "Witch's Garden"
+rooms = 66
+indoor = 5
+outdoor = 61
+room_ids = "34818 34869 34870 34871 34872 34873 34874 34875 34876 34877 34878 34879 34880 34881 34882 34883 34884 34885 34886 34887 34888 34889 34890 34891 34892 34893 34894 34895 34896 34897 34898 34899 34900 34901 34902 34903 34904 34905 34906 34907 34908 34909 34910 34911 34912 34913 34914 34915 34916 34917 34918 34919 34920 34921 34922 34923 34924 34925 34926 34927 34928 34929 34930 34931 34932 34933"
+
+[[place]]
+name = "Dungeon"
+rooms = 67
+indoor = 67
+outdoor = 0
+room_ids = "36348 36360 36361 36362 36363 36364 36365 36366 36367 36368 36369 36370 36371 36372 36395 36396 36397 36398 36399 36400 36401 36402 36403 36404 36405 36406 36407 36408 36409 36410 36411 36412 36413 36414 36415 36416 36417 36418 36419 36420 36421 36422 36423 36424 36425 36426 36427 36428 36429 36430 36431 36432 36433 36434 36435 36436 36437 36438 36439 36440 36441 36442 36443 36444 36445 36446 36447"
+
+[[place]]
+name = "House Sovyn"
+rooms = 54
+indoor = 52
+outdoor = 2
+room_ids = "14617 20788 20790 20791 20792 20793 20795 20796 20797 20798 20799 20800 20801 20802 20803 20804 20805 20806 20807 20808 20809 20810 20811 20812 20813 20814 20815 20816 20817 20818 20819 20820 20821 20822 20823 20824 20825 20826 20827 20828 20829 20830 20831 20832 20833 20834 25541 25542 25545 25546 25547 25548 25612 25613"
+
+# ========================================================= buildings
+#
+# Rooms of a building, attached to the Official area its front door opens
+# onto.
+#
+# Three things must hold. The group is 20 rooms or fewer, it has an exit
+# into an Official area, and that exit is a REAL FRONT DOOR -- an indoor
+# room of the group opening onto an outdoor room of the area.
+#
+# The last test is the one that matters, and it is asked of the graph
+# rather than of `location`. A single edge into an area is adjacency, not
+# belonging: a Krolvin Warship touches `wehnimers-landing-danjirland` by
+# one exit and is an Open Sea Adventures ship instance, not a building in
+# Danjirland. It has no doorway, and neither do [The Swale, Plaza Center]
+# or [Lumnea Meadow], outdoor places that merely abut an area.
+#
+# `location` was tried for this and rejected. It drops the Krolvin, but it
+# is missing on 1,608 rooms, stale on others (the Arena of the Abyss still
+# recorded Caligos Isle after the game moved it), and spells one town two
+# ways ("Wehnimer's Landing" beside "the town of Wehnimer's Landing").
+# Gating on it dropped 58 of 120 candidates, 45 of them real buildings.
+
+[[building]]
+parent = "vornavis-solhaven-town"
+rooms = 9
+names = "Sea Troll's Kitchen (9)"
+room_ids = "4628 5685 6374 14445 14446 14447 14449 14450 14452"
+
+[[building]]
+parent = "elven-nations-tavaalor-town"
+rooms = 15
+names = "Burghal Enclave (10); Gearheads (1); Stacked Vintners (1)"
+room_ids = "25296 26006 26013 26014 26015 26016 26017 26018 26019 26020 26021 26022 26023 26024 26025"
+
+[[building]]
+parent = "taillistim-town"
+rooms = 12
+names = "Blue Room (1); Garden (1); Green Room (1)"
+room_ids = "13247 13248 13284 13285 13286 13287 13288 13289 13290 13291 13292 13293"
+
+[[building]]
+parent = "isle-of-the-four-winds-mist-harbor-town"
+rooms = 12
+names = "Isle Dyes (12)"
+room_ids = "16323 16324 16325 17517 17569 17570 17571 17572 17573 17574 17575 17576"
+
+[[building]]
+parent = "wehnimers-landing-town"
+rooms = 12
+names = "Reignbeau Caverns (10); A Rainbow-Colored Tent (1); Caverns (1)"
+room_ids = "1251 1252 1253 1254 1255 3558 4069 4070 4071 4072 4073 8903"
+
+[[building]]
+parent = "vornavis-solhaven-town"
+rooms = 6
+names = "Faeilythe's Fashions (6)"
+room_ids = "14238 14242 14246 14252 14361 14364"
+
+[[building]]
+parent = "rivers-rest-town"
+rooms = 13
+names = "Empath Guild (13)"
+room_ids = "17730 17731 17732 17735 17736 17737 17738 17739 17740 19886 19887 19888 30577"
+
+[[building]]
+parent = "isle-of-the-four-winds-mist-harbor-town"
+rooms = 10
+names = "Great Hall (8); Bride's Waiting Room (1); Groom's Waiting Room (1)"
+room_ids = "19591 19592 19607 19608 19609 19610 19611 19612 19613 20701"
+
+[[building]]
+parent = "vornavis-solhaven-town"
+rooms = 12
+names = "Empath Guild (12)"
+room_ids = "19744 19745 19747 19748 19749 19750 19751 19752 19753 19754 19755 30580"
+
+[[building]]
+parent = "krakens-fall-town"
+rooms = 12
+names = "Converted Weather Station (8); Cobbler's Supply Corridor (1); Office of the Cobbler's Foreman (1)"
+room_ids = "29139 29140 29141 29142 29143 29144 29145 29146 29147 29148 30605 30606"
+
+[[building]]
+parent = "vornavis-caravansary"
+rooms = 17
+names = "Wine Cellar (9); Kraken Manor (8)"
+room_ids = "4583 4584 4585 4586 4587 4588 4589 4590 4591 4592 4593 4594 4595 4596 4597 4598 32728"
+
+[[building]]
+parent = "wehnimers-landing-town"
+rooms = 7
+names = "Militia Barracks (7)"
+room_ids = "6945 6946 6947 6948 6949 6950 15531"
+
+[[building]]
+parent = "vornavis-solhaven-town"
+rooms = 10
+names = "Warehouse (10)"
+room_ids = "9023 9024 9025 9026 9027 9028 9029 9030 9031 9032"
+
+[[building]]
+parent = "isle-of-the-four-winds-mist-harbor-town"
+rooms = 11
+names = "Easy Living (11)"
+room_ids = "12311 12312 16369 16370 16372 16373 16374 16375 16376 16377 16378"
+
+[[building]]
+parent = "taillistim-town"
+rooms = 10
+names = "Repository (10)"
+room_ids = "7435 13009 13010 13011 13013 13015 13032 13039 13040 13041"
+
+[[building]]
+parent = "teras-isle-kharam-dzu-town"
+rooms = 15
+names = "Warehouse (15)"
+room_ids = "14735 14736 14784 14785 14786 14787 14788 14789 14790 14791 14792 14793 14794 14795 14796"
+
+[[building]]
+parent = "icemule-trace-town"
+rooms = 19
+names = "Bard Guild (17); Troubadour Pub (2)"
+room_ids = "15696 15800 22093 22094 22095 22096 22097 22098 22099 22100 22102 22103 22104 22105 30883 30884 30885 30886 34403"
+
+[[building]]
+parent = "taillistim-town"
+rooms = 13
+names = "Bard Guild (13)"
+room_ids = "27795 27796 27797 27798 27799 27800 27801 27802 27803 27804 27805 27806 34420"
+
+[[building]]
+parent = "special-naidem-west"
+rooms = 9
+names = "Gavelsdown Hall (9)"
+room_ids = "31573 31574 31575 31576 32201 33980 33981 33982 34823"
+
+[[building]]
+parent = "wehnimers-landing-town"
+rooms = 8
+names = "Elaraeyn's Boutique (8)"
+room_ids = "1245 4047 4048 4049 4050 4051 4052 24595"
+
+[[building]]
+parent = "icemule-trace-town"
+rooms = 7
+names = "Icemule Trace Clerks Suite (4); Calradian's Deed Conveyance (1); Ceraleth's Cartage (1)"
+room_ids = "2430 2431 2432 2433 2434 2435 2436"
+
+[[building]]
+parent = "icemule-trace-town"
+rooms = 7
+names = "Dreamshine's Bedding (1); Fenster's Window Shop (1); Melisii's Fireplace Emporium (1)"
+room_ids = "3375 3376 3377 3378 3379 3380 8973"
+
+[[building]]
+parent = "icemule-trace-town"
+rooms = 8
+names = "Fileene's Flooring (1); Katanka's Table Shop (1); Maerhyn's Marble (1)"
+room_ids = "3381 3382 3383 3384 3385 3386 3387 3388"
+
+[[building]]
+parent = "elven-nations-tavaalor-town"
+rooms = 11
+names = "New Look (11)"
+room_ids = "3412 3413 3414 3415 3416 3417 3418 3419 3420 3421 3422"
+
+[[building]]
+parent = "wehnimers-landing-town"
+rooms = 11
+names = "The New Look (11)"
+room_ids = "3823 6934 6935 6936 6937 6938 6939 6940 6941 6942 6943"
+
+[[building]]
+parent = "vornavis-caravansary"
+rooms = 12
+names = "Locker Alcove (5); Storage Warehouse (4); Mercantylers' Storage Warehouse (2)"
+room_ids = "5598 5599 5600 5601 5602 5603 5604 35239 35240 35241 35242 35243"
+
+[[building]]
+parent = "vornavis-solhaven-town"
+rooms = 10
+names = "Andelas' Temple (4); Hall of the Claw (3); Chamber of Convergence (1)"
+room_ids = "4622 5678 5679 5680 5681 5682 5683 5684 14407 14408"
+
+[[building]]
+parent = "wehnimers-landing-town"
+rooms = 12
+names = "Henty's Depot (12)"
+room_ids = "6357 6358 6359 6360 6361 6362 6363 15513 15515 15516 15517 15518"
+
+[[building]]
+parent = "wehnimers-landing-town"
+rooms = 7
+names = "Wehnimer's Historical Society (7)"
+room_ids = "3724 8852 8853 8854 8855 8856 14636"
+
+[[building]]
+parent = "vornavis-solhaven-town"
+rooms = 6
+names = "Library (6)"
+room_ids = "5395 9057 9058 9059 9060 9061"
+
+[[building]]
+parent = "elven-nations-tavaalor-town"
+rooms = 7
+names = "Samyrle's Salon (7)"
+room_ids = "10427 10428 10429 10430 10431 10432 10433"
+
+[[building]]
+parent = "elven-nations-tavaalor-town"
+rooms = 11
+names = "Warehouse (9); Permit Office (1); Warehouse Entry (1)"
+room_ids = "10465 10466 10467 10468 10469 10470 10471 10472 10473 10474 10475"
+
+[[building]]
+parent = "rivers-rest-town"
+rooms = 13
+names = "Abalonia's Oceanic Artwork (1); Aeliena's Tables (1); Classy Ceiling-Holders (1)"
+room_ids = "10898 10899 10900 10901 10902 10903 10904 10905 10906 10907 10908 10909 10910"
+
+[[building]]
+parent = "teras-isle-kharam-dzu-town"
+rooms = 17
+names = "Emberglaes Hearth (7); Marienna's Market (7); Suniel's Alcove (1)"
+room_ids = "12498 12499 12500 12501 12502 12503 12984 13058 14824 14833 30771 30772 30773 30774 30775 30776 30777"
+
+[[building]]
+parent = "vornavis-solhaven-town"
+rooms = 6
+names = "Oleani's Temple (6)"
+room_ids = "13225 13229 13230 13235 13308 13309"
+
+[[building]]
+parent = "vornavis-solhaven-town"
+rooms = 9
+names = "Temple of Industry (5); Subterrain (3); Shrine of the Sword (1)"
+room_ids = "13170 13507 13508 13509 13510 13511 14576 14577 14578"
+
+[[building]]
+parent = "elven-nations-tavaalor-town"
+rooms = 10
+names = "Ta'Vaalor Dye Wares (10)"
+room_ids = "13547 13706 13707 13708 13709 13710 13711 13712 13713 13714"
+
+[[building]]
+parent = "vornavis-solhaven-town"
+rooms = 9
+names = "The Wage and Dagger (9)"
+room_ids = "14303 14304 14305 14306 14314 14315 14316 14317 14318"
+
+[[building]]
+parent = "teras-isle-kharam-dzu-town"
+rooms = 7
+names = "Rainbow Cavern (6); Rainbow Tent (1)"
+room_ids = "14815 14816 14828 14829 14830 14831 14832"
+
+[[building]]
+parent = "icemule-trace-town"
+rooms = 6
+names = "Our Colorful Place (6)"
+room_ids = "3820 15692 15783 15825 15826 15827"
+
+[[building]]
+parent = "rivers-rest-town"
+rooms = 10
+names = "Turpin's Merchant Supplies (10)"
+room_ids = "16040 16090 16091 16092 16093 16094 16095 16096 16097 16098"
+
+[[building]]
+parent = "rivers-rest-town"
+rooms = 10
+names = "Bamboo Cottage (10)"
+room_ids = "16175 16176 16177 16178 16281 16282 16283 16284 16285 16286"
+
+[[building]]
+parent = "isle-of-the-four-winds-mist-harbor-town"
+rooms = 16
+names = "Misty Isle Exteriors (16)"
+room_ids = "16343 16453 16454 16455 16456 16457 16458 16459 16460 16461 16462 16463 16464 16465 16466 16467"
+
+[[building]]
+parent = "isle-of-the-four-winds-mist-harbor-town"
+rooms = 12
+names = "Isle Designs (12)"
+room_ids = "16497 16498 16499 16684 16685 16686 16687 16688 16689 16690 16691 16692"
+
+[[building]]
+parent = "vornavis-solhaven-town"
+rooms = 12
+names = "Dark Cavern (11); Fangs of the Serpent (1)"
+room_ids = "25202 25206 25207 25208 25209 25210 25212 25213 25214 25215 25216 25218"
+
+[[building]]
+parent = "special-duskruin"
+rooms = 6
+names = "The Poisoned Heretics (3); The Dented Phylactery (2); Den of the Poisoned Heretics (1)"
+room_ids = "27165 27166 27167 27168 27169 27170"
+
+[[building]]
+parent = "wehnimers-landing-old-mine-road"
+rooms = 10
+names = "Sphere and Scythe (10)"
+room_ids = "27840 27841 27842 27843 27844 27845 27846 27847 27848 27849"
+
+[[building]]
+parent = "krakens-fall-town"
+rooms = 11
+names = "Limestone Cave (9); Limstone Cave (2)"
+room_ids = "29205 29206 29207 29208 29210 29211 29212 29213 29214 29215 29216"
+
+[[building]]
+parent = "teras-isle-kharam-dzu-town"
+rooms = 20
+names = "Asylum (20)"
+room_ids = "31250 31251 31252 31253 31254 31255 31256 31257 31258 31259 31260 31261 31262 31263 31264 31265 31266 31267 31268 32757"
+
+[[building]]
+parent = "icemule-trace-town"
+rooms = 11
+names = "New Look (11)"
+room_ids = "34076 34077 34078 34079 34080 34081 34082 34083 34084 34085 34086"
+
+[[building]]
+parent = "wehnimers-landing-town"
+rooms = 9
+names = "The TownCrier (9)"
+room_ids = "34425 34426 34427 34428 34429 34430 34431 34432 34433"
+
+[[building]]
+parent = "teras-isle-kharam-dzu-town"
+rooms = 10
+names = "Meeting Hall (10)"
+room_ids = "1922 1923 1924 1925 1926 12541 14799 14800 14801 14802"
+
+[[building]]
+parent = "icemule-trace-town"
+rooms = 7
+names = "Icemule Historical Society (7)"
+room_ids = "3389 3390 3391 3392 3393 3394 8974"
+
+[[building]]
+parent = "icemule-trace-town"
+rooms = 6
+names = "Honeybeer Inn (6)"
+room_ids = "3448 3449 3450 8982 8983 8984"
+
+[[building]]
+parent = "taillistim-town"
+rooms = 9
+names = "Ta'Illistim Keep (8); Ta'Illistim (1)"
+room_ids = "4014 4015 4016 4027 4028 4029 4030 4031 4032"
+
+[[building]]
+parent = "vornavis-solhaven-town"
+rooms = 18
+names = "Captain's Rest (18)"
+room_ids = "5398 5640 5686 5688 14100 14101 14102 14103 14104 14105 14106 14107 14108 14109 14110 14111 14112 17202"
+
+[[building]]
+parent = "vornavis-caravansary"
+rooms = 11
+names = "Mercantylers' Hall (6); Mercantyler's Debt Collection (1); Mercantylers' Banking Hall (1)"
+room_ids = "5590 5605 5606 5607 5608 5609 5610 5611 14582 14586 14587"
+
+[[building]]
+parent = "wehnimers-landing-town"
+rooms = 9
+names = "Barbley's Beds (1); Drumble's Oddities (1); Firenna's Fireplaces (1)"
+room_ids = "8821 8822 8823 8824 8825 8826 8827 8828 8829"
+
+[[building]]
+parent = "elven-nations-tavaalor-town"
+rooms = 7
+names = "Ta'Vaalor Historical Society (7)"
+room_ids = "10336 10337 10338 10339 10340 10341 10342"
+
+[[building]]
+parent = "elven-nations-tavaalor-town"
+rooms = 10
+names = "Stockade (6); Bastille (4)"
+room_ids = "10419 10420 10421 10422 10423 13992 13993 13994 13995 13996"
+
+[[building]]
+parent = "teras-isle-kharam-dzu-town"
+rooms = 6
+names = "Old Manor (6)"
+room_ids = "12414 12415 12416 12417 12418 12419"
+
+[[building]]
+parent = "taillistim-town"
+rooms = 9
+names = "Ta'Illistim (8); Catacombs (1)"
+room_ids = "13244 13437 13438 13439 13440 13441 13442 13443 13444"
+
+[[building]]
+parent = "vornavis-solhaven-town"
+rooms = 12
+names = "Midrian's Dyes (12)"
+room_ids = "13476 13477 14351 14352 14368 14369 14370 14371 14372 14373 17379 17405"
+
+[[building]]
+parent = "vornavis-solhaven-town"
+rooms = 14
+names = "Niima's Temple (14)"
+room_ids = "9302 14362 14363 14365 14366 14367 14431 14433 14434 14435 14437 14438 14439 14443"
+
+[[building]]
+parent = "vornavis-solhaven-town"
+rooms = 7
+names = "Reptile House (5); Butterfly Garden (1); Creepy Crawlies (1)"
+room_ids = "14488 14495 14497 14498 14499 14500 14501"
+
+[[building]]
+parent = "vornavis-solhaven-town"
+rooms = 15
+names = "Temple of Tonis (15)"
+room_ids = "13295 14496 14502 14503 14562 14563 14564 14565 14567 14568 14570 14571 14572 14573 14575"
+
+[[building]]
+parent = "wehnimers-landing-town"
+rooms = 7
+names = "Prison (7)"
+room_ids = "3886 3887 3888 3889 15522 15523 15524"
+
+[[building]]
+parent = "rivers-rest-town"
+rooms = 11
+names = "River's Rest Hall (11)"
+room_ids = "15298 15331 16010 16012 16020 16227 16228 16230 16231 16233 16234"
+
+[[building]]
+parent = "isle-of-the-four-winds-mist-harbor-town"
+rooms = 6
+names = "Mist Harbor Lockup (5); Lockup (1)"
+room_ids = "16331 16332 16704 16705 16706 16707"
+
+[[building]]
+parent = "isle-of-the-four-winds-mist-harbor-town"
+rooms = 14
+names = "Shear Delight (14)"
+room_ids = "19355 19405 19406 27689 27690 27691 27692 27693 27694 27695 27696 27697 27698 27699"
+
+[[building]]
+parent = "elven-nations-tavaalor-town"
+rooms = 8
+names = "Crimson Raven (3); Backsword Table (1); Claidhmore Table (1)"
+room_ids = "25192 25194 25196 25197 25198 25199 25200 25201"
+
+[[building]]
+parent = "elven-nations-tavaalor-town"
+rooms = 12
+names = "Annatto Bridge Tunnel (5); Annatto Bridge Shaft (3); Annatto Arch (2)"
+room_ids = "25624 25625 25626 25627 25628 25629 25630 25631 25632 25633 25634 25635"
+
+[[building]]
+parent = "wehnimers-landing-town"
+rooms = 9
+names = "Black Hand (9)"
+room_ids = "26890 26901 26908 26909 26910 26911 26912 26913 26914"
+
+[[building]]
+parent = "elven-nations-gyldemar"
+rooms = 6
+names = "Peregrine Tavern (6)"
+room_ids = "27635 27636 27637 27638 27639 27640"
+
+[[building]]
+parent = "wehnimers-landing-melgorehns-valley"
+rooms = 10
+names = "Baile Dragan (10)"
+room_ids = "23833 23834 23835 23836 23837 23838 28815 28864 28865 28866"
+
+[[building]]
+parent = "elven-nations-ravelin"
+rooms = 6
+names = "Arakhor Estate (5); Underground Cavern (1)"
+room_ids = "30148 30149 30150 30151 30152 30153"
+
+[[building]]
+parent = "krakens-fall-town"
+rooms = 8
+names = "Penitent Pass (7); Kraken's Fall (1)"
+room_ids = "28930 30613 30614 30615 30616 30617 30618 30619"
+
+[[building]]
+parent = "icemule-trace-south-gate-wilds"
+rooms = 6
+names = "Sunset Cabin (6)"
+room_ids = "31352 31353 31354 31355 31356 31357"
+
+[[building]]
+parent = "krakens-fall-town"
+rooms = 6
+names = "Cormorant's Roost (5); Happy Hands Odds-n-Ends (1)"
+room_ids = "31525 31526 31527 31528 31529 31530"
+
+[[building]]
+parent = "special-naidem-west"
+rooms = 11
+names = "Quinton Manse (11)"
+room_ids = "31594 31595 31596 31597 31772 31773 31774 32076 32198 32199 34822"
+
+[[building]]
+parent = "special-naidem-west"
+rooms = 6
+names = "Antiquarian Manor (5); Antiquarian's Study (1)"
+room_ids = "31605 31606 31754 31755 31756 31757"
+
+[[building]]
+parent = "special-naidem-east"
+rooms = 10
+names = "The Witching House (6); A. B. Witching (3); The Witching Family Vault (1)"
+room_ids = "31914 31915 31966 31967 32083 32084 32085 32086 32087 32088"
+
+[[building]]
+parent = "wehnimers-landing-town"
+rooms = 18
+names = "Consortium (18)"
+room_ids = "32500 32501 32502 32503 32504 32505 32506 32507 32508 32509 32510 32511 32512 32513 32514 32515 32516 32517"
+
+[[building]]
+parent = "elven-nations-tavaalor-town"
+rooms = 12
+names = "The Elven Sole (9); Daisy Workshop (1); Lilac Workshop (1)"
+room_ids = "33264 33265 33266 33267 33268 33269 33270 33271 33272 33273 33274 33275"
+
+[[building]]
+parent = "vornavis-solhaven-town"
+rooms = 17
+names = "Vornavis (17)"
+room_ids = "33294 33295 33296 33297 33298 33299 33300 33301 33377 33378 33379 33380 33381 33382 33383 33384 33385"
+
+[[building]]
+parent = "vornavis-solhaven-town"
+rooms = 7
+names = "Oleander House (7)"
+room_ids = "34440 34441 34442 34443 34444 34445 34446"
+
+[[building]]
+parent = "isle-of-the-four-winds-mist-harbor-town"
+rooms = 6
+names = "Shadowlight Gallery (6)"
+room_ids = "36279 36280 36281 36282 36283 36284"
+
+[[building]]
+parent = "wehnimers-landing-town"
+rooms = 7
+names = "Pan's Place (3); Cooper's Shop (2); Cooper's (1)"
+room_ids = "383 384 23976 25593 25594 25595 25596"
+
+[[building]]
+parent = "icemule-trace-town"
+rooms = 13
+names = "Tartifacts Bakery (2); Blueberry Tart Table (1); Burnt Tart Table (1)"
+room_ids = "2419 2420 3408 3610 3611 3626 3829 3851 17083 17084 17085 17086 17087"
+
+[[building]]
+parent = "elven-nations-sylvarraend-town"
+rooms = 7
+names = "Hagatha's Brew and Barley (2); Ant Hill Table (1); Jeweled Dagger Table (1)"
+room_ids = "10071 15607 18590 18592 18593 18594 18595"
+
+[[building]]
+parent = "elven-nations-tavaalor-town"
+rooms = 16
+names = "Helgreth's Tavern (4); Broadsword Table (1); Crossbow Table (1)"
+room_ids = "10424 10425 10426 28270 28271 28272 28273 28274 28275 28276 28277 28278 28279 28280 28281 28282"
+
+[[building]]
+parent = "isle-of-the-four-winds-mist-harbor-town"
+rooms = 6
+names = "Blue Table (1); Green Table (1); Portable Water Hole (1)"
+room_ids = "12364 23243 23745 26187 26188 26189"
+
+[[building]]
+parent = "elven-nations-sylvarraend-town"
+rooms = 8
+names = "Elaienaran Haven (6); Sylvarraend Herbals (2)"
+room_ids = "13137 15626 33715 33716 33717 33718 33719 33720"
+
+[[building]]
+parent = "elven-nations-ravelin"
+rooms = 8
+names = "Lilly's Tavern (4); Jester's Table (1); King's Table (1)"
+room_ids = "13926 13927 13963 13964 23977 23981 23983 23985"
+
+[[building]]
+parent = "special-duskruin"
+rooms = 6
+names = "Temple of Tentacles (4); Deep Within Darkness (1); Temple Of Tentacles (1)"
+room_ids = "26852 26853 26854 26855 28807 31423"
+
+[[building]]
+parent = "taillistim-town"
+rooms = 9
+names = "Museum Alerreth (9)"
+room_ids = "28963 29245 29246 29247 29248 29249 29250 29251 29252"
+
+[[building]]
+parent = "icemule-trace-town"
+rooms = 7
+names = "Shivergale (6); Hailscatter Atelier (1)"
+room_ids = "31426 31427 31428 31429 31430 31431 31432"
+
+[[building]]
+parent = "krakens-fall-town"
+rooms = 6
+names = "The Vengeance (5); Sailor's Solace (1)"
+room_ids = "29017 33428 33429 33430 33431 33432"
+
+[[building]]
+parent = "special-naidem-west"
+rooms = 8
+names = "Yvalyst Manor (8)"
+room_ids = "33983 33984 33985 33986 33987 33988 33989 33990"
+
+[[building]]
+parent = "isle-of-the-four-winds-mist-harbor-town"
+rooms = 6
+names = "Dragonfly Den (6)"
+room_ids = "35806 35807 35808 35809 35810 35811"
+
+[[building]]
+parent = "vornavis-solhaven-town"
+rooms = 10
+names = "The Tentacled Tavern (2); Azure Anemone Table (1); Beaded Anemone Table (1)"
+room_ids = "199 5717 5718 13973 19340 19341 19342 19343 19344 19345"
+
+[[building]]
+parent = "wehnimers-landing-town"
+rooms = 6
+names = "Baker's Shop (6)"
+room_ids = "8717 8718 14628 32563 32564 32565"
+
+[[building]]
+parent = "vornavis-solhaven-town"
+rooms = 6
+names = "Girvahk's Shop (6)"
+room_ids = "13974 13975 14579 14580 14581 17378"
+
+[[building]]
+parent = "wehnimers-landing-lysierian-hills"
+rooms = 6
+names = "Gryphon Holding (5); Gryhon Holding (1)"
+room_ids = "14453 26055 26056 26057 26058 26059"
+
+[[building]]
+parent = "isle-of-the-four-winds-eastern-waterway"
+rooms = 7
+names = "Stone Manor (7)"
+room_ids = "25837 25838 25839 25840 25841 25842 25843"

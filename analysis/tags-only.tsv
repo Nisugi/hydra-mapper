@@ -1,0 +1,1122 @@
+# TAGS -- 1120 classification tags
+# count	locations	tag	note
+5184	144	no forageables	1% beside herbs
+798	24	closed	0% beside herbs
+517	45	urchin-access	65% beside herbs
+318	50	private property	31% beside herbs
+212	74	node	58% beside herbs
+168	10	dusky pink sea thrift	77% beside herbs
+145	13	gone	1% beside herbs
+140	9	rewritten	0% beside herbs
+135	22	no-auto-map	11% beside herbs
+108	5	peacock's tail	66% beside herbs
+104	2	bract of sea spurge	60% beside herbs
+102	5	tiny white elderflowers	25% beside herbs
+91	35	supernode	77% beside herbs
+90	1	dobrem	71% beside herbs
+89	11	public locker	35% beside herbs
+89	11	publiclockers	35% beside herbs
+84	1	white-belled wintergreen	0% beside herbs
+67	2	seedhead of beebalm	64% beside herbs
+66	9	coastal sword sedge	85% beside herbs
+62	1	acistira stem	0% beside herbs
+62	1	black-red fritillary	0% beside herbs
+62	1	blackish green twisted-fan	0% beside herbs
+62	1	checkered fritillary	0% beside herbs
+62	1	green acistira leaves	0% beside herbs
+62	1	pinkish green rosegrass	0% beside herbs
+62	1	vert and orange frog-cup	0% beside herbs
+62	1	violet fritillary	0% beside herbs
+62	1	yellowish green twisted-fan	0% beside herbs
+57	1	snake's head fritillary	0% beside herbs
+54	9	rogue guild dirt	0% beside herbs
+52	7	missing	2% beside herbs
+51	9	rogue guild window	0% beside herbs
+51	9	sorcerer alchemy workshop	0% beside herbs
+49	9	cleric alchemy workshop	0% beside herbs
+49	9	wizard alchemy workshop	53% beside herbs
+47	9	empath alchemy workshop	0% beside herbs
+47	9	rogue guild plant	0% beside herbs
+44	6	warrior guild leaves	11% beside herbs
+44	7	warrior guild shrubbery	16% beside herbs
+42	7	warrior guild floor	0% beside herbs
+41	28	table	29% beside herbs
+40	7	warrior guild armor	0% beside herbs
+39	1	dybbuk	5% beside herbs
+39	1	eidolon	5% beside herbs
+39	1	tangerine scholar's-folly	79% beside herbs
+39	1	veilmist rose	79% beside herbs
+39	1	waern	5% beside herbs
+38	1	vesperti	76% beside herbs
+37	2	skeleton	89% beside herbs
+37	2	wraith	70% beside herbs
+36	27	bank	19% beside herbs
+36	2	winterbriar moss	0% beside herbs
+30	2	green vine	80% beside herbs
+27	1	kiramon defender	0% beside herbs
+27	1	kiramon worker	0% beside herbs
+26	3	heath star moss	31% beside herbs
+25	2	evermore rosehip	0% beside herbs
+25	2	jagged boneset leaf	0% beside herbs
+25	2	marigold blossoms	0% beside herbs
+25	13	trash	52% beside herbs
+24	2	dark apparition	46% beside herbs
+23	1	arctic willow	0% beside herbs
+23	1	blue snow gentian	0% beside herbs
+23	1	campanella rose	0% beside herbs
+23	1	glossy red bearberries	0% beside herbs
+23	2	orange milkweed flowers	0% beside herbs
+23	1	purple saxifrage	0% beside herbs
+23	1	purplish red fireweed	0% beside herbs
+23	2	red reishi mushroom	0% beside herbs
+23	1	white dwarf birch	0% beside herbs
+23	1	white pearl yarrow	0% beside herbs
+23	1	white-tufted grass	0% beside herbs
+23	1	yellow saxifrage	0% beside herbs
+21	13	exit	14% beside herbs
+21	16	inn	52% beside herbs
+21	20	pawnshop	38% beside herbs
+21	21	town	62% beside herbs
+20	19	furrier	45% beside herbs
+20	19	gemshop	50% beside herbs
+20	3	pineapple sage	55% beside herbs
+19	2	arch wight	5% beside herbs
+19	1	monastic lich	0% beside herbs
+18	13	advguard	83% beside herbs
+18	2	bittermere lichen	0% beside herbs
+18	17	herbalist	50% beside herbs
+18	2	sprig of green chervil	0% beside herbs
+18	16	tables	44% beside herbs
+18	2	vermilion fire moss	0% beside herbs
+18	7	warrior guild iceblocks	0% beside herbs
+16	15	alchemist	31% beside herbs
+16	1	blue iceblossom	0% beside herbs
+16	1	lesser vruul	0% beside herbs
+16	15	urchin-hideout	0% beside herbs
+16	15	workshop	25% beside herbs
+15	14	mail	40% beside herbs
+15	1	phantom	73% beside herbs
+15	14	postoffice	40% beside herbs
+15	1	white sea daffodil	73% beside herbs
+15	1	white vysan	73% beside herbs
+14	13	debts	50% beside herbs
+14	13	locksmith	50% beside herbs
+14	1	nedum vereri	21% beside herbs
+14	1	shelfae chieftain	36% beside herbs
+13	13	consignment	54% beside herbs
+13	12	general store	46% beside herbs
+13	13	locksmith pool	85% beside herbs
+13	13	locksmithpool	85% beside herbs
+13	13	npchealer	54% beside herbs
+13	12	pawn	54% beside herbs
+13	1	spectral monk	0% beside herbs
+13	13	urchin guide postoffice	46% beside herbs
+13	13	urchin guide tables	46% beside herbs
+13	11	weaponshop	31% beside herbs
+13	1	wind wraith	8% beside herbs
+12	8	advguild	42% beside herbs
+12	12	alchemy	50% beside herbs
+12	12	armorshop	58% beside herbs
+12	12	locksmith shop	42% beside herbs
+12	1	snow spectre	0% beside herbs
+12	12	urchin guide alchemy	50% beside herbs
+12	12	urchin guide armor	42% beside herbs
+12	12	urchin guide bank	42% beside herbs
+12	12	urchin guide furrier	50% beside herbs
+12	12	urchin guide gemshop	50% beside herbs
+12	12	urchin guide herbalist	50% beside herbs
+12	12	urchin guide locksmithpool	83% beside herbs
+12	7	warrior guild icetub	0% beside herbs
+12	7	warrior guild masters	8% beside herbs
+12	1	zombie	8% beside herbs
+11	11	armor	45% beside herbs
+11	11	chronomage	82% beside herbs
+11	11	collectibles	45% beside herbs
+11	11	forge	64% beside herbs
+11	11	guard	73% beside herbs
+11	11	houselockers	55% beside herbs
+11	11	jail	36% beside herbs
+11	11	justice	36% beside herbs
+11	11	lumnis donate	82% beside herbs
+11	11	lumnisdonate	82% beside herbs
+11	11	npccleric	45% beside herbs
+11	11	portmaster	45% beside herbs
+11	9	sanctuary	45% beside herbs
+11	11	stable	82% beside herbs
+11	11	townhall	82% beside herbs
+11	11	travel waiting room	82% beside herbs
+11	7	urchin guide bounty	36% beside herbs
+11	11	urchin guide collectibles	45% beside herbs
+11	11	urchin guide debts	55% beside herbs
+11	11	urchin guide guard	82% beside herbs
+11	11	urchin guide inn	55% beside herbs
+11	11	urchin guide justice	36% beside herbs
+11	11	urchin guide locksmith	45% beside herbs
+11	11	urchin guide pawn	55% beside herbs
+11	11	urchin guide townhall	82% beside herbs
+11	11	urchin guide weapons	45% beside herbs
+11	11	weapons	45% beside herbs
+10	9	bard guild	80% beside herbs
+10	9	bardguild	80% beside herbs
+10	9	bhalocker	10% beside herbs
+10	6	bounty	30% beside herbs
+10	1	copper tea flower	60% beside herbs
+10	10	dyers	50% beside herbs
+10	10	fletcher	40% beside herbs
+10	10	handler	70% beside herbs
+10	1	locker:public	0% beside herbs
+10	10	movers	40% beside herbs
+10	10	pauperslockers	50% beside herbs
+10	10	reagent shop	60% beside herbs
+10	9	rogue guild	20% beside herbs
+10	9	rogue guild footpads	0% beside herbs
+10	9	rogue guild masters	0% beside herbs
+10	9	rogueguild	20% beside herbs
+10	5	treasuremaster	30% beside herbs
+10	9	urchin guide docks	50% beside herbs
+10	10	urchin guide fletcher	40% beside herbs
+9	9	cleric alchemy administrator	0% beside herbs
+9	9	cleric alchemy cleaning supplies	0% beside herbs
+9	9	cleric alchemy guildmaster	0% beside herbs
+9	9	cleric alchemy masters	0% beside herbs
+9	9	cleric alchemy shop	0% beside herbs
+9	9	cleric alchemy training cauldron	0% beside herbs
+9	9	cleric guild	78% beside herbs
+9	9	cleric guild administrator	0% beside herbs
+9	9	cleric guild guildmaster	0% beside herbs
+9	9	cleric guild masters	0% beside herbs
+9	9	clericguild	78% beside herbs
+9	9	clericshop	44% beside herbs
+9	9	cobbling	44% beside herbs
+9	9	empath alchemy administrator	0% beside herbs
+9	9	empath alchemy cleaning supplies	0% beside herbs
+9	9	empath alchemy guildmaster	0% beside herbs
+9	9	empath alchemy masters	0% beside herbs
+9	9	empath alchemy shop	0% beside herbs
+9	9	empath alchemy training cauldron	0% beside herbs
+9	9	empath guild administrator	0% beside herbs
+9	9	empath guild guildmaster	0% beside herbs
+9	9	empath guild masters	0% beside herbs
+9	9	empath guild shop	0% beside herbs
+9	1	enemy man o' war	0% beside herbs
+9	9	exchange	22% beside herbs
+9	8	fishing shop	33% beside herbs
+9	9	grocer	44% beside herbs
+9	9	house clerk	56% beside herbs
+9	9	mho cart rentals	56% beside herbs
+9	9	mho tent rentals	44% beside herbs
+9	9	premium supernode	56% beside herbs
+9	9	premium:transport	0% beside herbs
+9	9	rogue guild administrator	0% beside herbs
+9	9	rogue guild cleaning supplies	0% beside herbs
+9	9	rogue guild dummies	0% beside herbs
+9	9	rogue guild guildmaster	0% beside herbs
+9	9	rogue guild kitchen	0% beside herbs
+9	9	rogue guild mannequin	0% beside herbs
+9	9	rogue guild mannequins	0% beside herbs
+9	9	rogue guild master	0% beside herbs
+9	9	rogue guild shop	0% beside herbs
+9	9	rogue guild toolbench	0% beside herbs
+9	9	rogue guild tools	0% beside herbs
+9	9	rogue guild workshop	0% beside herbs
+9	9	sorcerer alchemy administrator	11% beside herbs
+9	9	sorcerer alchemy cleaning supplies	0% beside herbs
+9	9	sorcerer alchemy guildmaster	0% beside herbs
+9	9	sorcerer alchemy masters	0% beside herbs
+9	9	sorcerer alchemy shop	0% beside herbs
+9	9	sorcerer alchemy training cauldron	0% beside herbs
+9	9	sorcerer guild	89% beside herbs
+9	9	sorcerer guild administrator	11% beside herbs
+9	9	sorcerer guild guildmaster	0% beside herbs
+9	9	sorcerer guild masters	0% beside herbs
+9	9	sorcererguild	89% beside herbs
+9	3	sunfist	44% beside herbs
+9	3	superintendent	44% beside herbs
+9	9	urchin guide bardguild	78% beside herbs
+9	9	urchin guide healer	56% beside herbs
+9	7	urchin guide warriorguild	78% beside herbs
+9	7	warrior guild	78% beside herbs
+9	7	warrior guild administrator	0% beside herbs
+9	7	warrior guild boards	0% beside herbs
+9	7	warrior guild branches	0% beside herbs
+9	7	warrior guild cleaning supplies	11% beside herbs
+9	7	warrior guild dark attendant	0% beside herbs
+9	7	warrior guild dummies	0% beside herbs
+9	7	warrior guild guildmaster	0% beside herbs
+9	7	warrior guild metal stage doors	0% beside herbs
+9	7	warrior guild sauna	0% beside herbs
+9	7	warrior guild shop master	0% beside herbs
+9	7	warrior guild wheel	0% beside herbs
+9	7	warrior guild wooden boxes	0% beside herbs
+9	7	warrior guild wooden stage doors	0% beside herbs
+9	7	warriorguild	78% beside herbs
+9	9	wizard alchemy administrator	33% beside herbs
+9	9	wizard alchemy cleaning supplies	11% beside herbs
+9	9	wizard alchemy guildmaster	33% beside herbs
+9	9	wizard alchemy masters	33% beside herbs
+9	9	wizard alchemy shop	11% beside herbs
+9	9	wizard alchemy training cauldron	0% beside herbs
+9	9	wizard guild	89% beside herbs
+9	9	wizard guild administrator	33% beside herbs
+9	9	wizard guild guildmaster	33% beside herbs
+9	9	wizard guild masters	33% beside herbs
+9	9	wizard guild shop	11% beside herbs
+9	9	wizard guild workshop	33% beside herbs
+9	9	wizard workshop	33% beside herbs
+9	9	wizardguild	89% beside herbs
+8	8	bard guild guildmaster	12% beside herbs
+8	8	bard guild shop	0% beside herbs
+8	1	downy skullcap	0% beside herbs
+8	1	orange-yellow chamomile	0% beside herbs
+8	8	premium teleportation jewelry	75% beside herbs
+8	8	ranger guild guildmaster	12% beside herbs
+8	8	rogue guild bar	0% beside herbs
+8	8	rogue guild table	0% beside herbs
+8	8	silver-cost:32928:25000	62% beside herbs
+8	8	summoning chamber	0% beside herbs
+8	8	urchin guide clericguild	75% beside herbs
+8	8	urchin guide cobbling	50% beside herbs
+8	8	urchin guide grocer	50% beside herbs
+8	8	urchin guide temple	62% beside herbs
+8	8	urchin guide wizardguild	88% beside herbs
+8	7	voln	75% beside herbs
+8	6	warrior guild snacks	0% beside herbs
+7	7	boatswain	86% beside herbs
+7	7	cleric guild shop	14% beside herbs
+7	7	debt	43% beside herbs
+7	1	enemy carrack	0% beside herbs
+7	1	enemy galleon	0% beside herbs
+7	7	ranger shack	57% beside herbs
+7	6	rogue guild trainer	0% beside herbs
+7	7	silver-cost:1870:25000	43% beside herbs
+7	7	silver-cost:29033:25000	43% beside herbs
+7	7	silver-cost:31493:35000	57% beside herbs
+7	7	silver-cost:32372:25000	57% beside herbs
+7	7	sorcerer guild node	14% beside herbs
+7	7	sorcerer guild shop	0% beside herbs
+7	7	sorcerer guild workshop	0% beside herbs
+7	6	travel office	29% beside herbs
+6	6	citizenship	50% beside herbs
+6	1	cysaegir public locker	83% beside herbs
+6	1	enemy brigantine	0% beside herbs
+6	1	enemy frigate	0% beside herbs
+6	6	firewood	17% beside herbs
+6	6	fshop	0% beside herbs
+6	6	healer	33% beside herbs
+6	4	omnishrine	33% beside herbs
+6	6	silver-cost:10838:25000	50% beside herbs
+6	2	white mullein blossom	33% beside herbs
+6	1	white willow bark	33% beside herbs
+5	5	advguard2	40% beside herbs
+5	2	brigatta locker	0% beside herbs
+5	5	citizen lounge	0% beside herbs
+5	1	enemy sloop	0% beside herbs
+5	5	rogue guild hardlock	40% beside herbs
+5	5	silver-cost:11756:12500	40% beside herbs
+5	5	wagon	80% beside herbs
+4	4	advguard3	50% beside herbs
+4	4	cleric shop	50% beside herbs
+4	4	dock handler	75% beside herbs
+4	1	gate	0% beside herbs
+4	2	locker:twilighthall	0% beside herbs
+4	3	ronan	50% beside herbs
+4	3	sglocker	0% beside herbs
+4	4	silver-cost:250:25000	75% beside herbs
+4	4	smokeshop	25% beside herbs
+4	1	warrior guild bush	0% beside herbs
+4	4	warrior guild sheet metal	25% beside herbs
+4	2	yellow sorrel sprig	0% beside herbs
+3	1	caravan	67% beside herbs
+3	3	citizen	33% beside herbs
+3	2	firebird	67% beside herbs
+3	1	icicle	33% beside herbs
+3	2	lockerentrance:twilighthall	0% beside herbs
+3	3	locus	0% beside herbs
+3	3	silver-cost:11756:25000	67% beside herbs
+3	3	trove	0% beside herbs
+2	0	Poisoned Heretic	0% beside herbs
+2	1	Silent Investor	0% beside herbs
+2	1	altar	50% beside herbs
+2	2	antimagic	100% beside herbs
+2	1	arctic puma	50% beside herbs
+2	2	arena	0% beside herbs
+2	2	artificer	50% beside herbs
+2	2	bakery	50% beside herbs
+2	1	blush white hollyhock	0% beside herbs
+2	2	boot	100% beside herbs
+2	2	boutique	50% beside herbs
+2	1	chocolate-red hollyhock	0% beside herbs
+2	1	cleo	50% beside herbs
+2	1	cleodelia	50% beside herbs
+2	2	clothier	0% beside herbs
+2	2	colgifts	0% beside herbs
+2	2	colinquisitor	0% beside herbs
+2	2	colpoohbah	0% beside herbs
+2	2	colservices	0% beside herbs
+2	2	coltaskmaster	0% beside herbs
+2	2	commons	50% beside herbs
+2	2	duplicate	0% beside herbs
+2	1	ebon hollyhock	0% beside herbs
+2	2	eonak	0% beside herbs
+2	1	foe:minotaur magus	100% beside herbs
+2	2	fusion	0% beside herbs
+2	2	gosaena	0% beside herbs
+2	1	green gingko leaf	0% beside herbs
+2	1	khy	0% beside herbs
+2	1	khylynnia	0% beside herbs
+2	2	koar	50% beside herbs
+2	1	leafi	0% beside herbs
+2	1	leafiara	0% beside herbs
+2	2	leya	50% beside herbs
+2	2	locker:beaconhall	0% beside herbs
+2	2	map:samepath:southeast,northeast	50% beside herbs
+2	1	mapdb:fixme	0% beside herbs
+2	2	marlu	50% beside herbs
+2	2	mount:return	100% beside herbs
+2	1	moved	0% beside herbs
+2	2	necropolis	0% beside herbs
+2	1	niveous hollyhock	0% beside herbs
+2	1	oxblood naefira	0% beside herbs
+2	1	pale violet hollyhock	0% beside herbs
+2	1	paupers locker	0% beside herbs
+2	2	pawn shop	0% beside herbs
+2	1	peer down =~ /Obvious exits: down/	100% beside herbs
+2	2	peer up =~ /^Obvious exits: up, down/	0% beside herbs
+2	2	permifier	0% beside herbs
+2	2	phoen	0% beside herbs
+2	1	plum wood rose	0% beside herbs
+2	2	public lockers	50% beside herbs
+2	1	quarters	100% beside herbs
+2	2	reddish black direbloom	0% beside herbs
+2	1	resaeun bark	0% beside herbs
+2	2	rogue guild hardlock:door	50% beside herbs
+2	2	rogue workshop	0% beside herbs
+2	2	saffron ginger root	0% beside herbs
+2	2	sanctum	50% beside herbs
+2	1	selema	0% beside herbs
+2	2	ship broker	100% beside herbs
+2	2	shipbroker	100% beside herbs
+2	2	shovels	0% beside herbs
+2	2	silver-cost:17645:500	0% beside herbs
+2	2	silver-cost:250:35000	50% beside herbs
+2	1	silver-cost:25145:3000	50% beside herbs
+2	2	silver-cost:29860:3000	100% beside herbs
+2	1	silvergate locker	0% beside herbs
+2	2	smithy	0% beside herbs
+2	1	sunny yellow hollyhock	0% beside herbs
+2	2	sylinar	0% beside herbs
+2	2	tilamaire	0% beside herbs
+2	2	traveler	0% beside herbs
+2	1	trove 5	0% beside herbs
+2	2	twilight locker	0% beside herbs
+2	2	urchin guide boatswain	50% beside herbs
+2	2	urchin guide commons	50% beside herbs
+2	2	urchin guide gate	100% beside herbs
+2	2	urchin guide osatask	50% beside herbs
+2	2	urchin guide star	100% beside herbs
+2	2	urchin guide westgate	100% beside herbs
+2	2	v'tull	0% beside herbs
+2	2	voln grandmaster	0% beside herbs
+2	2	voln master hall	0% beside herbs
+2	2	voln meditation chamber	0% beside herbs
+2	1	warcats	50% beside herbs
+2	2	warrior guild crates	50% beside herbs
+2	2	warrior guild shop	0% beside herbs
+2	2	westgate	100% beside herbs
+2	2	zelia	0% beside herbs
+1	1	Alouetta	0% beside herbs
+1	1	Aramund	100% beside herbs
+1	1	Arkati	0% beside herbs
+1	1	BRS	100% beside herbs
+1	1	Conundrum	0% beside herbs
+1	1	Emberstone	0% beside herbs
+1	1	Gemaneen	0% beside herbs
+1	1	Icemule Trace empath alchemy shop	0% beside herbs
+1	1	Icemule cleric alchemy shop	0% beside herbs
+1	1	Icemule empath guild entrance	100% beside herbs
+1	1	Icemule sorcerer alchemy shop	0% beside herbs
+1	1	Icemule wizard alchemy shop	0% beside herbs
+1	1	Ilyra	100% beside herbs
+1	1	Jaired	0% beside herbs
+1	1	Jaired's	0% beside herbs
+1	1	Keh'nira Fyr'sah	100% beside herbs
+1	1	Khy	0% beside herbs
+1	1	Khylynnia	0% beside herbs
+1	1	LDI	100% beside herbs
+1	1	Leya	100% beside herbs
+1	1	Luthrek	100% beside herbs
+1	1	Mania	0% beside herbs
+1	1	Mist Harbor cleric alchemy shop	0% beside herbs
+1	1	Mist Harbor empath alchemy shop	0% beside herbs
+1	0	Node	0% beside herbs
+1	1	River's Rest cleric alchemy shop	0% beside herbs
+1	1	River's Rest empath alchemy shop	0% beside herbs
+1	1	River's Rest wizard alchemy shop	0% beside herbs
+1	1	Rivers Rest sorcerer alchemy shop	0% beside herbs
+1	1	Sadie	0% beside herbs
+1	0	Sanctuary	0% beside herbs
+1	1	Solhaven cleric alchemy shop	0% beside herbs
+1	1	Solhaven empath alchemy shop	0% beside herbs
+1	1	Solhaven sorcerer alchemy shop	0% beside herbs
+1	1	Sorcerer Guild	0% beside herbs
+1	1	Ta'Illistim cleric alchemy shop	0% beside herbs
+1	1	Ta'Illistim empath alchemy shop	0% beside herbs
+1	1	Ta'Illistim sorcerer alchemy shop	0% beside herbs
+1	1	Ta'Illistim wizard alchemy shop	0% beside herbs
+1	1	Ta'Vaalor cleric alchemy shop	0% beside herbs
+1	1	Ta'Vaalor empath alchemy shop	0% beside herbs
+1	1	Ta'Vaalor wizard alchemy shop	0% beside herbs
+1	1	Teras empath alchemy shop	0% beside herbs
+1	1	Wehnimer's Landing cleric alchemy shop	0% beside herbs
+1	1	Wehnimer's Landing empath alchemy shop	0% beside herbs
+1	1	Wehnimer's Landing general store	100% beside herbs
+1	1	Wehnimer's Landing wizard alchemy shop	0% beside herbs
+1	1	Whirlin	0% beside herbs
+1	1	WillowHall	0% beside herbs
+1	1	Willowhall	0% beside herbs
+1	1	Wyromania	0% beside herbs
+1	1	Zephyra Wilds	0% beside herbs
+1	1	Zul Logoth cleric alchemy shop	0% beside herbs
+1	1	Zul Logoth empath alchemy shop	0% beside herbs
+1	1	Zul Logoth sorcerer alchemy shop	0% beside herbs
+1	1	Zul Logoth wizard alchemy shop	100% beside herbs
+1	1	achemist	100% beside herbs
+1	1	advhead	100% beside herbs
+1	1	agora	100% beside herbs
+1	1	agora entry	100% beside herbs
+1	1	agora promenade	100% beside herbs
+1	1	alchemsit	0% beside herbs
+1	1	alex workshop	0% beside herbs
+1	1	altar of wind	100% beside herbs
+1	1	amaranthgate	100% beside herbs
+1	1	amasalen	0% beside herbs
+1	1	andelas	0% beside herbs
+1	1	annattogate	100% beside herbs
+1	1	annex	0% beside herbs
+1	1	aota	0% beside herbs
+1	1	apothecarium	100% beside herbs
+1	1	arachne	0% beside herbs
+1	1	arakhor estate	100% beside herbs
+1	1	arakhor estate ballroom	100% beside herbs
+1	1	arakhor estate bedroom	0% beside herbs
+1	1	arakhor estate deck	100% beside herbs
+1	1	arakhor estate parlour	100% beside herbs
+1	1	arakhor estate workshop	0% beside herbs
+1	1	aramund	0% beside herbs
+1	1	arcane	100% beside herbs
+1	1	arcane masters	100% beside herbs
+1	1	arena:team	0% beside herbs
+1	1	arkati	0% beside herbs
+1	1	armory	0% beside herbs
+1	1	arrivals	100% beside herbs
+1	0	assassin	0% beside herbs
+1	1	atoll barrier	100% beside herbs
+1	1	atoll black crystal	100% beside herbs
+1	1	atoll blue crystal	100% beside herbs
+1	1	atoll red crystal	100% beside herbs
+1	1	atoll yellow crystal	100% beside herbs
+1	1	aurora light	100% beside herbs
+1	1	aurora light bedroom	100% beside herbs
+1	1	aurora light loft	100% beside herbs
+1	1	aurora light node	100% beside herbs
+1	1	aurora light pasture	100% beside herbs
+1	1	aurora light stables	100% beside herbs
+1	1	aurora light stables 2	100% beside herbs
+1	1	aurora's light	100% beside herbs
+1	1	aurora's light bedroom	100% beside herbs
+1	1	aurora's light loft	100% beside herbs
+1	1	aurora's light node	100% beside herbs
+1	1	aurora's light pasture	100% beside herbs
+1	1	aurora's light stables	100% beside herbs
+1	1	aurora's light stables 2	100% beside herbs
+1	1	auto-flarer	0% beside herbs
+1	1	autoflarer	0% beside herbs
+1	1	ayaa	0% beside herbs
+1	1	ballista	0% beside herbs
+1	1	bandit	0% beside herbs
+1	1	barkeep	100% beside herbs
+1	1	barracks	0% beside herbs
+1	1	barrister	0% beside herbs
+1	1	bastion	0% beside herbs
+1	1	bath	0% beside herbs
+1	1	bathhouse	0% beside herbs
+1	1	bcourtyard	0% beside herbs
+1	1	beach	100% beside herbs
+1	1	beldrins	100% beside herbs
+1	1	bericsaba	0% beside herbs
+1	1	bloodhenge	0% beside herbs
+1	1	bmarket	0% beside herbs
+1	1	board	100% beside herbs
+1	1	boats	100% beside herbs
+1	1	brigatta	100% beside herbs
+1	1	brigatta tables	0% beside herbs
+1	1	brigatta workshop	0% beside herbs
+1	1	britbane	0% beside herbs
+1	1	bruise-colored woundwort	0% beside herbs
+1	1	cages	100% beside herbs
+1	1	cannon	100% beside herbs
+1	1	cannons	100% beside herbs
+1	1	captains	100% beside herbs
+1	1	cargo	100% beside herbs
+1	1	carving	100% beside herbs
+1	1	carvings	100% beside herbs
+1	1	castle library	0% beside herbs
+1	1	cave	100% beside herbs
+1	1	ccf	100% beside herbs
+1	1	ccf:2018	100% beside herbs
+1	1	chancel	0% beside herbs
+1	1	charl	0% beside herbs
+1	1	cheap seats	0% beside herbs
+1	1	cheapseats	0% beside herbs
+1	1	cheprize	0% beside herbs
+1	1	cheshops	0% beside herbs
+1	1	cholen	0% beside herbs
+1	1	chum	0% beside herbs
+1	1	citygate	100% beside herbs
+1	1	clairette	0% beside herbs
+1	1	cleo's	0% beside herbs
+1	1	cleos	0% beside herbs
+1	1	cobblers	100% beside herbs
+1	1	col	0% beside herbs
+1	1	col taskmaster	0% beside herbs
+1	1	colosseum	0% beside herbs
+1	1	common	100% beside herbs
+1	1	constable	0% beside herbs
+1	1	conundrum	0% beside herbs
+1	1	council of light	0% beside herbs
+1	1	courtyard	0% beside herbs
+1	1	crew	100% beside herbs
+1	1	crewquarters	100% beside herbs
+1	1	dabbler	0% beside herbs
+1	1	dais	100% beside herbs
+1	1	debt collector	0% beside herbs
+1	1	debtcollector	0% beside herbs
+1	1	departures	100% beside herbs
+1	1	dice	100% beside herbs
+1	1	diriko	0% beside herbs
+1	1	dock	100% beside herbs
+1	1	docks	100% beside herbs
+1	1	dr sewer	0% beside herbs
+1	1	drafix	0% beside herbs
+1	1	dummy	0% beside herbs
+1	1	duskruin:smithy	0% beside herbs
+1	1	eastcart	0% beside herbs
+1	1	eastgate	100% beside herbs
+1	1	easttower	100% beside herbs
+1	1	eboard	0% beside herbs
+1	1	echo of volgust	100% beside herbs
+1	1	eg	0% beside herbs
+1	1	endlesswall	0% beside herbs
+1	1	endwall	0% beside herbs
+1	1	enhancive swap	0% beside herbs
+1	1	eorgina	0% beside herbs
+1	1	epilogue	100% beside herbs
+1	1	fash'lo'nae	0% beside herbs
+1	1	fcentral	0% beside herbs
+1	1	festival of lumnea	0% beside herbs
+1	1	figurehead	100% beside herbs
+1	1	firepit	100% beside herbs
+1	1	fishing gear	0% beside herbs
+1	1	fishing2	100% beside herbs
+1	1	fishing3	100% beside herbs
+1	1	fishing4	100% beside herbs
+1	1	flag	100% beside herbs
+1	1	flare tokens	0% beside herbs
+1	1	flares	0% beside herbs
+1	1	foxhunt	0% beside herbs
+1	1	friths	100% beside herbs
+1	1	front desk	0% beside herbs
+1	1	fwi festival	0% beside herbs
+1	1	fwi:bank	0% beside herbs
+1	1	fwifestival	100% beside herbs
+1	1	gem	0% beside herbs
+1	1	gem shop	0% beside herbs
+1	1	gemaneen	0% beside herbs
+1	1	ghia	0% beside herbs
+1	1	ghianna	0% beside herbs
+1	1	ghoul	0% beside herbs
+1	1	giantphang	0% beside herbs
+1	1	gladiator	0% beside herbs
+1	1	goldenhelm	100% beside herbs
+1	1	gp	0% beside herbs
+1	1	grand auction	0% beside herbs
+1	1	grand inquisitor	0% beside herbs
+1	1	grandmaster	0% beside herbs
+1	0	grumpy hermit	0% beside herbs
+1	1	helden	100% beside herbs
+1	1	helden hall	100% beside herbs
+1	1	herb hunt	0% beside herbs
+1	1	herbalist2	0% beside herbs
+1	1	herbhunt	0% beside herbs
+1	1	hess	0% beside herbs
+1	1	hot spring	0% beside herbs
+1	1	hot springs	0% beside herbs
+1	1	hotel	0% beside herbs
+1	1	house arcane	100% beside herbs
+1	1	house of paupers	100% beside herbs
+1	1	house phoenix	100% beside herbs
+1	1	house sovyn	100% beside herbs
+1	1	house sylvanfair	100% beside herbs
+1	1	hull	100% beside herbs
+1	1	huntress	0% beside herbs
+1	1	hut	100% beside herbs
+1	1	hut of bones	0% beside herbs
+1	1	idol	100% beside herbs
+1	1	ignis workshop	0% beside herbs
+1	1	imaera	0% beside herbs
+1	1	incanter	0% beside herbs
+1	1	investor	0% beside herbs
+1	1	invoker	0% beside herbs
+1	1	ivas	0% beside herbs
+1	1	jahadeem	0% beside herbs
+1	1	jastev	0% beside herbs
+1	1	jaston	0% beside herbs
+1	1	jouster	0% beside herbs
+1	1	kai	0% beside herbs
+1	1	kaldonis	0% beside herbs
+1	1	kingscourt	100% beside herbs
+1	1	kobold shaman	100% beside herbs
+1	1	krinchat	0% beside herbs
+1	1	kuon	0% beside herbs
+1	1	laethe	0% beside herbs
+1	1	lelqui	0% beside herbs
+1	1	library	0% beside herbs
+1	1	lichyard	0% beside herbs
+1	1	lighthouse	0% beside herbs
+1	1	live games	0% beside herbs
+1	1	livegames	0% beside herbs
+1	1	loci	0% beside herbs
+1	1	lockers	0% beside herbs
+1	1	lockpick:door:-125	100% beside herbs
+1	1	locksmith-pool	100% beside herbs
+1	1	lodge	0% beside herbs
+1	1	lorminstra	0% beside herbs
+1	1	lorn	0% beside herbs
+1	1	lornieh	0% beside herbs
+1	1	losthome	100% beside herbs
+1	1	lounge	0% beside herbs
+1	1	lumnea	0% beside herbs
+1	1	lumnis	0% beside herbs
+1	1	luukos	100% beside herbs
+1	1	lyrna	0% beside herbs
+1	1	mairiseth	0% beside herbs
+1	1	mairiseth telearat	0% beside herbs
+1	1	maithlea	0% beside herbs
+1	1	malwith	0% beside herbs
+1	1	mana trawl	0% beside herbs
+1	1	mania	0% beside herbs
+1	1	map:samepath:east,down	100% beside herbs
+1	1	map:samepath:east,northwest	100% beside herbs
+1	1	map:samepath:east,south,north	100% beside herbs
+1	1	map:samepath:east,southeast	100% beside herbs
+1	1	map:samepath:east,west	0% beside herbs
+1	1	map:samepath:north,northeast,east,southeast,south,southwest,west,northwest,up,down,out	0% beside herbs
+1	1	map:samepath:north,northwest,northeast	100% beside herbs
+1	1	map:samepath:north,south	100% beside herbs
+1	1	map:samepath:northeast,northwest	0% beside herbs
+1	1	map:samepath:northwest,southeast	0% beside herbs
+1	1	map:samepath:southeast,east	0% beside herbs
+1	1	map:samepath:southeast,northeast,southwest,west	100% beside herbs
+1	1	map:samepath:southwest,northwest	0% beside herbs
+1	1	map:samepath:southwest,southeast	0% beside herbs
+1	1	map:samepath:west,south,north,northwest,southwest	100% beside herbs
+1	1	map:samepath:west,southeast,southwest	100% beside herbs
+1	1	map:samepath:west,southwest,south	100% beside herbs
+1	1	maraene	0% beside herbs
+1	1	marauder	0% beside herbs
+1	1	marketbridge	100% beside herbs
+1	0	master assassin	0% beside herbs
+1	1	master of gifts	0% beside herbs
+1	1	master of services	0% beside herbs
+1	1	meb bed	100% beside herbs
+1	1	meb loft	100% beside herbs
+1	1	meb node	100% beside herbs
+1	1	meb's bed	100% beside herbs
+1	1	meb's loft	100% beside herbs
+1	1	meb's node	100% beside herbs
+1	1	mebloft	100% beside herbs
+1	1	mebnode	100% beside herbs
+1	1	mebroom	100% beside herbs
+1	1	menagerie madness	0% beside herbs
+1	1	messhall	100% beside herbs
+1	1	militia hall	0% beside herbs
+1	1	militia keep	0% beside herbs
+1	1	mirtag	0% beside herbs
+1	1	mobile smithy	100% beside herbs
+1	1	moneychanger	0% beside herbs
+1	1	moonsedge crypt	100% beside herbs
+1	1	moothall	100% beside herbs
+1	1	ms crypt	100% beside herbs
+1	1	mscastle	100% beside herbs
+1	1	mscrypt	100% beside herbs
+1	1	mslib	0% beside herbs
+1	1	mularos	0% beside herbs
+1	1	narwhal	0% beside herbs
+1	1	needle	0% beside herbs
+1	1	needle of pentas	0% beside herbs
+1	1	nest	100% beside herbs
+1	1	night market	0% beside herbs
+1	1	night markets	0% beside herbs
+1	1	nightowl	0% beside herbs
+1	1	niima	0% beside herbs
+1	1	northmarket	100% beside herbs
+1	1	npc locksmith	100% beside herbs
+1	1	npcbless	100% beside herbs
+1	1	npclocksmith	100% beside herbs
+1	1	obsidian acropolis	0% beside herbs
+1	1	obsidian acropolis lyceum	0% beside herbs
+1	1	obsidian acropolis observatory	0% beside herbs
+1	1	obsidian acropolis oubliette	0% beside herbs
+1	1	obsidian acropolis stoa	0% beside herbs
+1	1	obsidian acropolis workshop	0% beside herbs
+1	1	oleani	0% beside herbs
+1	1	ophidian cabal	0% beside herbs
+1	1	orange persimmon	100% beside herbs
+1	1	orb	100% beside herbs
+1	1	organ	0% beside herbs
+1	1	osaguild	100% beside herbs
+1	1	osasshop	0% beside herbs
+1	1	osatask	100% beside herbs
+1	1	papers	0% beside herbs
+1	1	patio	0% beside herbs
+1	1	pauper workshop	0% beside herbs
+1	1	paupers	100% beside herbs
+1	1	pauperslocker	0% beside herbs
+1	1	peer curtain =~ /Beacon Hall/	0% beside herbs
+1	1	peer curtain =~ /Twilight, West Tapestry Room/	0% beside herbs
+1	1	peer curtain =~ /^\[Annex, Beacon Hall Lobby\]$/	0% beside herbs
+1	1	peer curtain =~ /^\[Annex, Cairnfang Manor Lobby\]$/	0% beside herbs
+1	1	peer curtain =~ /^\[Annex, Helden Hall Lobby\]$/	0% beside herbs
+1	1	peer curtain =~ /^\[Annex, House Brigatta Lobby\]$/	0% beside herbs
+1	1	peer curtain =~ /^\[Annex, House Phoenix Lobby\]$/	0% beside herbs
+1	1	peer curtain =~ /^\[Annex, House Sovyn Lobby\]$/	0% beside herbs
+1	1	peer curtain =~ /^\[Annex, House Sylvanfair Lobby\]$/	0% beside herbs
+1	1	peer curtain =~ /^\[Annex, Rone Academy Lobby\]$/	0% beside herbs
+1	1	peer curtain =~ /^\[Annex, Silvergate Inn Lobby\]$/	0% beside herbs
+1	1	peer curtain =~ /^\[Annex, Twilight Hall Lobby\]$/	0% beside herbs
+1	1	peer curtain =~ /^\[Annex, White Haven Lobby\]$/	0% beside herbs
+1	1	peer curtain =~ /^\[Annex, Willow Hall Lobby\]$/	0% beside herbs
+1	1	peer curtain =~ /^\[Paupers, Annex Lobby\]$/	0% beside herbs
+1	1	peer door =~ /Arcane Masters|House of Paupers/	100% beside herbs
+1	1	peer door =~ /Beacon Hall|Obsidian Tower/	100% beside herbs
+1	1	peer door =~ /House Brigatta|Cairnfang Manor/	100% beside herbs
+1	1	peer door =~ /House Sylvanfair|House Sovyn/	100% beside herbs
+1	1	peer door =~ /Rising Phoenix|Argent Aspis/	100% beside herbs
+1	1	peer door =~ /Silvergate Inn|Twilight Hall/	100% beside herbs
+1	1	peer door =~ /White Haven|Helden Hall/	100% beside herbs
+1	1	peer door =~ /Willow Hall|Rone Academy/	100% beside herbs
+1	1	peer down =~ /Obvious exits: up, down/	0% beside herbs
+1	1	peer down =~ /^Obvious exits: southeast, up/	0% beside herbs
+1	1	peer down =~ /^Obvious exits: southeast/	0% beside herbs
+1	1	peer down =~ /^Obvious exits: southwest/	0% beside herbs
+1	1	peer east =~ /^Obvious (?:paths|exits): east, west/	100% beside herbs
+1	1	peer east =~ /^Obvious (?:paths|exits): northeast, east, west, northwest/	100% beside herbs
+1	1	peer east =~ /^Obvious exits: south, west/	0% beside herbs
+1	1	peer ne =~ /Obvious paths: north, southeast, south, southwest/	100% beside herbs
+1	1	peer ne =~ /Obvious paths: north, southwest/	100% beside herbs
+1	1	peer north =~ /^Obvious exits: north, south$/	0% beside herbs
+1	1	peer north =~ /^Obvious paths: east, southeast, south, southwest$/	100% beside herbs
+1	1	peer north =~ /^Obvious paths: east, southeast, south, southwest, west$/	100% beside herbs
+1	1	peer north =~ /^Obvious paths: north, northeast, east, south/	100% beside herbs
+1	1	peer north =~ /^Obvious paths: northeast, south, northwest/	100% beside herbs
+1	1	peer north =~ /^Obvious paths: south/	0% beside herbs
+1	1	peer northeast =~ /A Twisting Tunnel, Shaft/	100% beside herbs
+1	1	peer northeast =~ /^Obvious exits: north, east, southwest, west, up$/	100% beside herbs
+1	1	peer northeast =~ /^Obvious exits: north, northeast, southwest, west$/	100% beside herbs
+1	1	peer northeast =~ /^Obvious exits: north, northeast, southwest, west, down$/	100% beside herbs
+1	1	peer northeast =~ /^Obvious exits: northeast, east, south, southwest, down$/	100% beside herbs
+1	1	peer northeast =~ /^Obvious paths: east, southwest/	0% beside herbs
+1	1	peer northeast =~ /^Obvious paths: north, southwest, west, northwest$/	100% beside herbs
+1	1	peer northeast =~ /^Obvious paths: south, southwest, west, northwest$/	100% beside herbs
+1	1	peer northwest =~ /^Obvious paths: southeast, northwest/	0% beside herbs
+1	1	peer opening =~ /Twilight, West Tapestry Room/	0% beside herbs
+1	1	peer opening =~ /You also see a curtained opening and a steel door\./	0% beside herbs
+1	1	peer opening =~ /^Obvious exits: east, west$/	0% beside herbs
+1	1	peer opening =~ /^Obvious exits: north$/	0% beside herbs
+1	1	peer opening =~ /^Obvious exits: north, east, south$/	0% beside herbs
+1	1	peer opening =~ /^Obvious exits: north, south, west$/	0% beside herbs
+1	1	peer opening =~ /^Obvious exits: west$/	0% beside herbs
+1	1	peer opening =~ /^\[Paupers, Hallway\]/	0% beside herbs
+1	1	peer out =~ /^\[Beacon Hall, Storage Room\]$/	0% beside herbs
+1	1	peer out =~ /^\[Helden Hall, Commons\]$/	0% beside herbs
+1	0	peer passage =~ /^\[The Heart of the Art, Icemule\]/	0% beside herbs
+1	0	peer passage =~ /^\[The Heart of the Art, Solhaven\]/	0% beside herbs
+1	1	peer se =~ /Obvious paths: north, northeast, south, northwest/	100% beside herbs
+1	1	peer se =~ /Obvious paths: south, northwest/	100% beside herbs
+1	1	peer se =~ /Obvious paths: southeast, northwest/	100% beside herbs
+1	1	peer se =~ /expansive stone door/	0% beside herbs
+1	1	peer south =~ /Obvious exits: north, south/	100% beside herbs
+1	1	peer south =~ /^Obvious exits: north, south$/	100% beside herbs
+1	1	peer south =~ /^Obvious paths: north, east, southeast, west/	0% beside herbs
+1	1	peer south =~ /expansive stone door/	0% beside herbs
+1	1	peer southeast =~ /^Obvious paths: north, northeast, east, south, southwest, west, northwest$/	100% beside herbs
+1	1	peer southeast =~ /^Obvious paths: north, northeast, east, southeast, south, southwest, west, northwest$/	100% beside herbs
+1	1	peer southwest =~ /^Obvious paths: north, northeast, east, northwest$/	100% beside herbs
+1	1	peer southwest =~ /^Obvious paths: north, northeast, east, southeast$/	100% beside herbs
+1	1	peer southwest =~ /^Obvious paths: north, northeast, east, southeast, south, northwest$/	100% beside herbs
+1	1	peer southwest =~ /^Obvious paths: north, northeast, east, southeast, south, west, northwest$/	100% beside herbs
+1	1	peer sw =~ /Obvious paths: north, northeast, south, northwest/	100% beside herbs
+1	1	peer sw =~ /Obvious paths: northeast/	100% beside herbs
+1	1	peer sw =~ /expansive stone door/	0% beside herbs
+1	1	peer trapdoor =~ /Clumps of dirt make the travel here uneven and bumpy/	0% beside herbs
+1	1	peer up =~ /^Obvious exits: west, down/	0% beside herbs
+1	1	peer west =~ /\[Dark Shrine, Large Chamber\]/	0% beside herbs
+1	1	peer west =~ /^Obvious (?:paths|exits): east, west, northwest/	100% beside herbs
+1	1	peer west =~ /^Obvious (?:paths|exits): northeast, east, west, northwest/	100% beside herbs
+1	1	peer west =~ /^Obvious (?:paths|exits): northeast, east/	100% beside herbs
+1	1	peer west =~ /^Obvious exits: east$/	0% beside herbs
+1	1	peregrine	100% beside herbs
+1	1	phang	0% beside herbs
+1	1	phoenix	100% beside herbs
+1	1	pixiehunt	0% beside herbs
+1	1	plat lodge	0% beside herbs
+1	1	platinum lodge	0% beside herbs
+1	1	poohbah	0% beside herbs
+1	1	poorquarter	100% beside herbs
+1	1	pp:oberwood	100% beside herbs
+1	1	premium trove	0% beside herbs
+1	1	property trove	0% beside herbs
+1	1	ps:banthal	0% beside herbs
+1	1	ps:nonie	0% beside herbs
+1	1	ps:teclys	0% beside herbs
+1	1	pub	0% beside herbs
+1	1	purser	100% beside herbs
+1	1	pylon	0% beside herbs
+1	1	raincail	0% beside herbs
+1	1	ranger guild shop	100% beside herbs
+1	1	reagent	100% beside herbs
+1	1	reim	100% beside herbs
+1	1	reim task	0% beside herbs
+1	1	reim:vortex	0% beside herbs
+1	1	repair	100% beside herbs
+1	1	repairs	100% beside herbs
+1	1	restaurant	0% beside herbs
+1	1	restricted:11485:skill:climbing:15	0% beside herbs
+1	1	restricted:7918:skill:climbing:100	100% beside herbs
+1	1	retrone	0% beside herbs
+1	1	ringleader	0% beside herbs
+1	1	rogue guild hardlock:case	0% beside herbs
+1	1	rogue guild hardlock:gate	100% beside herbs
+1	1	rogue guild hardlock:hatchway	0% beside herbs
+1	1	roguemasters	0% beside herbs
+1	1	roguetrain	0% beside herbs
+1	1	rol:chaos	0% beside herbs
+1	1	rol:elemental	0% beside herbs
+1	1	rol:order	0% beside herbs
+1	1	rol:planar	0% beside herbs
+1	1	rol:spiritual	0% beside herbs
+1	1	roles	100% beside herbs
+1	1	roneacademy	100% beside herbs
+1	1	ruol	0% beside herbs
+1	1	ryjex	0% beside herbs
+1	1	sablecross	0% beside herbs
+1	1	sadie	0% beside herbs
+1	1	sails	100% beside herbs
+1	1	sands	100% beside herbs
+1	1	sara	0% beside herbs
+1	1	saranja	0% beside herbs
+1	1	saraphenia	0% beside herbs
+1	1	sboard	0% beside herbs
+1	1	sea	100% beside herbs
+1	1	seamstress	0% beside herbs
+1	1	sentry	100% beside herbs
+1	1	set desc on; peer down =~ /^Huge steps .* The floor of the cavern is far below, and anyone who fell over the unprotected edge of the stairway would surely die in the fall./	0% beside herbs
+1	1	set desc on; peer east =~ /^A throne sits in the middle/	100% beside herbs
+1	1	set desc on; peer east =~ /^Climbing a small hill/	100% beside herbs
+1	1	set desc on; peer northeast =~ /^A fur-matted, four-legged creature scurries/	0% beside herbs
+1	1	set desc on; peer northeast =~ /^Moving deeper into the woodlands/	0% beside herbs
+1	1	set desc on; peer out =~ /^A strong sea breeze rushes through,/	0% beside herbs
+1	1	set desc on; peer out =~ /^A woodworking masterpiece, a wooden wheel/	0% beside herbs
+1	1	set desc on; peer out =~ /^Bars for a capstan are stacked/	0% beside herbs
+1	1	set desc on; peer out =~ /^In the shadows cast from the/	0% beside herbs
+1	1	set desc on; peer out =~ /^Situated across from a wheel and/	0% beside herbs
+1	1	set desc on; peer out =~ /^The mizzenmast towers over a capstan,/	0% beside herbs
+1	1	set desc on; peer up =~ /^Huge steps .* Details of the cavern floor far below are lost in the shadowy distance./	0% beside herbs
+1	1	sewer	0% beside herbs
+1	1	sharth	0% beside herbs
+1	1	sheru	0% beside herbs
+1	1	ship dealer	100% beside herbs
+1	1	ship seller	100% beside herbs
+1	1	ships	100% beside herbs
+1	1	shipshull	100% beside herbs
+1	1	shipwheel	100% beside herbs
+1	1	shovel	0% beside herbs
+1	1	silver-cost:1013:1000	0% beside herbs
+1	1	silver-cost:1013:2000	0% beside herbs
+1	1	silver-cost:10838:12500	0% beside herbs
+1	1	silver-cost:10838:35000	100% beside herbs
+1	1	silver-cost:11754:25000	0% beside herbs
+1	1	silver-cost:1261:1000	0% beside herbs
+1	1	silver-cost:1261:2000	0% beside herbs
+1	1	silver-cost:1267:1000	0% beside herbs
+1	1	silver-cost:1870:35000	100% beside herbs
+1	1	silver-cost:19949:1	100% beside herbs
+1	1	silver-cost:221:3000	100% beside herbs
+1	1	silver-cost:2487:3000	0% beside herbs
+1	1	silver-cost:250:10000	0% beside herbs
+1	1	silver-cost:250:12500	100% beside herbs
+1	1	silver-cost:25691:500	0% beside herbs
+1	1	silver-cost:25858:2000	100% beside herbs
+1	1	silver-cost:25971:2000	100% beside herbs
+1	1	silver-cost:25975:2000	0% beside herbs
+1	1	silver-cost:2773:3000	100% beside herbs
+1	1	silver-cost:29033:35000	100% beside herbs
+1	1	silver-cost:30934:250	100% beside herbs
+1	1	silver-cost:31069:3000	0% beside herbs
+1	1	silver-cost:31493:25000	0% beside herbs
+1	1	silver-cost:32075:2000	0% beside herbs
+1	1	silver-cost:32372:12500	100% beside herbs
+1	1	silver-cost:993:1000	0% beside herbs
+1	1	silvergate	0% beside herbs
+1	1	silvergate inn	0% beside herbs
+1	1	songstone	0% beside herbs
+1	1	southgate	100% beside herbs
+1	1	sovyn	100% beside herbs
+1	1	spidersilk apothecary	100% beside herbs
+1	1	spiderweb	100% beside herbs
+1	1	spire	0% beside herbs
+1	1	stablehand	0% beside herbs
+1	1	stands	0% beside herbs
+1	1	stationary	0% beside herbs
+1	1	stationary store	0% beside herbs
+1	1	sunfist grandmaster	0% beside herbs
+1	1	sunny yellow rose	100% beside herbs
+1	1	swarmwall	0% beside herbs
+1	1	sylvan camp	100% beside herbs
+1	1	sylvan glade	100% beside herbs
+1	1	sylvanfair	100% beside herbs
+1	1	sylvanfair annex	0% beside herbs
+1	1	sylvanfair locker	0% beside herbs
+1	1	sylvisterai	100% beside herbs
+1	1	sylvisterai camp	100% beside herbs
+1	1	sylvisterai glade	100% beside herbs
+1	1	tables1	0% beside herbs
+1	1	tables2	0% beside herbs
+1	1	tables3	0% beside herbs
+1	1	tackle gear	0% beside herbs
+1	1	tackle shop	0% beside herbs
+1	1	tackleshop	0% beside herbs
+1	1	tactician	0% beside herbs
+1	0	talondown	0% beside herbs
+1	0	talondown exit	0% beside herbs
+1	1	task	100% beside herbs
+1	1	taskboard	100% beside herbs
+1	1	taskmaster	100% beside herbs
+1	1	tavern	0% beside herbs
+1	1	tc	100% beside herbs
+1	1	tea	0% beside herbs
+1	1	tea shop	0% beside herbs
+1	1	teashop	0% beside herbs
+1	1	telearat	0% beside herbs
+1	1	the falcon	0% beside herbs
+1	1	theater	0% beside herbs
+1	1	throne	0% beside herbs
+1	1	tonis	0% beside herbs
+1	1	tot	0% beside herbs
+1	1	totems	100% beside herbs
+1	1	treasure trove	0% beside herbs
+1	1	trick or treat	0% beside herbs
+1	1	trove 1	0% beside herbs
+1	1	trove 2	0% beside herbs
+1	1	trove 3	0% beside herbs
+1	1	trove 4	0% beside herbs
+1	1	trove npc	0% beside herbs
+1	1	tsalinx	0% beside herbs
+1	1	tsc	100% beside herbs
+1	1	twilight hall	100% beside herbs
+1	1	twilight workshop	0% beside herbs
+1	1	unlocker	0% beside herbs
+1	1	urchin guide amaranthgate	100% beside herbs
+1	1	urchin guide annattogate	100% beside herbs
+1	1	urchin guide beldrins	100% beside herbs
+1	1	urchin guide blacksmith	100% beside herbs
+1	1	urchin guide briarstone	100% beside herbs
+1	1	urchin guide catwalk	100% beside herbs
+1	1	urchin guide citygate	100% beside herbs
+1	1	urchin guide clovertooth	100% beside herbs
+1	1	urchin guide common	100% beside herbs
+1	1	urchin guide dais	100% beside herbs
+1	1	urchin guide dancingdahcre	100% beside herbs
+1	1	urchin guide drawbridge	100% beside herbs
+1	1	urchin guide eastcart	0% beside herbs
+1	1	urchin guide eastgate	100% beside herbs
+1	1	urchin guide easttower	100% beside herbs
+1	1	urchin guide ferry	100% beside herbs
+1	1	urchin guide friths	100% beside herbs
+1	1	urchin guide garden	100% beside herbs
+1	1	urchin guide goldenhelm	100% beside herbs
+1	1	urchin guide hearthstone	100% beside herbs
+1	1	urchin guide helgas	0% beside herbs
+1	1	urchin guide helgreths	100% beside herbs
+1	1	urchin guide keep	100% beside herbs
+1	1	urchin guide kingscourt	100% beside herbs
+1	1	urchin guide lighthouse	0% beside herbs
+1	1	urchin guide losthome	100% beside herbs
+1	1	urchin guide malwith	0% beside herbs
+1	1	urchin guide market	100% beside herbs
+1	1	urchin guide marketbridge	100% beside herbs
+1	1	urchin guide messageboard	100% beside herbs
+1	1	urchin guide monument	100% beside herbs
+1	1	urchin guide moonglae	100% beside herbs
+1	1	urchin guide moothall	100% beside herbs
+1	1	urchin guide nightowl	0% beside herbs
+1	1	urchin guide northmarket	100% beside herbs
+1	1	urchin guide osaguild	100% beside herbs
+1	1	urchin guide pipeden	0% beside herbs
+1	1	urchin guide poorquarter	100% beside herbs
+1	1	urchin guide portmaster	100% beside herbs
+1	1	urchin guide purser	100% beside herbs
+1	1	urchin guide safehaven	100% beside herbs
+1	1	urchin guide sanctuary	100% beside herbs
+1	1	urchin guide shimmarglin	100% beside herbs
+1	1	urchin guide southgate	100% beside herbs
+1	1	urchin guide statue	100% beside herbs
+1	1	urchin guide tc	100% beside herbs
+1	1	urchin guide thrak	100% beside herbs
+1	1	urchin guide tinctures	0% beside herbs
+1	1	urchin guide tower	0% beside herbs
+1	1	urchin guide tsc	100% beside herbs
+1	1	urchin guide vermiliongate	100% beside herbs
+1	1	urchin guide victorygate	100% beside herbs
+1	1	urchin guide wayside	100% beside herbs
+1	1	urchin guide westcart	0% beside herbs
+1	1	vaalor citizen lounge	0% beside herbs
+1	1	vaalor handler	100% beside herbs
+1	1	vermiliongate	100% beside herbs
+1	1	victorygate	100% beside herbs
+1	1	voaris	0% beside herbs
+1	1	vortex	0% beside herbs
+1	1	vote	0% beside herbs
+1	1	voting	0% beside herbs
+1	1	wads	0% beside herbs
+1	1	wadsworth	0% beside herbs
+1	1	warrior guild boxes	0% beside herbs
+1	1	warrior guild dark chamber	0% beside herbs
+1	1	warrior guild ice	0% beside herbs
+1	1	warrior guild master	0% beside herbs
+1	1	warrior guild metal door	0% beside herbs
+1	1	warrior guild tool rack	0% beside herbs
+1	1	warrior guild tubs	0% beside herbs
+1	1	warrior guild wheels	0% beside herbs
+1	1	warrior guild wood door	0% beside herbs
+1	1	warrior guild workshop	0% beside herbs
+1	1	warrior tool rack	0% beside herbs
+1	1	wayside	100% beside herbs
+1	1	well	100% beside herbs
+1	1	westcart	0% beside herbs
+1	1	wheel	100% beside herbs
+1	1	whirlin	0% beside herbs
+1	1	white feverfew bloom	0% beside herbs
+1	1	willow	0% beside herbs
+1	1	wind cave	100% beside herbs
+1	1	wishing well	100% beside herbs
+1	1	witchhunt	0% beside herbs
+1	1	witchhut	0% beside herbs
+1	1	wizard guild master	100% beside herbs
+1	1	wlhelden	100% beside herbs
+1	1	workshop:paupers	0% beside herbs
+1	1	workshop:phoenix	100% beside herbs
+1	1	workshop:silvergate	0% beside herbs
+1	1	xec	0% beside herbs
+1	1	xilona	0% beside herbs
+1	1	ylandra dark tower	0% beside herbs

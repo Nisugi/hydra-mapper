@@ -138,6 +138,10 @@ pub fn position_rooms(map: &Map, dirs: &DirectionMap) -> Vec<Group> {
     let mut groups: Vec<Group> = Vec::new();
     let mut unpositioned: HashSet<RoomId> = rooms.iter().map(|r| r.id).collect();
 
+    // Which outdoor rooms are the world outside, rather than a courtyard
+    // a building encloses. Computed once; see `open_air`.
+    let air = open_air(map);
+
     // Directional-edge counts are a pure function of the selection, so they
     // are computed once instead of per component start.
     let connection_counts: Vec<usize> = rooms
@@ -182,57 +186,37 @@ pub fn position_rooms(map: &Map, dirs: &DirectionMap) -> Vec<Group> {
         let mut room_order: Vec<RoomId> = Vec::new();
 
         let mut queue: VecDeque<RoomId> = VecDeque::new();
+        // Edges that join the component but cannot place a room, drained
+        // after the directional BFS runs dry.
+        let mut pending_connectors: Vec<(RoomId, RoomId)> = Vec::new();
         queue.push_back(start_id);
         positions.insert(start_id, Cell { x: 0, y: 0 });
         occupied.insert(Cell { x: 0, y: 0 });
         room_order.push(start_id);
         unpositioned.remove(&start_id);
 
-        // BFS. The queue holds ids only: grid rips move already-placed
-        // rooms, so the parent position is re-read at processing time.
-        while let Some(room_id) = queue.pop_front() {
-            let Some(room) = map.room(room_id) else {
-                continue;
-            };
-            for exit in &room.exits {
-                let target_id = exit.to;
-                if map.room(target_id).is_none() || !unpositioned.contains(&target_id) {
-                    continue;
-                }
-                let Some(direction) = dirs.get(room_id, target_id) else {
-                    continue;
-                };
-                let (dx, dy) = direction.offset();
+        directional_bfs(
+            map,
+            dirs,
+            &air,
+            &mut queue,
+            &mut pending_connectors,
+            &mut positions,
+            &mut occupied,
+            &mut room_order,
+            &mut unpositioned,
+        );
 
-                let pos = positions[&room_id];
-                let mut target = Cell {
-                    x: pos.x + dx,
-                    y: pos.y + dy,
-                };
-
-                if occupied.contains(&target) {
-                    // Grid rip: shift a half-plane one cell so the occupant
-                    // slides off the target cell and the stated direction
-                    // stays true. The parent is never inside the
-                    // half-plane.
-                    rip_grid(&mut positions, pos, (dx, dy));
-                    occupied = positions.values().copied().collect();
-                    let fresh = positions[&room_id];
-                    target = Cell {
-                        x: fresh.x + dx,
-                        y: fresh.y + dy,
-                    };
-                }
-
-                if !occupied.contains(&target) {
-                    positions.insert(target_id, target);
-                    occupied.insert(target);
-                    room_order.push(target_id);
-                    unpositioned.remove(&target_id);
-                    queue.push_back(target_id);
-                }
-            }
-        }
+        drain_connectors(
+            map,
+            dirs,
+            &air,
+            &mut pending_connectors,
+            &mut positions,
+            &mut occupied,
+            &mut room_order,
+            &mut unpositioned,
+        );
 
         optimize_component(&room_order, &mut positions, map, dirs);
         let mut violations = validate_component(&room_order, &positions, map, dirs);
@@ -272,6 +256,348 @@ pub fn position_rooms(map: &Map, dirs: &DirectionMap) -> Vec<Group> {
     }
 
     groups
+}
+
+/// The directional BFS: place every room a stated bearing can reach.
+///
+/// Bearingless doorways are collected in `pending` rather than followed,
+/// unless they are a building's front door (see [`is_building_entrance`]),
+/// in which case they are dropped entirely -- the room behind them starts
+/// a separate group the interior shelf will place.
+#[allow(clippy::too_many_arguments, reason = "one BFS's working state,     split out only to keep `position_rooms` readable; bundling it into a     struct would hide that these are all one loop's locals")]
+fn directional_bfs(
+    map: &Map,
+    dirs: &DirectionMap,
+    air: &HashSet<RoomId>,
+    queue: &mut VecDeque<RoomId>,
+    pending: &mut Vec<(RoomId, RoomId)>,
+    positions: &mut HashMap<RoomId, Cell>,
+    occupied: &mut HashSet<Cell>,
+    room_order: &mut Vec<RoomId>,
+    unpositioned: &mut HashSet<RoomId>,
+) {
+        // BFS. The queue holds ids only: grid rips move already-placed
+    // rooms, so the parent position is re-read at processing time.
+    while let Some(room_id) = queue.pop_front() {
+        let Some(room) = map.room(room_id) else {
+            continue;
+        };
+        for exit in &room.exits {
+            let target_id = exit.to;
+            if map.room(target_id).is_none() || !unpositioned.contains(&target_id) {
+                continue;
+            }
+            let Some(direction) = dirs.get(room_id, target_id) else {
+                // A `go door`, `go archway`, `go yett`. It states no
+                // bearing, but it may still say these two rooms are
+                // one place -- and grouping on direction alone
+                // shattered 71% of buildings, the Bard Guild into 97
+                // pieces and the Temple of Tonis into 11 across two
+                // sheets, because a doorway is how a building is
+                // joined to itself.
+                //
+                // The distinction is what the doorway crosses. Inside
+                // to inside is a building's own structure: the
+                // Temple's `go archway` from its Hall of Spring to its
+                // Garden Bower. Outside to inside is a front door, and
+                // the room behind it is a separate building that the
+                // interior shelf exists to place. Following those too
+                // welds every shop onto the street and makes one
+                // 27,959-room group of the world.
+                if !is_building_entrance(map, air, room_id, target_id) {
+                    pending.push((room_id, target_id));
+                }
+                continue;
+            };
+            let (dx, dy) = direction.offset();
+
+            let pos = (*positions)[&room_id];
+            let mut target = Cell {
+                x: pos.x + dx,
+                y: pos.y + dy,
+            };
+
+            if occupied.contains(&target) {
+                // Grid rip: shift a half-plane one cell so the occupant
+                // slides off the target cell and the stated direction
+                // stays true. The parent is never inside the
+                // half-plane.
+                rip_grid(positions, pos, (dx, dy));
+                *occupied = positions.values().copied().collect();
+                let fresh = (*positions)[&room_id];
+                target = Cell {
+                    x: fresh.x + dx,
+                    y: fresh.y + dy,
+                };
+            }
+
+            if !occupied.contains(&target) {
+                positions.insert(target_id, target);
+                occupied.insert(target);
+                room_order.push(target_id);
+                unpositioned.remove(&target_id);
+                queue.push_back(target_id);
+            }
+        }
+    }
+
+}
+
+/// Place the rooms joined only by a bearingless doorway.
+///
+/// Runs after the directional BFS has run dry, so every room that CAN be
+/// placed by a stated bearing already is and these only fill the gaps.
+/// Each round may open the way for the next -- a doorway into a wing
+/// places that wing's first room, whose own compass exits then place the
+/// rest -- so it repeats until a pass places nothing.
+#[allow(clippy::too_many_arguments, reason = "one BFS's working state,     split out only to keep `position_rooms` readable; bundling it into a     struct would hide that these are all one loop's locals")]
+fn drain_connectors(
+    map: &Map,
+    dirs: &DirectionMap,
+    air: &HashSet<RoomId>,
+    pending: &mut Vec<(RoomId, RoomId)>,
+    positions: &mut HashMap<RoomId, Cell>,
+    occupied: &mut HashSet<Cell>,
+    room_order: &mut Vec<RoomId>,
+    unpositioned: &mut HashSet<RoomId>,
+) {
+    // Drain the connectors. Each round places what it can and may
+        // open the way for the next, so it repeats until a pass places
+        // nothing. A room already placed by a bearing is left alone.
+        loop {
+            let mut placed_any = false;
+            let mut still_pending: Vec<(RoomId, RoomId)> = Vec::new();
+            for &(from_id, target_id) in &*pending {
+                if !unpositioned.contains(&target_id) || !positions.contains_key(&from_id) {
+                    continue;
+                }
+                let Some(spot) = free_cell_near((*positions)[&from_id], occupied) else {
+                    still_pending.push((from_id, target_id));
+                    continue;
+                };
+                positions.insert(target_id, spot);
+                occupied.insert(spot);
+                room_order.push(target_id);
+                unpositioned.remove(&target_id);
+                placed_any = true;
+
+                // Its own exits rejoin the directional BFS, so a doorway
+                // into a wing places that whole wing by its bearings.
+                let mut wave: VecDeque<RoomId> = VecDeque::from([target_id]);
+                while let Some(id) = wave.pop_front() {
+                    let Some(room) = map.room(id) else { continue };
+                    for exit in &room.exits {
+                        let next = exit.to;
+                        if map.room(next).is_none() || !unpositioned.contains(&next) {
+                            continue;
+                        }
+                        let Some(direction) = dirs.get(id, next) else {
+                            if !is_building_entrance(map, air, id, next) {
+                                still_pending.push((id, next));
+                            }
+                            continue;
+                        };
+                        let (dx, dy) = direction.offset();
+                        let pos = (*positions)[&id];
+                        let mut cell = Cell {
+                            x: pos.x + dx,
+                            y: pos.y + dy,
+                        };
+                        if occupied.contains(&cell) {
+                            rip_grid(positions, pos, (dx, dy));
+                            *occupied = positions.values().copied().collect();
+                            let fresh = (*positions)[&id];
+                            cell = Cell {
+                                x: fresh.x + dx,
+                                y: fresh.y + dy,
+                            };
+                        }
+                        if !occupied.contains(&cell) {
+                            positions.insert(next, cell);
+                            occupied.insert(cell);
+                            room_order.push(next);
+                            unpositioned.remove(&next);
+                            wave.push_back(next);
+                        }
+                    }
+                }
+            }
+            *pending = still_pending;
+            if !placed_any {
+                break;
+            }
+        }
+
+}
+
+/// The outdoor rooms that are the open air: the big outdoor networks a
+/// building's front door opens onto.
+///
+/// Computed once per layout. Outdoor rooms are linked to each other by
+/// EVERY edge between them -- a `go gate` between two streets is still
+/// the open air -- and the runs that come out are split by size. The
+/// large ones are the world outside; the small ones are pockets, and a
+/// pocket reached only through a building is that building's courtyard.
+///
+/// # Why reachability and not a room count alone
+///
+/// A doorway between an indoor room and an outdoor one is either a front
+/// door or a garden gate, and the two are identical locally: the Temple
+/// of Tonis's `go archway` from its Hall of Spring to its Garden Bower
+/// looks exactly like a shop's `go out` to the street. Blocking both
+/// splits the temple from its gardens; following both welds every shop
+/// onto its street and makes one 27,959-room group of the world.
+///
+/// What separates them is whether the outdoor side is part of the world's
+/// outdoor network or a pocket only the building reaches. That is a
+/// property of the graph, so the graph is asked rather than a room count
+/// guessed at.
+///
+/// Measured on `gs.map` the two are not close. The outdoor runs are one
+/// of 11,740 rooms, then 308, 242, 211, 158 and down: the world outside
+/// is three orders of magnitude bigger than the next thing, and every
+/// courtyard is far below that. A threshold anywhere from 5 to 100 picks
+/// out the same handful of networks, which is what makes this safe where
+/// a bare room count was not -- Vellum's notes record boutique streets of
+/// 17 rooms that really are streets, and those sit inside the 11,740
+/// because a street is joined to its town.
+fn open_air(map: &Map) -> HashSet<RoomId> {
+    use crate::classifier::{Sense, room_sense};
+
+    let outdoor: HashSet<RoomId> = map
+        .rooms()
+        .iter()
+        .filter(|room| room_sense(room) == Sense::Outdoor)
+        .map(|room| room.id)
+        .collect();
+
+    // Compass-linked runs of outdoor rooms.
+    let mut adjacent: HashMap<RoomId, Vec<RoomId>> = HashMap::new();
+    for room in map.rooms() {
+        if !outdoor.contains(&room.id) {
+            continue;
+        }
+        for exit in &room.exits {
+            if !outdoor.contains(&exit.to) {
+                continue;
+            }
+            adjacent.entry(room.id).or_default().push(exit.to);
+            adjacent.entry(exit.to).or_default().push(room.id);
+        }
+    }
+
+    let mut runs: Vec<Vec<RoomId>> = Vec::new();
+    let mut seen: HashSet<RoomId> = HashSet::new();
+    for &start in &outdoor {
+        if !seen.insert(start) {
+            continue;
+        }
+        let mut run = vec![start];
+        let mut queue = VecDeque::from([start]);
+        while let Some(id) = queue.pop_front() {
+            for &next in adjacent.get(&id).into_iter().flatten() {
+                if seen.insert(next) {
+                    run.push(next);
+                    queue.push_back(next);
+                }
+            }
+        }
+        runs.push(run);
+    }
+
+    // The line is drawn relative to the biggest run rather than at a fixed
+    // count, so it does not assume a map the size of `gs.map`. A courtyard
+    // is small *compared to the world it sits in*; in a ten-room test
+    // fixture a four-room square IS the world, and a fixed threshold would
+    // call it a courtyard and weld the bank onto it.
+    let biggest = runs.iter().map(Vec::len).max().unwrap_or(0);
+    let floor = biggest / OPEN_AIR_RATIO;
+
+    let mut air: HashSet<RoomId> = HashSet::new();
+    for run in runs {
+        if run.len() >= floor.max(1) {
+            air.extend(run);
+        }
+    }
+    air
+}
+
+/// How much smaller than the largest outdoor run a run may be and still
+/// count as the open air.
+///
+/// The gap this has to straddle is enormous, so the exact figure hardly
+/// matters. Measured on `gs.map`, the outdoor runs are 11,740 rooms, then
+/// 308, 242, 211, 158, and a long tail of yards and gardens: the world
+/// outside is nearly forty times the next thing down. Anything from 20 to
+/// 500 picks out the same networks.
+///
+/// Twenty is chosen so a map with several real towns, none dominant,
+/// still reads all of them as open air.
+const OPEN_AIR_RATIO: usize = 20;
+
+/// Whether a bearingless doorway is a building's front door rather than
+/// its own internal structure.
+///
+/// A `go door` states no bearing, so it cannot place a room -- but it
+/// still says whether two rooms are one place, and grouping on direction
+/// alone shattered 71% of buildings, the Bard Guild into 97 pieces.
+///
+/// A doorway is a front door when it joins a room to the open air (see
+/// [`open_air`]): the interior behind it is a building the shelf places,
+/// and following it welds every shop onto its street. Every other
+/// bearingless doorway is a building's own structure -- indoor to indoor,
+/// or indoor to a courtyard nothing else reaches.
+fn is_building_entrance(map: &Map, air: &HashSet<RoomId>, from: RoomId, to: RoomId) -> bool {
+    use crate::classifier::{Sense, room_sense};
+    let (Some(a), Some(b)) = (map.room(from), map.room(to)) else {
+        return false;
+    };
+    let (sa, sb) = (room_sense(a), room_sense(b));
+    // One end indoors, the other in the open air.
+    (sa == Sense::Indoor && air.contains(&to)) || (sb == Sense::Indoor && air.contains(&from))
+}
+
+/// A free cell beside `from`, for a room joined by a doorway that states
+/// no bearing. Compass neighbours first, then diagonals, then outward --
+/// the room has to go somewhere, and beside the room you walk in from is
+/// the honest guess. The hill climb refines it afterwards.
+fn free_cell_near(from: Cell, occupied: &HashSet<Cell>) -> Option<Cell> {
+    const NEAR: [(i32, i32); 8] = [
+        (0, -1),
+        (0, 1),
+        (1, 0),
+        (-1, 0),
+        (1, -1),
+        (1, 1),
+        (-1, -1),
+        (-1, 1),
+    ];
+    for (dx, dy) in NEAR {
+        let cell = Cell {
+            x: from.x + dx,
+            y: from.y + dy,
+        };
+        if !occupied.contains(&cell) {
+            return Some(cell);
+        }
+    }
+    for radius in 2i32..=6 {
+        for dy in -radius..=radius {
+            for dx in -radius..=radius {
+                if dx.abs() != radius && dy.abs() != radius {
+                    continue;
+                }
+                let cell = Cell {
+                    x: from.x + dx,
+                    y: from.y + dy,
+                };
+                if !occupied.contains(&cell) {
+                    return Some(cell);
+                }
+            }
+        }
+    }
+    None
 }
 
 fn rip_grid(positions: &mut HashMap<RoomId, Cell>, parent: Cell, (dx, dy): (i32, i32)) {

@@ -1,0 +1,79 @@
+# Bookkeeping stubs: rooms whose title is literally `duplicate of NNNN`.
+#
+# 264 rooms in gs.map. They are not places. Each names, in its own title,
+# the room it is a stub for -- `duplicate of 2937` means room 2937 is the
+# real one -- so which room is current is recorded, not inferred.
+#
+# Do NOT infer it from the id ordering. 262 of the 264 have a higher id
+# than the room they name, which makes "the higher id is the stub" look
+# like a rule, but two go the other way. The title is authoritative and
+# costs nothing to read.
+#
+# The evidence that these are stubs rather than rooms, measured across all
+# 264 and their targets:
+#
+#              stubs   targets
+#   uid          0       242
+#   exits      139       264
+#   inbound      5       263
+#
+# Not one stub has a uid. The game has never numbered them, so they cannot
+# be addressed by uid, will not survive a map rebuild, and cannot be
+# corrected by any store keyed on uid.
+#
+# Why all 264 are safe to delete, including the ones with edges:
+#
+#   * 139 have outbound exits, but nothing points in, so no one can ever
+#     stand in them to use one. Dropping the room drops edges that were
+#     already unreachable.
+#   * 5 have inbound edges, and EVERY ONE comes from another stub --
+#     5894<-5904, 5896<-5895, 5899<->5900, 13113<-13103, all of them
+#     `duplicate of` rooms themselves. They form an isolated island of
+#     duplicates referring to each other. No live room points at any stub.
+#   * 1 names another stub (28684 -> 28269 -> 6106), which resolves
+#     transitively to a real room and needs no special handling once the
+#     whole set goes.
+# EXCEPTION -- 10 rooms that are NOT stubs.
+#
+# Ten carry a real title beside the stub one, e.g.
+# ["duplicate of 3485", "[Ta'Vaalor, Amaranth Court]"], and unlike the
+# other 254 they have a DESCRIPTION. Comparing it with the target's shows
+# they are day/night variants of the same room, not duplicates of it:
+#
+#   stub 5896   "The normally crowded intersection of wey and var is
+#                nearly deserted.  A row of pennants ..."
+#   room 3490   "The crowded intersection of wey and var teems with
+#                people, each hurrying ...  A row of pennants ..."
+#
+# Same place, different time of day. Someone recorded both and labelled
+# one a duplicate. They are live rooms with a labelling problem, so they
+# are neither deleted nor marked gone here; whether the map should model
+# day/night as two rooms at all is a larger question than this file.
+#
+# That is why the test below is the description and not the title. A room
+# with a body of text is a room someone visited:
+#
+#   253  no description          -> stub, delete
+#    10  description differs     -> day/night variant, leave alone
+#     1  description identical   -> genuine duplicate, delete
+#
+# The doc's earlier figure of "140 rooms, delete rather than visit" counted
+# only the fully isolated ones. The real number is 264 and the real reason
+# is that no live room reaches any of them.
+
+[stubs]
+# Match rooms whose title begins with this. The trailing space matters:
+# it is `duplicate of 2937`, never a room actually called "duplicate...".
+title_prefix = "duplicate of "
+
+# A stub has no description. This is what separates the 253 bookkeeping
+# artifacts from the 10 day/night variants that share their title prefix;
+# see the EXCEPTION note above. Without it the tool would delete ten live
+# Ta'Vaalor street rooms.
+require_no_description = true
+
+# Refuse to delete a stub that some NON-stub room points at. Nothing in
+# gs.map trips this today; it is here so that if a future map rebuild
+# attaches a real room to a stub, the tool stops instead of silently
+# orphaning the edge.
+require_no_live_inbound = true

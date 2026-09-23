@@ -1,0 +1,208 @@
+# Lockers: four overlapping schemes onto one.
+#
+# ~605 rooms are described by `meta:locker`, `meta:locker annex:<House>`,
+# `meta:che:<house>:locker`, `meta:che:<house>:entrance_locker`,
+# `meta:che:<house>:entrance_annex`, and 19 separate tags spelling the
+# same ideas three more ways (`bhalocker`, `locker:beaconhall`,
+# `silvergate locker`).
+#
+# # The fact that forces the consolidation
+#
+# `publiclockers` (89 rooms) and bare `meta:locker` (164 rooms) overlap on
+# ZERO rooms. They are disjoint sets naming the same concept in different
+# fields, so a consumer reading `meta` finds no public lockers at all and
+# one reading `tags` finds no CHE vaults. 102 rooms are known to be
+# lockers only by a tag.
+#
+# # What an annex actually is
+#
+# Not "a locker in another town", which is what `locker annex:` looks like
+# at first. An annex is a SHARED LOCKER BUILDING -- one per town, like a
+# warehouse -- containing one private room per Great House. Kraken's Fall
+# shows it plainly: 12 annex rooms, 12 houses, one each, titled
+# `[House Annex, Beacon Hall]`, `[House Annex, Silvergate Inn]` and so on,
+# all hanging off four `[Inking Den, Annex Hallway]` corridors. Mist
+# Harbor has 14 rooms for 14 houses. The wiki says the same thing: "In
+# each city other than that where their grounds are located, each House is
+# represented by a private room with locker access located in a public
+# building."
+#
+# So `locker annex:<House>` names the HOUSE THAT OCCUPIES the room, and
+# the town it is in comes from `location`. The town is not stored twice.
+#
+# This also explains a count that looks alarming and is not: only 59 of
+# the 208 `locker annex:` rooms have "annex" in their title. The other 149
+# are the furniture inside the annex -- `[Cloudberry Room]`,
+# `[Winterberry Room, Cubbyhole]`, `[Rone Academy, Cubby]`, the berry-room
+# per house that repeats town to town. They are annex rooms whose titles
+# simply do not say so.
+#
+# # What is deliberately NOT marked
+#
+# The annex building's own corridors -- the four `[Inking Den, Annex
+# Hallway]` rooms at Kraken's Fall and their equivalents elsewhere -- get
+# no locker meta. A walker reaches them by following exits like any other
+# room, and nothing needs to query for them, so marking them would be a
+# fifth thing to keep in sync for no consumer. (They are also the rooms
+# carrying the `peer door =~ /Rising Phoenix|Argent Aspis/` probes, since
+# four rooms share one title and the visible doors tell them apart.)
+#
+# # The shape
+#
+#   meta:locker:public                 a public town locker, anyone may use
+#   meta:locker:che                    a shared CHE locker hall, no one house
+#   meta:locker:che:house:<house>      a house locker room on its own grounds
+#   meta:locker:che:annex:<house>      the house's room in a town annex
+#   meta:locker:che:entrance:<house>   the room you enter to reach one
+#
+# One namespace, and the first question a consumer asks -- public or
+# house? -- is the first segment after `locker:`. Everything below `che:`
+# is a CHE fact, which is why the level is there on all three rather than
+# only on the annex: a house locker room, its annex room and the way into
+# either are the same kind of thing, and a shape that spells one of them
+# differently invites the reader to think it is special.
+#
+# It also gives the shared halls somewhere natural to sit. `houselockers`
+# marks CHE locker halls that belong to no single house -- [Silvermule,
+# Corridor], [Adventurers' Rest, Long Hall] -- and those are exactly
+# `meta:locker:che` with nothing after it.
+#
+# Today the same five facts take four fields and 19 tags to express, and
+# two of those fields are disjoint.
+#
+# `<house>` reuses the house keys the `che:` namespace already uses --
+# `paupers`, `silvergate_inn`, `twilight_hall` -- not the display forms in
+# `locker annex:` ("House of the Rising Phoenix"). Same eighteen houses,
+# spelled the way they are already spelled everywhere else, so the two
+# namespaces cannot drift into two spellings of one house.
+#
+# `meta:che:<house>:*` is left completely alone. That is the ACCESS axis
+# -- who may enter -- which `Cost::Gated` and `tags.lic` already evaluate
+# per character, and which `docs/room-classification.md` §3 says not to
+# touch. Ownership and access are different questions about one room:
+# `locker:che:house:paupers` says whose locker it is, `che:paupers:locker`
+# says who may open the door. Separate namespaces are what stop a later
+# reader "simplifying" one into the other.
+
+# ---------------------------------------------------------------- public
+# Town lockers anyone may use. Three tag spellings plus a meta key, and
+# the tags share no room with the meta -- the whole problem in one line.
+[[locker]]
+to_meta = "locker:public"
+from_tags = ["publiclockers", "locker:public", "cysaegir public locker", "lockers"]
+from_meta = ["locker"]
+from_meta_requires_no_che = true
+drop_source = true
+note = """`publiclockers` (89) and bare `meta:locker` (164) overlap on zero rooms -- two disjoint sets naming one concept in two fields.
+
+Bare `meta:locker` means "is a locker", NOT "is public": 112 of its 164 rooms also carry a `che:*` key and are house vaults. Only the 52 with no `che:` key are public, hence `from_meta_requires_no_che`. Without it [Paupers, Vault] comes out marked public.
+
+The tags need no such guard -- 0 of the 89 `publiclockers` rooms carry a `che:` key. `lockers` is one room, [Mercantylers' Storage Warehouse]."""
+
+# ------------------------------------------------------------ CHE shared
+# CHE locker halls belonging to no single house. The wiki lists one per
+# town: "CHE House Lockers: Silvermule Gaming Hall (3s, 1w of TC)".
+[[locker]]
+to_meta = "locker:che"
+from_tags = ["houselockers"]
+drop_source = true
+note = "11 rooms, e.g. [Adventurers' Rest, Long Hall], [Silvermule, Corridor]."
+
+# ------------------------------------------------------------ house rooms
+[[locker]]
+to_meta_pattern = "locker:che:house:{house}"
+from_meta_pattern = "che:{house}:locker"
+from_meta_pattern_alt = "che:{House}"
+require_meta = "locker"
+note = """185 rooms. The source key is KEPT: it carries the access fact, and this only adds the ownership one beside it.
+
+The `che:{House}` alternate catches houses with no snake_case key. [House Phoenix, Lockers] has only `che:House of the Rising Phoenix` and a bare `locker`, so the main pattern misses it; `require_meta` keeps that alternate from claiming all 500-odd rooms that carry a bare membership key without being lockers at all."""
+
+# ------------------------------------------------------------ annex rooms
+# A house's private room inside a town's shared annex building.
+[[locker]]
+to_meta_pattern = "locker:che:annex:{house}"
+from_meta_pattern = "locker annex:{House}"
+from_meta_pattern_alt = "che:{house}:entrance_annex"
+drop_source = true
+note = """208 rooms across 14 houses. `locker annex:House of Paupers` becomes `locker:che:annex:paupers`, spelling the house the way `che:` already spells it. The old key is dropped: unlike `che:*` it carries no access fact, only this one."""
+
+# ------------------------------------------------------------- entrances
+# The room you walk into to reach a locker. Kept rather than derived from
+# the graph: it is what a `;go2 locker` walker needs, and the exits do not
+# say which neighbour holds your cubbyhole.
+[[locker]]
+to_meta_pattern = "locker:che:entrance:{house}"
+from_meta_pattern = "che:{house}:entrance_locker"
+note = """158 rooms, disjoint from `che:{house}:locker` -- overlap is zero, because the way in is not the room itself. Source key kept."""
+
+# --------------------------------------------------- per-house tag fixes
+# 19 tags spelling house ownership three ways: `<house>locker`,
+# `locker:<house>`, `<house> locker`. Each names the house it belongs to.
+[[house_tags]]
+house = "beacon_hall"
+tags = ["bhalocker", "locker:beaconhall"]
+
+[[house_tags]]
+house = "brigatta"
+tags = ["brigatta locker"]
+
+[[house_tags]]
+house = "paupers"
+tags = ["pauperslockers", "paupers locker", "pauperslocker"]
+
+[[house_tags]]
+house = "silvergate_inn"
+tags = ["sglocker", "silvergate locker"]
+
+[[house_tags]]
+house = "twilight_hall"
+tags = ["locker:twilighthall", "twilight locker"]
+
+[[house_tags]]
+house = "sylvanfair"
+tags = ["sylvanfair locker"]
+
+# An entrance, not a locker room.
+[[house_tags]]
+house = "twilight_hall"
+kind = "entrance"
+tags = ["lockerentrance:twilighthall"]
+
+# ------------------------------------------------------- house key names
+# `locker annex:` spells a house as a display name and `che:<key>:*` as a
+# snake_case key, so folding one into the other needs the mapping. Eleven
+# of the fourteen derive themselves: a room carrying both
+# `locker annex:House of Paupers` and `che:paupers:entrance_annex` says
+# the pair outright, and `retag` reads them from the map rather than
+# trusting a list here.
+#
+# These are the ones no room pairs up, with why.
+[house_keys]
+# The key exists (`che:beacon_hall:locker`); only the display name carries
+# the "Archive" suffix.
+"Beacon Hall Archive" = "beacon_hall"
+# The key exists on four sub-keys.
+"Obsidian Tower" = "obsidian_tower"
+# No snake_case key anywhere in the map -- this house has only the bare
+# membership key `che:House of the Rising Phoenix`. Coined to match the
+# convention of `argent_aspis`, `white_haven`, `silvergate_inn`.
+"House of the Rising Phoenix" = "rising_phoenix"
+# Two display names, ONE house: `che:Silvergate Inn` and
+# `che:Silvergate Manor` are on the same 42 rooms, all of them, and the
+# wiki lists only "Silvergate Inn" as the CHE. The Manor is its building.
+"Silvergate Manor" = "silvergate_inn"
+
+# `Moonstone Abbey` is a CHE (40 rooms in the dark woods) but has no
+# locker sub-keys at all, so it needs no entry: nothing here will ever
+# look it up.
+
+# ------------------------------------------------------------- NOT here
+#
+# `che:<house>:entrance_che` (13 rooms) is the front door of a house's
+# GROUNDS -- [Helden Hall, Inner Bailey], [Willow Hall, Courtyard],
+# [Cairnfang Manor, Pathway]. It has nothing to do with lockers and is
+# left exactly as it is.
+#
+# `unlocker` (1 room) matches a substring search for "locker" and is a
+# different word entirely.

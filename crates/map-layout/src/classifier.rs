@@ -68,7 +68,7 @@ pub fn classify(groups: &[Group], map: &Map) -> Classification {
                 }
             }
         }
-        if outdoor > indoor {
+        if outdoor > indoor && group.room_ids.len() > COURTYARD_ROOMS {
             decisive_outdoor.insert(group.index);
         }
     }
@@ -246,6 +246,25 @@ fn is_interior_component(group: &Group, component_of: &HashMap<RoomId, usize>, m
 /// work.
 pub const ZONE_COMPONENT_ROOMS: usize = 50;
 
+/// An outdoor component this small does not get to veto propagation: if
+/// every way out of it leads into one building, it is that building's
+/// courtyard -- a roofless room of it -- not a street.
+///
+/// **Why there is a size line at all.** Propagation must not overrule a
+/// decisive outdoor majority (see `classify`), because player-shop
+/// boutique streets are 17 rooms of "Obvious paths" reachable only
+/// through the shops they serve, and they are streets. But the same veto
+/// stranded the Dragonfly Den's Rainfall -- one open-air bath, reached
+/// only by `go stairs` from the Den's Chamber and `go portal` from its
+/// Cookery, printing "Obvious paths" because you can see the sky. Being
+/// outdoor it never joined the Den's cluster; being a street with no
+/// street it shelved alone, 87 cells from the building it belongs to.
+///
+/// A courtyard is small and enclosed; a street is neither. Two rooms is
+/// the line: it takes the baths and the light wells, and leaves anything
+/// with a shape of its own to the outdoor sheet.
+pub const COURTYARD_ROOMS: usize = 2;
+
 /// Interior clusters: interior groups connected by ANY exit between interior
 /// rooms form one walkable interior space (one building) -- "go arch" joins
 /// as surely as "north". Only edges that lead outdoors (or into a
@@ -405,6 +424,74 @@ mod tests {
             packing: None,
             name: None,
         }
+    }
+
+    fn sensed(id: u32, paths: &str, exits: &[(u32, &str)]) -> Room {
+        Room {
+            paths: vec![paths.to_owned()],
+            ..room(id, exits)
+        }
+    }
+
+    /// The Dragonfly Den's Rainfall is an open-air bath inside a
+    /// building: "Obvious paths" because you can see the sky, but the
+    /// only ways out are `go stairs` into the Den's Chamber and
+    /// `go portal` into its Cookery. A roofless room of the building is
+    /// still a room of the building -- it must not be left outdoors,
+    /// with no street to sit on.
+    ///
+    /// Two rooms of boutique street are still street, though: that is
+    /// what the size line protects.
+    #[test]
+    fn a_courtyard_a_building_encloses_is_part_of_it() {
+        let rooms = vec![
+            sensed(1, "Obvious exits: none", &[(2, "go stairs")]),
+            sensed(
+                2,
+                "Obvious paths: none",
+                &[(1, "go stairs"), (3, "go portal")],
+            ),
+            sensed(3, "Obvious exits: none", &[(2, "go portal")]),
+        ];
+        let map = Map::from_rooms(rooms).expect("no duplicate ids");
+        let groups = vec![group(0, &[1]), group(1, &[2]), group(2, &[3])];
+
+        let out = classify(&groups, &map);
+        assert!(
+            out.interior_groups.contains(&1),
+            "the bath was left outdoors, with no street to sit on"
+        );
+    }
+
+    /// The veto the size line protects: a boutique street is reachable
+    /// only through the shops it serves and prints "Obvious paths", but
+    /// it is a street and belongs on the outdoor sheet.
+    #[test]
+    fn a_boutique_street_is_still_a_street() {
+        let mut rooms = vec![sensed(1, "Obvious exits: none", &[(2, "go door")])];
+        // Four rooms of street, past COURTYARD_ROOMS, reached only
+        // through the shop.
+        for i in 2..=5u32 {
+            let mut exits: Vec<(u32, &str)> = vec![];
+            if i > 2 {
+                exits.push((i - 1, "west"));
+            }
+            if i < 5 {
+                exits.push((i + 1, "east"));
+            }
+            if i == 2 {
+                exits.push((1, "go door"));
+            }
+            rooms.push(sensed(i, "Obvious paths: east, west", &exits));
+        }
+        let map = Map::from_rooms(rooms).expect("no duplicate ids");
+        let groups = vec![group(0, &[1]), group(1, &[2, 3, 4, 5])];
+
+        let out = classify(&groups, &map);
+        assert!(
+            !out.interior_groups.contains(&1),
+            "a boutique street was swallowed by the shop it serves"
+        );
     }
 
     /// The bank: 3850+3672 are one directional component, 3670 hangs off

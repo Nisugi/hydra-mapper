@@ -1,7 +1,11 @@
 /target
 
 # Map files: large binaries, supplied by the person running the tool
-# (CENA_MAP or a path argument), never part of the repo.
+# (CENA_MAP or a path argument), never part of the repo. That includes
+# the snapshots taken before an irreversible pass -- gs.map.backup is the
+# map before the migration, gs.map.before-delete the map one second
+# before 2,629 rooms went -- which are worth keeping beside a person's
+# own map and worthless to anybody else.
 *.map
 
 # Local editing state and its export: these belong beside a person's

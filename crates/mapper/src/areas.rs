@@ -53,7 +53,28 @@ pub enum AreaKind {
     /// Simutronics' own layout areas (`source` = `official layout`).
     Official,
     /// The game's `location` verb (`source` = `mapdb location`).
-    Mapdb,
+    ///
+    /// Named for the FIELD, not the file. `location` is what the game
+    /// answers where you stand, at whatever granularity the verb uses:
+    /// `the Upper Trollfang`, `the town of Wehnimer's Landing`,
+    /// `Greystorm Manor, inside the frontier town of Wehnimer's Landing`.
+    Location,
+    /// The official mapdb's `loc` field, written to `meta:region:` by
+    /// `retag`.
+    ///
+    /// A different question from [`AreaKind::Location`], not a better
+    /// answer to the same one. `loc` is an administrative grouping a GM
+    /// assigned -- 50 of them in this map, against 344 location strings --
+    /// and Simutronics fills it in for towns, quests and transport routes
+    /// and leaves wilderness blank on purpose. 11,994 rooms have none, and
+    /// for those our `location` is the only field that names the place.
+    ///
+    /// Worth having beside `Location` because the two disagree in a way
+    /// that is information: the Upper Trollfang is one location of 413
+    /// rooms, of which 120 are `QUEST: Black Swan Castle` -- a quest
+    /// staged inside a hunting ground, which only the region field
+    /// separates.
+    Region,
     /// Areas read off the room graph, with mapdb's names as labels. See
     /// [`cena_map_layout::regions`]. Beside the other two rather than
     /// replacing them yet; its corrections are stored under their own
@@ -66,9 +87,10 @@ pub enum AreaKind {
 
 impl AreaKind {
     /// Every list, in tab order.
-    pub const ALL: [AreaKind; 4] = [
+    pub const ALL: [AreaKind; 5] = [
         AreaKind::Official,
-        AreaKind::Mapdb,
+        AreaKind::Region,
+        AreaKind::Location,
         AreaKind::Derived,
         AreaKind::Plates,
     ];
@@ -77,7 +99,8 @@ impl AreaKind {
     pub const fn title(self) -> &'static str {
         match self {
             AreaKind::Official => "Official",
-            AreaKind::Mapdb => "Mapdb",
+            AreaKind::Region => "Region",
+            AreaKind::Location => "Location",
             AreaKind::Derived => "Derived",
             AreaKind::Plates => "Plates",
         }
@@ -95,6 +118,15 @@ impl Area {
     pub fn store_key(&self) -> String {
         match self.kind {
             AreaKind::Derived => format!("derived:{}", self.name),
+            // Same reason as `derived:`. A region and a location share a
+            // name often -- `Ta'Illistim` is both -- over different room
+            // sets, so an unprefixed key would put one list's corrections
+            // on the other's grid.
+            // A curated area and a region are both Region-kind rows, so
+            // the key says which: `Hearthstone` the area and a region of
+            // that name would otherwise share a grid.
+            AreaKind::Region if self.parent.is_some() => format!("curated:{}", self.name),
+            AreaKind::Region => format!("region:{}", self.name),
             _ => self.name.clone(),
         }
     }
@@ -106,6 +138,19 @@ pub struct Area {
     /// Which kind of list this came from, so a caller can tell a plate
     /// (a grid) from an area (a place).
     pub kind: AreaKind,
+    /// For a curated area in the Region tree: the region it sits under,
+    /// read from its rooms. `None` for a region row itself, and for
+    /// anything outside that tree.
+    ///
+    /// Not stored with the area. An area's region is whatever its rooms
+    /// carry, so assigning a room is the only act needed and the tree
+    /// cannot drift from the map.
+    pub parent: Option<String>,
+    /// Set when the area's rooms do not agree on a region: how many
+    /// carry the majority one, out of how many carry any. The row still
+    /// sits under the majority -- a split is worth seeing, not worth
+    /// refusing to draw.
+    pub contested: Option<(usize, usize)>,
     /// Members, in map order. Official areas carry them from `areas.tsv`;
     /// mapdb areas collect every room sharing a `location`; plates collect
     /// whatever was moved onto them.
@@ -116,7 +161,8 @@ pub struct Area {
 /// between plates.
 pub struct Areas {
     pub official: Vec<Area>,
-    pub mapdb: Vec<Area>,
+    pub region: Vec<Area>,
+    pub location: Vec<Area>,
     pub derived: Vec<Area>,
     pub plates: Vec<Area>,
 }
@@ -153,7 +199,12 @@ impl Areas {
             .collect();
         Areas {
             official,
-            mapdb: mapdb_areas(map, &claimed),
+            region: {
+                let mut rows = region_areas(map);
+                rows.extend(curated_areas(map, store));
+                rows
+            },
+            location: location_areas(map, &claimed),
             derived: derived_areas(map),
             plates: plate_areas(map, store),
         }
@@ -165,7 +216,8 @@ impl Areas {
     pub fn list(&self, kind: AreaKind) -> &[Area] {
         match kind {
             AreaKind::Official => &self.official,
-            AreaKind::Mapdb => &self.mapdb,
+            AreaKind::Region => &self.region,
+            AreaKind::Location => &self.location,
             AreaKind::Derived => &self.derived,
             AreaKind::Plates => &self.plates,
         }
@@ -181,6 +233,8 @@ fn derived_areas(map: &Map) -> Vec<Area> {
         .map(|a| Area {
             name: a.name,
             kind: AreaKind::Derived,
+            parent: None,
+            contested: None,
             rooms: a.rooms,
         })
         .collect();
@@ -208,6 +262,8 @@ fn plate_areas(map: &Map, store: &MapOverrides) -> Vec<Area> {
             // itself for one that arrived in a hand-edited file.
             name: store.plate_name(plate).to_owned(),
             kind: AreaKind::Plates,
+            parent: None,
+            contested: None,
             rooms,
         })
         .collect()
@@ -254,11 +310,97 @@ fn official_areas(map: &Map) -> Vec<Area> {
         areas.push(Area {
             name: (*name).to_owned(),
             kind: AreaKind::Official,
+            parent: None,
+            contested: None,
             rooms,
         });
     }
     areas.sort_by(|a, b| a.name.cmp(&b.name));
     areas
+}
+
+/// Every distinct `meta:region:` value, with its rooms.
+///
+/// Unlike the location list this claims nothing and excludes nothing. It
+/// is a second opinion on the whole map, and the rooms an official area
+/// already covers are exactly the ones worth seeing under both names.
+///
+/// Rooms with no region are collected under one entry rather than
+/// dropped. 11,994 of them is a third of the map -- the hunting grounds
+/// Simutronics does not classify -- and "which rooms does the official
+/// grouping not reach" is a question worth being able to click on.
+fn region_areas(map: &Map) -> Vec<Area> {
+    let mut by_region: BTreeMap<&str, Vec<RoomId>> = BTreeMap::new();
+    for room in map.rooms() {
+        let name = room
+            .meta
+            .iter()
+            .find_map(|m| m.strip_prefix("region:"))
+            .unwrap_or("");
+        by_region.entry(name).or_default().push(room.id);
+    }
+    by_region
+        .into_iter()
+        .map(|(name, rooms)| Area {
+            name: if name.is_empty() {
+                NO_REGION.to_owned()
+            } else {
+                name.to_owned()
+            },
+            kind: AreaKind::Region,
+            parent: None,
+            contested: None,
+            rooms,
+        })
+        .collect()
+}
+
+/// The row for rooms the mapdb does not classify.
+///
+/// A third of the map: the hunting grounds, caves and slopes Simutronics
+/// leaves out of `loc` on purpose. Named rather than hidden, because it
+/// is where most curation work will start.
+pub const NO_REGION: &str = "(no region)";
+
+/// The curated areas, each under the region its ROOMS carry.
+///
+/// Reading the parent from the rooms rather than storing it is what keeps
+/// the tree honest: there is no second place for the answer to live and
+/// go stale. An area whose rooms disagree sits under the majority and
+/// says so.
+fn curated_areas(map: &Map, store: &MapOverrides) -> Vec<Area> {
+    let mut by_area: BTreeMap<&str, Vec<RoomId>> = BTreeMap::new();
+    for room in map.rooms() {
+        let key = RoomKey::of(room.id, map);
+        if let Some(area) = store.area_moves.get(&key) {
+            by_area.entry(area.as_str()).or_default().push(room.id);
+        }
+    }
+    by_area
+        .into_iter()
+        .map(|(key, rooms)| {
+            let mut votes: BTreeMap<&str, usize> = BTreeMap::new();
+            for id in &rooms {
+                let name = map
+                    .room(*id)
+                    .and_then(|r| r.meta.iter().find_map(|m| m.strip_prefix("region:")))
+                    .unwrap_or(NO_REGION);
+                *votes.entry(name).or_default() += 1;
+            }
+            let total: usize = votes.values().sum();
+            let (parent, top) = votes
+                .into_iter()
+                .max_by_key(|&(_, n)| n)
+                .unwrap_or((NO_REGION, 0));
+            Area {
+                name: store.area_name(key).to_owned(),
+                kind: AreaKind::Region,
+                parent: Some(parent.to_owned()),
+                contested: (top < total).then_some((top, total)),
+                rooms,
+            }
+        })
+        .collect()
 }
 
 /// Every distinct [`cena_map::Room::location`] among the rooms no official
@@ -270,7 +412,7 @@ fn official_areas(map: &Map) -> Vec<Area> {
 /// entirely, which is the point: the official layout already shows those
 /// rooms under a curated name, and mapdb would re-list them split into
 /// ones and twos.
-fn mapdb_areas(map: &Map, claimed: &HashSet<RoomId>) -> Vec<Area> {
+fn location_areas(map: &Map, claimed: &HashSet<RoomId>) -> Vec<Area> {
     let mut by_location: BTreeMap<&str, Vec<RoomId>> = BTreeMap::new();
     for room in map.rooms() {
         if claimed.contains(&room.id) {
@@ -289,7 +431,9 @@ fn mapdb_areas(map: &Map, claimed: &HashSet<RoomId>) -> Vec<Area> {
             } else {
                 name.to_owned()
             },
-            kind: AreaKind::Mapdb,
+            kind: AreaKind::Location,
+            parent: None,
+            contested: None,
             rooms,
         })
         .collect()
@@ -393,8 +537,9 @@ mod tests {
         assert!(official_areas(&map).is_empty());
     }
 
-    /// The rule the lists exist to keep: official layout is truth, so a
-    /// room it claims is never listed again under its mapdb location.
+    /// The rule the location list exists to keep: official layout is
+    /// truth, so a room it claims is never listed again under its
+    /// `location`.
     #[test]
     fn a_claimed_room_is_not_listed_twice() {
         let claimed = RoomId(7);
@@ -405,8 +550,8 @@ mod tests {
         ];
         let map = Map::from_rooms(rooms).expect("no duplicate ids");
 
-        let mapdb = mapdb_areas(&map, &std::iter::once(claimed).collect());
-        let listed: Vec<RoomId> = mapdb.iter().flat_map(|a| a.rooms.iter().copied()).collect();
+        let by_location = location_areas(&map, &std::iter::once(claimed).collect());
+        let listed: Vec<RoomId> = by_location.iter().flat_map(|a| a.rooms.iter().copied()).collect();
 
         assert!(
             !listed.contains(&claimed),
@@ -419,13 +564,144 @@ mod tests {
     }
 
     /// A location every one of whose rooms is claimed drops out of the
-    /// mapdb list rather than lingering as an empty name.
+    /// location list rather than lingering as an empty name.
     #[test]
     fn a_wholly_claimed_location_disappears() {
         let rooms = vec![room_in(RoomId(1), "Inside An Official Area")];
         let map = Map::from_rooms(rooms).expect("no duplicate ids");
         let claimed = std::iter::once(RoomId(1)).collect();
-        assert!(mapdb_areas(&map, &claimed).is_empty());
+        assert!(location_areas(&map, &claimed).is_empty());
+    }
+
+    /// The region list claims nothing and drops nothing: unlike the
+    /// location list it is a second opinion on the whole map, and a room
+    /// an official area already covers is exactly the one worth seeing
+    /// under both names.
+    #[test]
+    fn the_region_list_covers_every_room_including_claimed_ones() {
+        let mut a = room_in(RoomId(1), "the Upper Trollfang");
+        a.meta = vec!["region:QUEST: Black Swan Castle".to_owned()];
+        let b = room_in(RoomId(2), "the Upper Trollfang");
+        let map = Map::from_rooms(vec![a, b]).expect("no duplicate ids");
+
+        let regions = region_areas(&map);
+        let listed: Vec<RoomId> = regions.iter().flat_map(|r| r.rooms.iter().copied()).collect();
+        assert!(listed.contains(&RoomId(1)) && listed.contains(&RoomId(2)));
+
+        // One location, two regions: the quest separates from the
+        // hunting ground, which is the whole reason the list exists.
+        let quest = regions
+            .iter()
+            .find(|r| r.name == "QUEST: Black Swan Castle")
+            .expect("the quest is its own entry");
+        assert_eq!(quest.rooms, vec![RoomId(1)]);
+        let none = regions
+            .iter()
+            .find(|r| r.name == "(no region)")
+            .expect("unclassified rooms are kept, not dropped");
+        assert_eq!(none.rooms, vec![RoomId(2)]);
+    }
+
+    /// A region and a location sharing a name keep separate corrections.
+    #[test]
+    fn a_region_and_a_location_of_one_name_do_not_share_a_store_key() {
+        let region = Area {
+            name: "Ta'Illistim".to_owned(),
+            kind: AreaKind::Region,
+            parent: None,
+            contested: None,
+            rooms: vec![],
+        };
+        let location = Area {
+            name: "Ta'Illistim".to_owned(),
+            kind: AreaKind::Location,
+            parent: None,
+            contested: None,
+            rooms: vec![],
+        };
+        assert_ne!(region.store_key(), location.store_key());
+    }
+
+    /// A curated area sits under the region its ROOMS carry.
+    ///
+    /// Nothing records the parent, so there is no second place for the
+    /// answer to live and go stale: assign a room, and the area appears
+    /// under the right region.
+    #[test]
+    fn a_curated_area_takes_its_region_from_its_rooms() {
+        let mut a = room_in(RoomId(1), "the Upper Trollfang");
+        a.meta = vec!["region:Wehnimer's Landing".to_owned()];
+        let mut b = room_in(RoomId(2), "the Upper Trollfang");
+        b.meta = vec!["region:Wehnimer's Landing".to_owned()];
+        let map = Map::from_rooms(vec![a, b]).expect("no duplicate ids");
+
+        let mut store = MapOverrides::default();
+        let key = store.create_area("Hearthstone");
+        store.set_area(RoomKey::of(RoomId(1), &map), Some(&key));
+        store.set_area(RoomKey::of(RoomId(2), &map), Some(&key));
+
+        let areas = curated_areas(&map, &store);
+        assert_eq!(areas.len(), 1);
+        assert_eq!(areas[0].name, "Hearthstone");
+        assert_eq!(areas[0].parent.as_deref(), Some("Wehnimer's Landing"));
+        assert_eq!(areas[0].contested, None);
+    }
+
+    /// An area spanning regions sits under the majority and says so.
+    #[test]
+    fn an_area_whose_rooms_disagree_reports_the_split() {
+        let mut a = room_in(RoomId(1), "somewhere");
+        a.meta = vec!["region:Wehnimer's Landing".to_owned()];
+        let mut b = room_in(RoomId(2), "somewhere");
+        b.meta = vec!["region:Wehnimer's Landing".to_owned()];
+        let mut c = room_in(RoomId(3), "somewhere");
+        c.meta = vec!["region:Icemule Trace".to_owned()];
+        let map = Map::from_rooms(vec![a, b, c]).expect("no duplicate ids");
+
+        let mut store = MapOverrides::default();
+        let key = store.create_area("Straddler");
+        for id in [1, 2, 3] {
+            store.set_area(RoomKey::of(RoomId(id), &map), Some(&key));
+        }
+
+        let areas = curated_areas(&map, &store);
+        assert_eq!(areas[0].parent.as_deref(), Some("Wehnimer's Landing"));
+        assert_eq!(areas[0].contested, Some((2, 3)));
+    }
+
+    /// A room with no region puts its area in the `(no region)` branch,
+    /// which is where a third of the map lives and where curation starts.
+    #[test]
+    fn an_unregioned_area_lands_in_its_own_branch() {
+        let map = Map::from_rooms(vec![room_in(RoomId(1), "Stone Valley")])
+            .expect("no duplicate ids");
+        let mut store = MapOverrides::default();
+        let key = store.create_area("Stone Valley");
+        store.set_area(RoomKey::of(RoomId(1), &map), Some(&key));
+
+        let areas = curated_areas(&map, &store);
+        assert_eq!(areas[0].parent.as_deref(), Some(NO_REGION));
+    }
+
+    /// A curated area and a region of the same name keep separate
+    /// corrections: both are Region-kind rows over different room sets.
+    #[test]
+    fn a_curated_area_does_not_share_a_store_key_with_its_region() {
+        let region = Area {
+            name: "Ta'Illistim".to_owned(),
+            kind: AreaKind::Region,
+            parent: None,
+            contested: None,
+            rooms: vec![],
+        };
+        let curated = Area {
+            name: "Ta'Illistim".to_owned(),
+            kind: AreaKind::Region,
+            parent: Some("Ta'Illistim".to_owned()),
+            contested: None,
+            rooms: vec![],
+        };
+        assert_ne!(region.store_key(), curated.store_key());
     }
 
     /// A room with just enough filled in to carry an id and a location.

@@ -53,6 +53,106 @@ pub const CONTESTED_SHARE: usize = 40;
 /// rooms of road with their own label -- and joins whatever it opens onto.
 pub const TINY_ROOMS: usize = 6;
 
+/// The tag on a room that is a menu rather than a place.
+///
+/// An urchin hideout has no geography: all 16 of them are a single room
+/// whose exits are `urchin guide <somewhere>` commands -- 60 of them from
+/// the Landing's, reaching every shop and gate in town. Drawing it puts a
+/// room on the sheet that nobody can walk to and lines across the map
+/// that nobody can walk along.
+///
+/// The premium halls' `premium:transport`, `premium supernode` and
+/// `premium teleportation jewelry` rooms are **not** this: Zephyr Hall's
+/// Common Room and Seamist Hall's Central Lounge are places, with
+/// ordinary doors to the rest of their building. They carry a
+/// [`Crossing::PassThrough`] to a hideout as well, which
+/// [`is_passage`] already declines to follow. The room stays; the
+/// teleport does not.
+/// Spelled in `meta`, not `tags`. The disposition migration moved this
+/// one too, and it went unnoticed for the same reason `gone` did: the
+/// test kept compiling and kept matching nothing, so all 16 hideouts
+/// were being drawn.
+pub const VIRTUAL_ROOM_META: &str = "map:virtual room";
+
+/// The `meta` key on a room that has been taken out of the game.
+///
+/// Old Solhaven's streets, a Zul Logoth tunnel, a bank lobby that no
+/// longer exists, the whole barony of Talador. They are history the map
+/// keeps, not places, and they drag the sheet out of shape -- Icemule's
+/// `[Tower]` (15690, no exits at all) sits alone off the bottom of the
+/// town, and `[Road to Talador]` was drawn through Wehnimer's town
+/// square.
+///
+/// **This was a `tags` entry named `gone` and is not one any more.** The
+/// disposition migration moved the fact to `meta` and dropped the tag
+/// from every room, so a `tags` test here matched nothing at all and
+/// 2,559 removed rooms were laid out and drawn as though live. The fact
+/// did not move quietly -- it moved to a namespace with a verdict in it:
+///
+/// - `map:status:closed` -- shut, not gone: the Abbey, Rumor Woods
+///   between events. **Closed still draws.** It is the whole distinction
+///   the status carries, so this tests for `gone` and nothing else.
+/// - `map:status:live` -- said out loud where a rule had to overrule the
+///   graph.
+///
+/// Checked against `meta` rather than `tags` because that is where
+/// `retag` writes it; see `curation/status.toml` for which places were
+/// decided and why.
+pub const REMOVED_ROOM_META: &str = "map:status:gone";
+
+/// Whether a room is a place at all: not a menu wearing a room's
+/// clothes, and not something the game no longer has.
+#[must_use]
+pub fn is_real_room(room: &Room) -> bool {
+    !room.meta.iter().any(|m| m == VIRTUAL_ROOM_META || m == REMOVED_ROOM_META)
+}
+
+/// Whether anything at all connects a room to the rest of the map: an
+/// exit out, or an exit in.
+///
+/// A room with neither cannot be walked to, walked from, or drawn in
+/// relation to anything -- there is no geometry to place it by. **Why it
+/// has neither varies and does not matter**: a player shop nobody has
+/// visited since uids existed, a bookkeeping stub whose title is
+/// literally `duplicate of 2937`, a room with no title at all, something
+/// the game removed. The map cannot say where it goes, so it goes
+/// nowhere.
+///
+/// This is not a `gone` detector -- only 5 of the 714 such rooms carry
+/// that tag. It is the separate fact that there is nothing to draw.
+///
+/// Measured on `gs.map`: 790 rooms, 784 of which were reaching an area.
+/// 186 of the 191 rooms of "the sewers of Bloodriven Village" are this,
+/// which is why that area laid out 2,944 cells wide --
+/// `gather_the_unwalkable` collected them by shared location and the
+/// packer had no geometry to place them by.
+///
+/// The sewers are worth naming because they are the extreme case and
+/// they are **not** a dead place: they are a paid event, entered from
+/// Gloam Pike, and the five rooms that do have exits stay. What the map
+/// holds for the rest is 186 room-instances with no recorded links at
+/// all -- an exit-count histogram of 186 zeroes and five small numbers.
+/// Whether that is because the place reconfigures, or because whatever
+/// recorded it was moved around by a script rather than walking, the map
+/// does not say, and this rule does not need to know: it drops rooms
+/// whose position is unknowable, not rooms it has judged dead.
+fn is_connected(room: &Room, pointed_at: &HashSet<RoomId>) -> bool {
+    !room.exits.is_empty() || pointed_at.contains(&room.id)
+}
+
+/// Whether an exit is something a person can walk along, and so whether
+/// it says anything about where two rooms are in relation to each other.
+///
+/// Routines (the Elemental Confluence, the Rift -- travel puzzles whose
+/// destinations shuffle) and urchin pass-throughs are not walks, and an
+/// unported or unknown crossing cannot be walked at all. None of them is
+/// a passage, for grouping *or* for drawing: a line on the map is a claim
+/// that you can get there that way.
+#[must_use]
+pub fn is_passage(exit: &cena_map::Exit) -> bool {
+    matches!(exit.crossing, Crossing::Command(_) | Crossing::Steps(_))
+}
+
 /// One derived area.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DerivedArea {
@@ -113,10 +213,49 @@ pub fn region_of(location: &str) -> &str {
     }
 }
 
+/// The region a room belongs to: the official answer if there is one,
+/// otherwise the one read out of `location`.
+///
+/// `meta:region:` is Simutronics' own grouping, lifted from their room
+/// database and applied by `retag`. It is preferred because [`region_of`]
+/// is inference and this is not, and because the two disagree at a scale
+/// that matters: `derive_areas` made Wehnimer's Landing 3,050 rooms
+/// across 17 locations, fusing Talador into it across an unlabelled
+/// corridor. The official field says 1,413.
+///
+/// The fallback is not a formality. 14,623 rooms -- 40% of the map --
+/// have no uid the mapdb lists, so they have no official region and
+/// `location` remains the only thing that speaks for them. Those are
+/// mostly newer content and player shops, not junk.
+///
+/// Both are labels, not partitions: the grouping is still read off the
+/// graph by [`units`] and [`derive_areas`], and this only says which
+/// pieces are allowed to be the same place.
+fn region_name(room: &Room) -> Option<String> {
+    room.meta
+        .iter()
+        .find_map(|m| m.strip_prefix("region:").map(str::to_owned))
+        .or_else(|| room.location.as_deref().map(|l| region_of(l).to_owned()))
+}
+
 /// Every area the map's rooms fall into, largest first.
 #[must_use]
 pub fn derive_areas(map: &Map) -> Vec<DerivedArea> {
-    let rooms = map.rooms();
+    // A menu is not a place, a removed room is not a place, and a room
+    // nothing reaches is nowhere. None of them reach an area at all, so
+    // no consumer downstream has to know they exist.
+    let pointed_at: HashSet<RoomId> = map
+        .rooms()
+        .iter()
+        .flat_map(|r| r.exits.iter().map(|e| e.to))
+        .collect();
+    let rooms: Vec<Room> = map
+        .rooms()
+        .iter()
+        .filter(|r| is_real_room(r) && is_connected(r, &pointed_at))
+        .cloned()
+        .collect();
+    let rooms = rooms.as_slice();
     let sense: Vec<Sense> = rooms.iter().map(room_sense).collect();
     let adj = adjacency(rooms);
 
@@ -129,12 +268,7 @@ pub fn derive_areas(map: &Map) -> Vec<DerivedArea> {
     let unit_sense: Vec<Sense> = members.iter().map(|m| majority(m, &sense)).collect();
     let unit_region: Vec<Option<String>> = members
         .iter()
-        .map(|m| {
-            rooms[m[0]]
-                .location
-                .as_deref()
-                .map(|l| region_of(l).to_owned())
-        })
+        .map(|m| region_name(&rooms[m[0]]))
         .collect();
 
     let mut parent: Vec<usize> = (0..unit_count).collect();
@@ -322,12 +456,12 @@ pub const HUB_REGIONS: usize = 3;
 /// (see [`HUB_REGIONS`]).
 fn adjacency(rooms: &[Room]) -> Vec<Vec<usize>> {
     let index: HashMap<RoomId, usize> = rooms.iter().enumerate().map(|(i, r)| (r.id, i)).collect();
-    let region: Vec<Option<&str>> = rooms
-        .iter()
-        .map(|r| r.location.as_deref().map(region_of))
-        .collect();
-    let passage =
-        |exit: &cena_map::Exit| matches!(exit.crossing, Crossing::Command(_) | Crossing::Steps(_));
+    // The SAME source `unit_region` uses. Two different answers to "what
+    // region is this room in" would let adjacency merge across a boundary
+    // the units then refuse to share, which is a fused town.
+    let owned: Vec<Option<String>> = rooms.iter().map(region_name).collect();
+    let region: Vec<Option<&str>> = owned.iter().map(Option::as_deref).collect();
+    let passage = |exit: &cena_map::Exit| is_passage(exit);
     let is_hub: Vec<bool> = rooms
         .iter()
         .enumerate()
@@ -531,6 +665,17 @@ mod tests {
     const OUT: &str = "Obvious paths: north";
     const IN: &str = "Obvious exits: out";
 
+    /// A room carrying a `meta` key. Disposition lives in `meta`, not
+    /// `tags` -- a fixture that spells it as a tag tests a map that no
+    /// longer exists, which is exactly how 2,559 removed rooms went on
+    /// being drawn while this file's tests passed.
+    fn with_meta(id: u32, title: &str, location: Option<&str>, meta: &str, to: &[u32]) -> Room {
+        Room {
+            meta: vec![meta.to_owned()],
+            ..room(id, title, location, IN, to)
+        }
+    }
+
     fn room(id: u32, title: &str, location: Option<&str>, paths: &str, to: &[u32]) -> Room {
         Room {
             id: RoomId(id),
@@ -670,11 +815,11 @@ mod tests {
 
     /// The Landing's urchin hideout has an exit to a hideout in each of
     /// three other towns; each town's street has an exit into its own
-    /// hideout. Those hops are not passages: the hideout is a room of the
-    /// Landing, and the towns stay apart.
+    /// hideout. A hideout is a menu, not a place: it lands in no area at
+    /// all, and the towns it reaches stay apart.
     #[test]
     #[allow(clippy::cast_possible_truncation)] // fixture ids
-    fn a_hideout_joins_its_town_and_fuses_nothing() {
+    fn a_hideout_is_no_place_and_fuses_nothing() {
         let mut rooms = Vec::new();
         for (t, town) in ["Wehn", "Sol", "Ice", "Riv"].iter().enumerate() {
             let base = 100 * (t as u32 + 1);
@@ -696,11 +841,11 @@ mod tests {
             // The hideout: back to its street, and on to the others'.
             let mut to: Vec<u32> = vec![base];
             to.extend((1..=4u32).map(|o| o * 100 + 50).filter(|&h| h != base + 50));
-            rooms.push(room(
+            rooms.push(with_meta(
                 base + 50,
                 &format!("[{town} - Urchin Hideout]"),
                 Some(town),
-                IN,
+                VIRTUAL_ROOM_META,
                 &to,
             ));
         }
@@ -717,10 +862,86 @@ mod tests {
                 pair[0].name
             );
         }
-        assert_eq!(
-            area_of(&areas, 150).rooms,
-            area_of(&areas, 100).rooms,
-            "the hideout left its town"
+        for base in [100, 200, 300, 400] {
+            assert!(
+                !areas.iter().any(|a| a.rooms.contains(&RoomId(base + 50))),
+                "a hideout reached an area"
+            );
+        }
+    }
+
+    /// A room taken out of the game is not drawn, whether or not
+    /// anything still points at it. Icemule's `[Tower]` has no exits at
+    /// all and sat alone off the bottom of the town; the old Solhaven
+    /// streets are a clump of their own with a live road still leading
+    /// in. `closed` is not `gone`: the Abbey is shut, not deleted.
+    #[test]
+    fn a_room_the_game_no_longer_has_is_no_place() {
+        let mut rooms = vec![
+            room(1, "[Street]", Some("the town of Wehn"), OUT, &[2]),
+            room(2, "[Street]", Some("the town of Wehn"), OUT, &[1, 3]),
+            // Still reachable from the live street, but gone.
+            with_meta(3, "[Old Lane]", Some("Wehn"), REMOVED_ROOM_META, &[2]),
+            // The Tower: gone, and nothing points at it either way.
+            with_meta(4, "[Tower]", Some("Wehn"), REMOVED_ROOM_META, &[]),
+        ];
+        // A shut shop is still a place: it opens off the street.
+        rooms.push(with_meta(5, "[Abbey]", Some("Wehn"), "map:status:closed", &[2]));
+        rooms[1].exits.push(Exit {
+            to: RoomId(5),
+            kind: ExitKind::Cardinal,
+            crossing: Crossing::Command("go abbey".to_owned()),
+            cost: Some(Cost::Fixed(1.0)),
+        });
+        let map = Map::from_rooms(rooms).expect("no duplicate ids");
+        let areas = derive_areas(&map);
+
+        for id in [3, 4] {
+            assert!(
+                !areas.iter().any(|a| a.rooms.contains(&RoomId(id))),
+                "a removed room reached an area: {id}"
+            );
+        }
+        assert!(
+            areas.iter().any(|a| a.rooms.contains(&RoomId(5))),
+            "a closed room is still a place"
+        );
+    }
+
+    /// A room with no exits and nothing pointing at it has no geometry:
+    /// nothing says where it goes. Whether it is a player shop nobody
+    /// has visited since uids existed, a `duplicate of 2937` stub or a
+    /// titleless blank does not matter -- there is nothing to draw.
+    ///
+    /// A room reachable only one way is *not* this: a shop you can enter
+    /// and not leave is still somewhere, and still on its street.
+    #[test]
+    fn a_room_nothing_reaches_is_nowhere() {
+        let rooms = vec![
+            room(1, "[Street]", Some("the town of Wehn"), OUT, &[2]),
+            room(2, "[Street]", Some("the town of Wehn"), OUT, &[1]),
+            // Entered from the street, never leaves: still a place.
+            room(3, "[Oubliette]", Some("Wehn"), IN, &[]),
+            // Nothing in, nothing out.
+            room(4, "[Lwin's General Store]", Some("Wehn"), IN, &[]),
+        ];
+        let mut rooms = rooms;
+        rooms[1].exits.push(Exit {
+            to: RoomId(3),
+            kind: ExitKind::Cardinal,
+            crossing: Crossing::Command("go hole".to_owned()),
+            cost: Some(Cost::Fixed(1.0)),
+        });
+        let map = Map::from_rooms(rooms).expect("no duplicate ids");
+        let areas = derive_areas(&map);
+
+        assert!(
+            areas.iter().any(|a| a.rooms.contains(&RoomId(3))),
+            "a room you can enter and not leave is still a place"
+        );
+        assert!(
+            !areas.iter().any(|a| a.rooms.contains(&RoomId(4))),
+            "a room nothing reaches was given a cell"
         );
     }
 

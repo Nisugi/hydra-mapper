@@ -1,0 +1,373 @@
+# Disposition triage for gs.map -- components with NO verdict from curation/status.toml.
+# Fill `verdict`: live | closed | gone | delete      (blank = still undecided)
+#   live   = real place, entrance edge merely unrecorded -> walk it later
+#   closed = exists, shut right now, expected back -> draw, do not route
+#   gone   = removed or retired, nothing scheduled -> do not draw
+#   delete = bookkeeping stub -> remove the room entirely
+# Built ignoring `event transport` edges (seasonal, untraversable out of season).
+# The 33 rules in curation/status.toml already cover 5516 rooms and are not listed here.
+#
+verdict	rooms	anchor	anchor_uid	existing_tags	locations	sample_titles
+	53	36012	8022021		Northern Steppes (53)	[Halan Lea, Shore of Khesta'Dahl] | [Halan Lea, Western Track] | [Halan Lea, Western Track]
+	50	36547	12102015		<none> (49); Wehnimer's Landing (1)	[Skyship, Storage] | [Skyship, Triage] | [Skyship, Assembly]
+	40	28108	8208601		<none> (40)	[Rumor Woods, Gateway] | [Rumor Woods] | [Rumor Woods]
+	36	31144	8208501		<none> (36)	[Liraflyswn, Entrance] | [Liraflyswn, Corridor of Stone] | [Liraflyswn, Corridor of Stone]
+	29	24898			the Shimmering Mists (29)	[Iyo Village, Fire Pit] | [Iyo Village, Hut] | [Iyo Village, Hut]
+	18	30292			the Sea of Fire (18)	[Sea of Fire, Dunes] | [Sea of Fire, Yuvi Qorit] | [Yuvi Qorit, Sandy Path]
+	15	34781	1063113		<none> (15)	[Pathway, Recent Work] | [Pathway, Ups and Downs] | [Pathway, Small Clearing]
+	15	36603	12102037		<none> (15)	[Skyship, Arches] | [Skyship, The Pits] | [Skyship, Processing]
+	10	30595	4002910		Mist Harbor (10)	[Swirling Nexus, Transport Hub] | [Kraken's Fall Room] | [Icemule Trace Room]
+	8	10477			Talador (8)	[Hendoran Outpost, Gateway] | [Talador, The Bleaklands] | [Talador, The Bleaklands]
+	7	36239	9040301		<none> (7)	[Mariath's Manse, Outside] | [Mariath's Manse, Antechamber] | [Mariath's Manse, Rotunda]
+	7	36596	12102026		<none> (7)	[Skyship, The Rows] | [Skyship, Worship] | [Skyship, Hydration]
+	6	30154			Ta'Illistim (6)	[Obsidian Acropolis, Propylaeum] | [Obsidian Acropolis, Stoa Elan] | [Obsidian Acropolis, Atelier]
+	6	33286	7108001		the Quest Nexus (5); Wehnimer's Landing (1)	[Nexus] | [Distorted Winding Road] | [Distorted Wharf]
+	5	31358	409601		<none> (5)	[Garden Sanctuary, Approach] | [Garden Sanctuary, Retreat] | [Garden Sanctuary, Reception]
+	4	31434	4740138		the free port of Solhaven (4)	[Solhaven, Dungeon] | [Solhaven, Dungeon] | [Solhaven, Gaol]
+	4	36213	4290020		the twin spires of Thanatoph (4)	[The Crossroads] | [The Crossroads, Lounge] | [The Crossroads]
+	3	13546			<none> (3)	[Melorra's General Store] | [Melorra's Armory] | [Melorra's General Store]
+	3	13835			Solhaven (3)	[Xygon's Weaponry] | [Xygon's General Store] | [Xygon's General Store]
+	3	13837			Solhaven (3)	[Xandrya's Outfitting] | [Xandrya's Magic Shoppe] | [Xandrya's Outfitting]
+	3	13839			Solhaven (3)	[Morgause's Magic Shoppe] | [Morgause's Outfitting] | [Morgause's Outfitting]
+	3	15019			Wehnimer's Landing (3)	[Summerlyn's General Store] | [Summerlyn's Magic Shoppe] | [Summerlyn's General Store]
+	3	16382			<none> (3)	[Loelita's Lockpicks] | [Loelita's Outfitting] | [Loelita's Outfitting]
+	3	16484			Mist Harbor (3)	[Daelyne's Outfitting] | [Daelyne's Outfitting] | [Daelyne's Outfitting]
+	3	16546			Mist Harbor (3)	[The Garnet Moth] | [The Garnet Moth, Boutique] | [The Garnet Moth, Arcana]
+	3	16549			<none> (3)	[Maselon's Magic Shoppe] | [Maselon's Outfitting] | [Maselon's Magic Shoppe]
+	3	20428			Mist Harbor (3)	[Vivina's General Store] | [Vivina's Outfitting] | [Vivina's Weaponry]
+	3	21269	639129		Solhaven (3)	[Enchantment Emporium] | [Enchantment Emporium, Trinkets] | [Enchantment Emporium, Baubles]
+	3	23556			Mist Harbor (3)	[Mischung's Weaponry] | [Mischung's Outfitting] | [Mischung's Outfitting]
+	3	23558			Mist Harbor (3)	[Alberon's Weaponry] | [Alberon's Outfitting] | [Alberon's General Store]
+	3	28666			Ta'Vaalor (3)	[Coliseum Colonnade] | [Coliseum, Elven Lounge] | [Coliseum, Citizen Lounge]
+	3	36818	636049		Solhaven (3)	[Shespar's Weaponry] | [Shespar's General Store] | [Shespar's General Store]
+	2	3873			<none> (2)	[Mirarte's General Store] | [Mirarte's General Store]
+	2	10118	14001001		the Lake of Fear (2)	[Lake of Fear, Ferry] | [Lake of Fear, Ferry Saloon]
+delete	2	13103			<none> (2)	duplicate of 13104 | duplicate of 13114
+	2	15490			Wehnimer's Landing (2)	[Helden Hall, Cramped Entryway] | [Inside the Iron Maiden]
+	2	17646			<none> (2)	[Western Waterway, Harbor] | [Western Waterway, Harbor]
+	2	24576	108430		Wehnimer's Landing (2)	[Lowest Environs, Cavern] | [Lowest Environs, Flat Rocks]
+	2	26064	211101		Wehnimer's Landing (2)	[Sylvanfair, Summoning Chamber] | [Sylvanfair, Secret Passageway]
+	2	34796	1063003		<none> (2)	[Maze, Observation Deck] | [Maze, The Diamond Room]
+	2	35799	2014002		Arborsong, inside the island town of Mist Harbor (1); Mist Harbor (1)	[ArborSong, Dungeon] | [ArborSong, Cell]
+	1	750		missing:1	<none> (1)	[Hall of Patrons]
+	1	1768	29013	no-auto-map:1	nowhere in particular (1)	[Temporal Rift]
+delete	1	2951			<none> (1)	duplicate of 2937
+delete	1	3630			<none> (1)	duplicate of 2743
+	1	3864			<none> (1)	[Kristalis' Outfitting]
+	1	3865			<none> (1)	
+	1	8614			<none> (1)	
+	1	9828	13022150		Maaghara Tower (1)	[Inside Tree, Narrow Tunnel]
+	1	10289			<none> (1)	
+	1	11239			Ta'Illistim (1)	[Hebe's Outfitting]
+	1	11798			Ta'Illistim (1)	[Lwin's General Store]
+	1	11800			Ta'Illistim (1)	[Lwin's General Store]
+	1	12318			Ta'Illistim (1)	[Lakavelli's General Store]
+	1	12378			Ta'Illistim (1)	[Lakavelli's Magic Shoppe]
+	1	12497			Ta'Illistim (1)	[Eldaria's Magic Shoppe]
+	1	12542			Ta'Illistim (1)	[Eldaria's Outfitting]
+delete	1	13126			<none> (1)	duplicate of 13125
+delete	1	13190			<none> (1)	duplicate of 1505
+delete	1	13191			<none> (1)	duplicate of 1506
+	1	13821			<none> (1)	
+	1	13862			<none> (1)	[Vender's General Store]
+	1	13863			Solhaven (1)	[Vender's General Store]
+	1	14457			<none> (1)	
+	1	14458			<none> (1)	
+	1	14459			<none> (1)	
+	1	14462			<none> (1)	
+	1	14464			<none> (1)	
+	1	14465			<none> (1)	
+	1	14590			<none> (1)	[Zzentar's General Store]
+	1	14653			Wehnimer's Landing (1)	[Ryhn's Magic Shoppe]
+	1	14660	13022151		Maaghara Tower (1)	[Inside Tree, Narrow Tunnel]
+	1	14661	13022152		Maaghara Tower (1)	[Inside Tree, Narrow Tunnel]
+	1	14662	13022153		Maaghara Tower (1)	[Inside Tree, Narrow Tunnel]
+	1	14690			<none> (1)	[Orzel's Outfitting]
+	1	15007			Wehnimer's Landing (1)	[Jagar's Weaponry]
+	1	15009			<none> (1)	[Crisella's Magic Shoppe]
+	1	15101			<none> (1)	[Teiana's General Store]
+	1	15159			<none> (1)	
+	1	15408			<none> (1)	[Histrion's Magic Shoppe]
+	1	15410			<none> (1)	[Neopuron's Magic Shoppe]
+	1	15415			<none> (1)	[Neopuron's Weaponry]
+	1	15532			<none> (1)	[Sevris' Weaponry]
+	1	15629			Old Ta'Faendryl (1)	[In Flight]
+	1	15934			<none> (1)	
+	1	15947			Wehnimer's Landing (1)	[Eahlstan's General Store]
+delete	1	15949			<none> (1)	duplicate of 7989
+delete	1	15953			<none> (1)	duplicate of 7988
+delete	1	15955			<none> (1)	duplicate of 8751
+delete	1	16057			<none> (1)	duplicate of 11238
+	1	16089			the Dark Tower, outside the glacier-locked town of Icemule Trace (1)	[A Steep Trail]
+	1	16113			the High Plains (1)	[Dark Tower, Great Hall]
+	1	16126		no-auto-map:1	the Karazja Jungle (1)	[Karazja Jungle, Path]
+	1	16136	5001050	rewritten:1	River's Rest (1)	[Timor's Storage, Hallway]
+	1	16398			Ta'Illistim (1)	[Mellindya's Combat Gear]
+	1	16827			<none> (1)	[Steia's Outfitting]
+	1	16828			<none> (1)	[Tese's Outfitting]
+	1	16829			Wehnimer's Landing (1)	[Betyar's Weaponry]
+	1	16830			<none> (1)	[Kivsha's Weaponry]
+	1	16832			<none> (1)	[Vivaldi's Combat Gear]
+	1	16833			<none> (1)	[Vlinch's Outfitting]
+	1	16834			<none> (1)	[Aethor's Magic Shoppe]
+	1	17195			<none> (1)	
+delete	1	17290			<none> (1)	duplicate of 12348
+delete	1	17294			<none> (1)	duplicate of 10421
+delete	1	17295			<none> (1)	duplicate of 13993
+delete	1	17296			<none> (1)	duplicate of 10422
+delete	1	17297			<none> (1)	duplicate of 10423
+delete	1	17298			<none> (1)	duplicate of 13995
+delete	1	17299			<none> (1)	duplicate of 13996
+	1	17398			Solhaven (1)	[Wondrious's General Store]
+	1	17399			Solhaven (1)	[Windpanguss' Outfitting]
+	1	17402			Solhaven (1)	[Ayl's Outfitting]
+	1	17792		missing:1	<none> (1)	[A Brown Tent]
+	1	17795		gone:1	Wehnimer's Landing (1)	[Zanthie's Wagon]
+	1	18090		gone:1	Ta'Vaalor (1)	[Burghal Caravan, Sew What]
+	1	18096		gone:1	Ta'Vaalor (1)	[Shades of Velathae]
+delete	1	18222			<none> (1)	duplicate of 3676
+	1	18749			Wehnimer's Landing (1)	[Rustybeard's Magic Shoppe]
+	1	18750			Wehnimer's Landing (1)	[Janlyn's Armory]
+	1	18752			<none> (1)	
+	1	18754			Wehnimer's Landing (1)	[Solice's General Store]
+	1	18797			Icemule Trace (1)	[Zyzax's Magic Shoppe]
+	1	18809			Ta'Vaalor (1)	[Naitalya's Magic Shoppe]
+delete	1	18813			<none> (1)	duplicate of 14012
+	1	19043		closed:1	River's Rest (1)	[A Derelict Hovel]
+	1	19283			the Upper Trollfang (1)	[Moat, Bottom]
+	1	19284			the Upper Trollfang (1)	[Moat, Underwater]
+	1	19285			the Upper Trollfang (1)	[Moat, Whirlpool]
+	1	19286			Solhaven (1)	[Prion's General Store]
+	1	19287			Solhaven (1)	[Katirena's Outfitting]
+	1	19288			Solhaven (1)	[Heust's General Store]
+delete	1	19407			<none> (1)	duplicate of 18221
+delete	1	19408			<none> (1)	duplicate of 18220
+	1	19462			Icemule Trace (1)	[Imraith's Magic Shoppe]
+	1	19469			Icemule Trace (1)	[Slatesleeve's General Store]
+	1	19475			<none> (1)	
+	1	19481			<none> (1)	
+	1	19482			Wehnimer's Landing (1)	[Boora's Outfitting]
+	1	19483			<none> (1)	
+	1	19484			<none> (1)	
+	1	19485			<none> (1)	
+	1	19488			Wehnimer's Landing (1)	[Kagehisa's General Store]
+	1	19492			Wehnimer's Landing (1)	[Athanecia's Weaponry]
+	1	19493			Wehnimer's Landing (1)	[Kitruth's Outfitting]
+	1	19496			Wehnimer's Landing (1)	[Ana's General Store]
+	1	19498			Wehnimer's Landing (1)	[Idratheil's Weaponry]
+	1	19500			Wehnimer's Landing (1)	[Siehn's Outfitting]
+	1	19501			Wehnimer's Landing (1)	[Masrath's Weaponry]
+	1	19502			Wehnimer's Landing (1)	[Chenault's General Store]
+	1	19503			<none> (1)	
+	1	19504			Wehnimer's Landing (1)	[Eoghain's Weaponry]
+	1	19547	13004104		Kharag 'doth Dzulthu (1)	[Kharag 'doth Dzulthu, Tunnels]
+	1	20186			<none> (1)	
+delete	1	20884			<none> (1)	duplicate of 1979
+	1	21264		gone:1	Solhaven (1)	[The Hungry Halfling]
+	1	21327			Wehnimer's Landing (1)	[House Brigatta, Garden Bower]
+delete	1	22151			<none> (1)	duplicate of 14098
+delete	1	22460			<none> (1)	duplicate of 19928
+delete	1	23202			<none> (1)	duplicate of 23197
+delete	1	23203			<none> (1)	duplicate of 23197
+delete	1	23250			<none> (1)	duplicate of 19537
+	1	23557			<none> (1)	
+	1	23560			<none> (1)	
+	1	23563			<none> (1)	
+	1	23566			<none> (1)	
+	1	23572			<none> (1)	
+	1	23573			<none> (1)	
+	1	23575			<none> (1)	
+	1	23585			<none> (1)	
+	1	23586			<none> (1)	
+	1	23594			<none> (1)	
+	1	23595			<none> (1)	
+	1	23599			<none> (1)	
+	1	23600			<none> (1)	
+	1	23604			<none> (1)	
+	1	23605			<none> (1)	
+	1	23609			<none> (1)	
+	1	23610			<none> (1)	
+	1	23615			<none> (1)	
+	1	23616			<none> (1)	
+	1	23622			<none> (1)	
+	1	23623			<none> (1)	
+	1	23630			<none> (1)	
+delete	1	23651			<none> (1)	duplicate of 13351
+	1	23910			Mist Harbor (1)	[Ondreian's Outfitting]
+	1	23912			Mist Harbor (1)	[Ondreian's Magic Shoppe]
+	1	23914			Mist Harbor (1)	[Ondreian's Outfitting]
+	1	23916			Mist Harbor (1)	[Ondreian's Outfitting]
+delete	1	23917			<none> (1)	duplicate of 3872
+delete	1	23918			<none> (1)	duplicate of 3872
+delete	1	23919			<none> (1)	duplicate of 3869
+delete	1	23920			<none> (1)	duplicate of 3869
+delete	1	23921			<none> (1)	duplicate of 12265
+delete	1	23922			<none> (1)	duplicate of 12265
+delete	1	23987			<none> (1)	duplicate of 13925
+delete	1	23988			<none> (1)	duplicate of 10681
+delete	1	23989			<none> (1)	duplicate of 13925
+	1	24061			<none> (1)	
+	1	24062			<none> (1)	
+	1	24063			Wehnimer's Landing (1)	[House Brigatta, Memorial Garden]
+	1	24256			Ta'Illistim (1)	[Elven Enchantment, By Night]
+delete	1	24531			<none> (1)	duplicate of 3111
+delete	1	24671			<none> (1)	duplicate of 24644
+delete	1	24812			<none> (1)	duplicate of 23885
+	1	25184			<none> (1)	[Inside the Wagon]
+	1	25490			Wehnimer's Landing (1)	[Mikalmas's General Store]
+	1	25498			<none> (1)	
+delete	1	25644			<none> (1)	duplicate of 25643
+delete	1	25778			<none> (1)	duplicate of 25775
+	1	25789			Coral Villa, outside the island town of Mist Harbor (1)	[Coral Island, Living Room]
+	1	25790			Coral Villa, outside the island town of Mist Harbor (1)	[Coral Island, Master Bedroom]
+	1	25791			Coral Villa, outside the island town of Mist Harbor (1)	[Coral Island, Kitchen]
+	1	25792			Coral Villa, outside the island town of Mist Harbor (1)	[Coral Island, Garden]
+	1	25793			Coral Villa, outside the island town of Mist Harbor (1)	[Coral Island, Private Beach]
+	1	25794			Coral Villa, outside the island town of Mist Harbor (1)	[Tiny Cove, Swimming Lagoon]
+	1	25795			Coral Villa, outside the island town of Mist Harbor (1)	[Coral Island, Guest Bedroom]
+	1	25866			Wehnimer's Landing (1)	[Mikalmas's Armory]
+	1	25867			Wehnimer's Landing (1)	[Mikalmas's General Store]
+	1	25868			Wehnimer's Landing (1)	[Mikalmas's Weaponry]
+delete	1	25884			<none> (1)	duplicate of 20732
+delete	1	25993			<none> (1)	duplicate of 23212
+delete	1	25995			<none> (1)	duplicate of 13099
+	1	26051			Wehnimer's Landing (1)	[Mikalmas's Magic Shoppe]
+	1	26052			Wehnimer's Landing (1)	[Mikalmas's Magic Shoppe]
+delete	1	26061			<none> (1)	duplicate of 25984
+delete	1	26094			<none> (1)	duplicate of 1491
+	1	26382			Wehnimer's Landing (1)	[Lord Metaboculous' Room]
+	1	26392			the Dark Tower, outside the glacier-locked town of Icemule Trace (1)	[A Steep Trail]
+	1	26393			the High Plains (1)	[Dark Tower, Great Hall]
+	1	26394			the Dark Tower, outside the glacier-locked town of Icemule Trace (1)	[A Steep Trail]
+	1	26395			the High Plains (1)	[Dark Tower, Great Hall]
+	1	26397			the Dark Tower, outside the glacier-locked town of Icemule Trace (1)	[A Steep Trail]
+	1	26398			the High Plains (1)	[Dark Tower, Great Hall]
+	1	26399			the Dark Tower, outside the glacier-locked town of Icemule Trace (1)	[A Steep Trail]
+	1	26400			the High Plains (1)	[Dark Tower, Great Hall]
+	1	26401			the Dark Tower, outside the glacier-locked town of Icemule Trace (1)	[A Steep Trail]
+	1	26402			the High Plains (1)	[Dark Tower, Great Hall]
+	1	26403			the Dark Tower, outside the glacier-locked town of Icemule Trace (1)	[A Steep Trail]
+	1	26404			the High Plains (1)	[Arctic Tundra, High Plain]
+	1	26405			the High Plains (1)	[A Steep Trail]
+	1	26915	18018011		Wehnimer's Landing (1)	[Black Hand, Pantry]
+delete	1	26925			<none> (1)	duplicate of 26922
+delete	1	26926			<none> (1)	duplicate of 26922
+delete	1	26927			<none> (1)	duplicate of 26924
+delete	1	26933			<none> (1)	duplicate of 26922
+delete	1	27043			<none> (1)	duplicate of 25697
+delete	1	27044			<none> (1)	duplicate of 25702
+delete	1	27045			<none> (1)	duplicate of 25703
+delete	1	27046			<none> (1)	duplicate of 25821
+delete	1	27047			<none> (1)	duplicate of 25822
+delete	1	27089			<none> (1)	duplicate of 18327
+delete	1	27090			<none> (1)	duplicate of 18325
+delete	1	27091			<none> (1)	duplicate of 18321
+delete	1	27092			<none> (1)	duplicate of 18319
+delete	1	27093			<none> (1)	duplicate of 18267
+delete	1	27094			<none> (1)	duplicate of 18329
+delete	1	27095			<none> (1)	duplicate of 18331
+delete	1	27096			<none> (1)	duplicate of 18326
+delete	1	27097			<none> (1)	duplicate of 18324
+delete	1	27098			<none> (1)	duplicate of 18322
+delete	1	27099			the environs of the Saewehna Lagoon (1)	duplicate of 18320
+delete	1	27100			<none> (1)	duplicate of 18333
+delete	1	27101			<none> (1)	duplicate of 18330
+delete	1	27102			<none> (1)	duplicate of 18310
+delete	1	27103			<none> (1)	duplicate of 18311
+delete	1	27104			<none> (1)	duplicate of 18334
+delete	1	27105			<none> (1)	duplicate of 18276
+delete	1	27106			<none> (1)	duplicate of 18339
+delete	1	27107			<none> (1)	duplicate of 18278
+delete	1	27108			<none> (1)	duplicate of 18283
+delete	1	27109			<none> (1)	duplicate of 18285
+delete	1	27110			<none> (1)	duplicate of 18287
+delete	1	27111			<none> (1)	duplicate of 18298
+delete	1	27112			<none> (1)	duplicate of 18342
+delete	1	27113			<none> (1)	duplicate of 18343
+delete	1	27114			<none> (1)	duplicate of 18294
+delete	1	27115			<none> (1)	duplicate of 18307
+delete	1	27116			<none> (1)	duplicate of 18308
+delete	1	27117			<none> (1)	duplicate of 18309
+delete	1	27118			<none> (1)	duplicate of 18274
+delete	1	27119			<none> (1)	duplicate of 18273
+delete	1	27120			<none> (1)	duplicate of 18272
+delete	1	27121			<none> (1)	duplicate of 18337
+delete	1	27122			<none> (1)	duplicate of 18271
+delete	1	27123			<none> (1)	duplicate of 18335
+delete	1	27124			<none> (1)	duplicate of 18336
+delete	1	27125			<none> (1)	duplicate of 18270
+delete	1	27126			<none> (1)	duplicate of 18266
+	1	27127			<none> (1)	duplicate 18265
+delete	1	27128			<none> (1)	duplicate of 18314
+delete	1	27129			<none> (1)	duplicate of 18268
+delete	1	27130			<none> (1)	duplicate of 18288
+delete	1	27146			<none> (1)	duplicate of 24628
+delete	1	27387			<none> (1)	duplicate of 27383
+	1	27537			<none> (1)	
+	1	27629			<none> (1)	
+delete	1	27643			<none> (1)	duplicate of 23239
+delete	1	27654			<none> (1)	duplicate of 15464
+delete	1	27744			<none> (1)	duplicate of 15793
+delete	1	27977			<none> (1)	duplicate of 24798
+delete	1	27978			<none> (1)	duplicate of 24241
+delete	1	27979			<none> (1)	duplicate of 24804
+delete	1	28155			<none> (1)	duplicate of 25916
+	1	28249			Talador (1)	[Talador, The Bleaklands]
+	1	28251			Talador (1)	[Talador, The Bleaklands]
+	1	28259		gone:1	Wehnimer's Landing (1)	[Melgorehn's Reach, Planar Nexus]
+delete	1	28325			<none> (1)	duplicate of 27653
+delete	1	28352			<none> (1)	duplicate of 9891
+	1	28678			<none> (1)	duplicate 10848
+delete	1	28683			<none> (1)	duplicate of 451
+	1	28696			<none> (1)	
+delete	1	28710			<none> (1)	duplicate of 12567
+delete	1	28763			<none> (1)	duplicate of 25429
+delete	1	28806			<none> (1)	duplicate of 28439
+delete	1	29149			<none> (1)	duplicate of 29054
+delete	1	29333			<none> (1)	duplicate of 27530
+delete	1	29336			<none> (1)	duplicate of 27528
+delete	1	29529			<none> (1)	duplicate of 9889
+delete	1	29530			<none> (1)	duplicate of 9890
+delete	1	29551			<none> (1)	duplicate of 15787
+delete	1	29602			<none> (1)	duplicate of 19359
+delete	1	29799			<none> (1)	duplicate of 28884
+delete	1	30094			<none> (1)	duplicate of 27366
+delete	1	30097			<none> (1)	duplicate of 27479
+	1	32037			<none> (1)	
+	1	32671			<none> (1)	
+	1	32713	36		the heavens (1)	[F2P Limbo]
+delete	1	32739			<none> (1)	duplicate of 18145
+delete	1	33006			<none> (1)	duplicate of 25647
+delete	1	33142			<none> (1)	duplicate of 23909
+	1	33225	4216951		the shadow of the Sanctum (1)	[Hinterwilds Caravan, Sleigh]
+	1	33246	3201503		the Isle of Four Winds (1)	[Mist Harbor, Jail]
+	1	33247	2601		Wehnimer's Landing (1)	[Wehnimer's, Jail Cell]
+	1	33248	2101301		the town of River's Rest (1)	[River's Rest, The Brig]
+	1	33249	4043325		Icemule Trace (1)	[Icemule Trace, Cell]
+	1	33250	13010022		Zul Logoth (1)	[The Cockroach Pit]
+	1	33251	13105004		Ta'Illistim (1)	[Hall of Justice, Oubliette]
+	1	33252	14108004		Ta'Vaalor (1)	[Hall of Justice, Pit of Doom]
+	1	33253	3003054		the town of Kharam-Dzu (1)	[Lockup]
+	1	33254	7118404		Kraken's Fall (1)	[Jailhouse, Cell]
+	1	33255	14052014		Cysaegir (1)	[Reformatory, Detention Cell]
+	1	34088	7116970		The Great Western Sea (1)	[Below Deck]
+	1	34398			Hinterwilds (1)	[the Hinterwilds - Urchin Hideout]
+	1	35764	-369000		Cold River (1)	[Under the Sea]
+	1	36226	9181011		Elanthia (1)	[The Wasteland, Tunnel Shaft]
+	1	36232	9181021		Elanthia (1)	[Deserted House, Cellar]
+	1	36238	9159001		<none> (1)	[Itzel's Palapa]
+	1	36246	4290029		the twin spires of Thanatoph (1)	[The Crossroads]
+	1	36247	9117002		<none> (1)	[Scrimge's Office]
+	1	36248	9243002		<none> (1)	[Private Beach, Ivry's Island]
+	1	36249	9243004		<none> (1)	[Private Beach N, Ivry's Island]
+	1	36250	9243003		<none> (1)	[Private Beach S, Ivry's Island]
+	1	36251	9243001		<none> (1)	[Private Island, Ivry's Oasis]
+	1	36252	9202002		<none> (1)	[Marstreforn's Golem Repair]
+	1	36253	9179950		<none> (1)	[The Washed-a-Shore]
+	1	36254	9179951		<none> (1)	[A Ruined Black Ship]
+	1	36255	9179952		<none> (1)	[A Broken Crimson Schooner]
+	1	36256	9179953		<none> (1)	[Are-You-Ashore]
+	1	36257	9179954		<none> (1)	[Under the Sea]
+	1	36258	9179955		<none> (1)	[Lair Lair, Pants on Fair]
+	1	36259	9179956		<none> (1)	[Kenstrom's Bureau]
+	1	36260	9179957		<none> (1)	[The Strategy Stage]

@@ -1,0 +1,692 @@
+# META -- 48 namespaces
+# count	namespace	value
+2401	playershop	
+62	che	House of the Argent Aspis
+60	che	Helden Hall
+57	che	Willow Hall
+56	che	House Sovyn
+55	che	Cairnfang Manor
+54	che	Obsidian Tower
+51	che	Twilight Hall
+44	che	House of Paupers
+43	che	House Sylvanfair
+42	che	Silvergate Inn
+42	che	Silvergate Manor
+41	che	Beacon Hall Archive
+40	che	Moonstone Abbey
+38	che	White Haven
+31	che	House of the Rising Phoenix
+30	che	House Brigatta
+19	che	paupers:locker
+18	che	silvergate_inn:locker
+17	che	paupers:entrance_locker
+17	che	silvergate_inn:entrance_locker
+16	che	twilight_hall:locker
+14	che	cairnfang_manor:locker
+13	che	arcane_masters:entrance_locker
+13	che	arcane_masters:locker
+13	che	brigatta:entrance_locker
+13	che	brigatta:locker
+13	che	cairnfang_manor:entrance_locker
+13	che	sovyn:entrance_locker
+13	che	sovyn:locker
+13	che	sylvanfair:locker
+13	che	twilight_hall:entrance_locker
+13	che	white_haven:locker
+13	che	willow_hall:locker
+12	che	helden_hall:entrance_locker
+12	che	helden_hall:locker
+12	che	rone_academy:locker
+12	che	sylvanfair:entrance_locker
+12	che	willow_hall:entrance_locker
+11	che	argent_aspis:locker
+11	che	rone_academy:entrance_locker
+11	che	white_haven:entrance_locker
+10	che	arcane_masters:entrance_annex
+10	che	argent_aspis:entrance
+10	che	brigatta:entrance_annex
+10	che	cairnfang_manor:entrance_annex
+10	che	helden_hall:entrance_annex
+10	che	paupers:entrance_annex
+10	che	rone_academy:entrance_annex
+10	che	sovyn:entrance_annex
+10	che	sylvanfair:entrance_annex
+10	che	twilight_hall:entrance_annex
+10	che	white_haven:entrance_annex
+10	che	willow_hall:entrance_annex
+9	che	silvergate_inn:entrance_annex
+3	che	beacon_hall:locker
+2	che	obsidian_tower:locker
+1	che	Arcane Masters
+1	che	arcane_masters:entrance_che
+1	che	brigatta:entrance_che
+1	che	cairnfang_manor:entrance_che
+1	che	helden_hall:entrance_che
+1	che	obsidian_tower:entrance_annex
+1	che	obsidian_tower:entrance_che
+1	che	obsidian_tower:entrance_locker
+1	che	paupers:entrance_che
+1	che	rone_academy:entrance_che
+1	che	silvergate_inn:entrance_che
+1	che	sovyn:entrance_che
+1	che	sylvanfair:entrance_che
+1	che	twilight_hall:entrance_che
+1	che	white_haven:entrance_che
+1	che	willow_hall:entrance_che
+667	nomagic	
+211	fest	grawood
+186	fest	anfelt
+113	fest	velathae
+75	fest	highman
+4	fest	fof
+1	fest	frontier
+65	mapcategory	Wehnimer's Landing
+53	mapcategory	Guilds
+43	mapcategory	Elven Nations
+41	mapcategory	Icemule Trace
+22	mapcategory	CHE
+20	mapcategory	Vornavis
+17	mapcategory	River's Rest
+17	mapcategory	Teras Isle
+15	mapcategory	Premium
+14	mapcategory	Events and Festivals
+14	mapcategory	Towns
+13	mapcategory	Zul Logoth
+12	mapcategory	MHO
+10	mapcategory	Isle of the Four Winds
+6	mapcategory	Kraken's Fall
+5	mapcategory	Neighborhoods
+4	mapcategory	Other
+4	mapcategory	Quests
+1	mapcategory	CHE:Twilight Hall Annex (Elven Nations)
+1	mapcategory	Dyer's Tents:Cysaegir
+1	mapcategory	Dyer's Tents:Icemule Trace
+1	mapcategory	Dyer's Tents:Isle of the Four Winds
+1	mapcategory	Dyer's Tents:River's Rest
+1	mapcategory	Dyer's Tents:Solhaven
+1	mapcategory	Dyer's Tents:Ta'Illistim
+1	mapcategory	Dyer's Tents:Ta'Vaalor
+1	mapcategory	Dyer's Tents:Teras Isle
+1	mapcategory	Dyer's Tents:Wehnimer's Landing
+1	mapcategory	Dyer's Tents:Zul Logoth
+1	mapcategory	Elven Nations:Twilight Hall Annex
+1	mapcategory	Open Sea Adventures
+1	mapcategory	Open Sea Adventures:Docks (WL)
+206	map	multi-uid
+40	map	ignore-blanks
+16	map	virtual room
+2	map	ignore-selfpath
+1	map	close and open door
+231	teleport	fwi
+16	teleport	
+235	splashy	
+1	mapname	Abbey
+1	mapname	Adventurer's Guild
+1	mapname	Baile Dragan
+1	mapname	Black Hand Trading Company - Wehnimer's Landing
+1	mapname	Den of Rot
+1	mapname	Duskruin
+1	mapname	Ebon Gate - Naidem 2022 - Part 1
+1	mapname	Ebon Gate - Naidem 2022 - Part 2
+1	mapname	Ebon Gate/Caligos Isle 5119
+1	mapname	Elemental Confluence, The
+1	mapname	Elven Nations - Aradhul Road
+1	mapname	Elven Nations - Cysaegir
+1	mapname	Elven Nations - Cysaegir - Dyer's Dent
+1	mapname	Elven Nations - Fearling Pass
+1	mapname	Elven Nations - Gyldemar
+1	mapname	Elven Nations - Maaghara Tower
+1	mapname	Elven Nations - Old Ta'Faendryl
+1	mapname	Elven Nations - Ravelin
+1	mapname	Elven Nations - Skull Temple
+1	mapname	Elven Nations - Sylvarraend Road
+1	mapname	Elven Nations - Ta'Illistim
+1	mapname	Elven Nations - Ta'Illistim - Dyer's Tent
+1	mapname	Elven Nations - Ta'Illistim - Isharn Enclave
+1	mapname	Elven Nations - Ta'Illistim Buildings
+1	mapname	Elven Nations - Ta'Illistim Cleric Guild
+1	mapname	Elven Nations - Ta'Illistim Embassies
+1	mapname	Elven Nations - Ta'Illistim Ranger Guild
+1	mapname	Elven Nations - Ta'Illistim Rogue Guild
+1	mapname	Elven Nations - Ta'Illistim Sapphire Gate
+1	mapname	Elven Nations - Ta'Illistim Sorcerer Guild
+1	mapname	Elven Nations - Ta'Illistim Warrior Guild
+1	mapname	Elven Nations - Ta'Illistim Wizard Guild
+1	mapname	Elven Nations - Ta'Vaalor
+1	mapname	Elven Nations - Ta'Vaalor - Cleric Guild
+1	mapname	Elven Nations - Ta'Vaalor - Dancing Dahcre
+1	mapname	Elven Nations - Ta'Vaalor - Dyer's Tent
+1	mapname	Elven Nations - Ta'Vaalor - Rogue Guild
+1	mapname	Elven Nations - Ta'Vaalor - Sorcerer Guild
+1	mapname	Elven Nations - Ta'Vaalor - Wyvern Keep
+1	mapname	Elven Nations - Ta'Vaalor Cemetary and Neartofar Forest
+1	mapname	Elven Nations - Trail (Locksmehr River/West of Dragonspine)
+1	mapname	Elven Nations - Twilight Hall Annex
+1	mapname	Elven Nations - Victory Road
+1	mapname	Elven Nations - Whistler's Pass
+1	mapname	Elven Nations - Wildwood
+1	mapname	Four Winds - Warrior Guild
+1	mapname	Grimswarm Warcamp
+1	mapname	Gryphon's Holding - Wehnimer's Landing
+1	mapname	Helden Hall - Wehnimer's Landing
+1	mapname	Icemule Trace
+1	mapname	Icemule Trace - Beacon Hall Annex
+1	mapname	Icemule Trace - Bramble Patch
+1	mapname	Icemule Trace - Cleric Guild
+1	mapname	Icemule Trace - Clovertooth Hall
+1	mapname	Icemule Trace - East, West and North Gates
+1	mapname	Icemule Trace - Empath Guild
+1	mapname	Icemule Trace - Fenog's Lodge
+1	mapname	Icemule Trace - Hinterwilds
+1	mapname	Icemule Trace - House White Haven (Map #1)
+1	mapname	Icemule Trace - House White Haven (Map #2)
+1	mapname	Icemule Trace - ICICLE
+1	mapname	Icemule Trace - Icemule Hall (PRO Hall)
+1	mapname	Icemule Trace - Moonsedge
+1	mapname	Icemule Trace - Moonsedge Crypt
+1	mapname	Icemule Trace - Moonsedge Road & Crawling Shore
+1	mapname	Icemule Trace - Pinefar
+1	mapname	Icemule Trace - Pinefar Trading Post
+1	mapname	Icemule Trace - Ranger Guild
+1	mapname	Icemule Trace - Rift, The
+1	mapname	Icemule Trace - Rogue Guild
+1	mapname	Icemule Trace - Scatter, The
+1	mapname	Icemule Trace - Silvermule Gaming Hall
+1	mapname	Icemule Trace - Sorcerer Guild
+1	mapname	Icemule Trace - South Gate Wilds
+1	mapname	Icemule Trace - Stout Street Armory
+1	mapname	Icemule Trace - Temple
+1	mapname	Icemule Trace - The Settlement of Reim
+1	mapname	Icemule Trace - Town Walls
+1	mapname	Icemule Trace - Trail to Wehnimer's Landing
+1	mapname	Icemule Trace - Twilight Hall Annex
+1	mapname	Icemule Trace - Underground
+1	mapname	Icemule Trace - Wizard Guild
+1	mapname	Icemule's Trace - Dyer's Tent
+1	mapname	Icewall Penitentiary
+1	mapname	Isle of the Four Winds - Cleric Guild
+1	mapname	Isle of the Four Winds - Dyer's Tent
+1	mapname	Isle of the Four Winds - Eastern Waterway
+1	mapname	Isle of the Four Winds - Empath Guild
+1	mapname	Isle of the Four Winds - Mist Harbor
+1	mapname	Isle of the Four Winds - Monsoon Lagoon
+1	mapname	Isle of the Four Winds - Rogue Guild
+1	mapname	Isle of the Four Winds - Wilds
+1	mapname	Iyo Glade
+1	mapname	Kraken's Fall
+1	mapname	Kraken's Fall - Atoll
+1	mapname	Kraken's Fall - Hand of the Arkati
+1	mapname	Kraken's Fall - Inking Den
+1	mapname	Kraken's Fall - Widowmaker's Road
+1	mapname	Kraken's Fall - Wizard Guild
+1	mapname	Mist Harbor - Wizard Guild
+1	mapname	Neighborhood of Elven Nations and Solhaven
+1	mapname	Neighborhoods of Icemule Trace and Pinefar
+1	mapname	Neighborhoods of Teras Isle and River's Rest
+1	mapname	Neighborhoods of Wehnimer's Landing #1
+1	mapname	Neighborhoods of Wehnimer's Landing #2
+1	mapname	Obsidian Tower - Wehnimer's Landing
+1	mapname	Open Sea Adventures - Vessels and Warships
+1	mapname	Premium Halls of Elanthia
+1	mapname	Quests - Night at the Academy
+1	mapname	Quests - Reim Fortress and Base Camp
+1	mapname	Quests - The Settlement of Reim
+1	mapname	Quests - Troubled Waters
+1	mapname	Red Forest, The
+1	mapname	River's Rest
+1	mapname	River's Rest - Beacon Hall Archive
+1	mapname	River's Rest - Citadel
+1	mapname	River's Rest - Cleric Guild
+1	mapname	River's Rest - Dyer's Tent
+1	mapname	River's Rest - Empath Guild
+1	mapname	River's Rest - Maelstrom Bay
+1	mapname	River's Rest - Marsh Keep
+1	mapname	River's Rest - Ranger Guild
+1	mapname	River's Rest - Rogue Guild
+1	mapname	River's Rest - Sorcerer Guild
+1	mapname	River's Rest - Warrens
+1	mapname	River's Rest - Wizard Guild
+1	mapname	Rone Academy - Wehnimer's Landing
+1	mapname	Sanctum of Scales
+1	mapname	Solhaven Dyer's Tent
+1	mapname	Sorcerer Guild (FWI)
+1	mapname	Summit Academy and Sylinar's Spire
+1	mapname	Ta'Illistim - Empath Guild
+1	mapname	Ta'Illistim - Journey's End
+1	mapname	Ta'Vaalor - Empath Guild
+1	mapname	Ta'Vaalor - Wizard Guild
+1	mapname	Teras Isle - Adventurer's Rest
+1	mapname	Teras Isle - Cleric Guild
+1	mapname	Teras Isle - Dyer's Tent
+1	mapname	Teras Isle - Empath Guild
+1	mapname	Teras Isle - Eye of V'Tull
+1	mapname	Teras Isle - F'Eyrie
+1	mapname	Teras Isle - Fhorian Village
+1	mapname	Teras Isle - Kharam-Dzu
+1	mapname	Teras Isle - Kragnek-Dzu
+1	mapname	Teras Isle - Nelemar
+1	mapname	Teras Isle - Rogue Guild
+1	mapname	Teras Isle - Sorcerer Guild
+1	mapname	Teras Isle - Wizard Guild
+1	mapname	The Docks and Rusty Cutless - Wehnimer's Landing
+1	mapname	Trail to Vornavis
+1	mapname	Vardar Hollow
+1	mapname	Vornavis - Cairnfang Manor
+1	mapname	Vornavis - Caravansary
+1	mapname	Vornavis - Cleric Guild
+1	mapname	Vornavis - Foggy Valley
+1	mapname	Vornavis - Forgotten Vineyard
+1	mapname	Vornavis - North Beach
+1	mapname	Vornavis - Outlands
+1	mapname	Vornavis - Ranger Guild
+1	mapname	Vornavis - Rogue Guild
+1	mapname	Vornavis - Solhaven
+1	mapname	Vornavis - Solhaven Lockers
+1	mapname	Vornavis - Sorcerer Guild
+1	mapname	Vornavis - Sunholm
+1	mapname	Warrior Guilds
+1	mapname	Wehnimer's Landing - Argent Aspis
+1	mapname	Wehnimer's Landing - Beacon Hall Annex
+1	mapname	Wehnimer's Landing - Black Wolves
+1	mapname	Wehnimer's Landing - Broken Lands
+1	mapname	Wehnimer's Landing - Burrow Way
+1	mapname	Wehnimer's Landing - Catacombs
+1	mapname	Wehnimer's Landing - Cavernhold
+1	mapname	Wehnimer's Landing - Cleric Guild
+1	mapname	Wehnimer's Landing - Coastal Cliffs
+1	mapname	Wehnimer's Landing - Danjirland
+1	mapname	Wehnimer's Landing - Darkstone Castle
+1	mapname	Wehnimer's Landing - Deadfall Forest
+1	mapname	Wehnimer's Landing - Ebonstone Manor
+1	mapname	Wehnimer's Landing - Empath Guild
+1	mapname	Wehnimer's Landing - Faendryl Enclave
+1	mapname	Wehnimer's Landing - Graveyard
+1	mapname	Wehnimer's Landing - Halcyon Hills
+1	mapname	Wehnimer's Landing - Hearthstone Manor
+1	mapname	Wehnimer's Landing - House Brigatta (Map 2)
+1	mapname	Wehnimer's Landing - House Daingneach Onoir
+1	mapname	Wehnimer's Landing - House Of The Rising Phoenix
+1	mapname	Wehnimer's Landing - House Paupers
+1	mapname	Wehnimer's Landing - House Sovyn
+1	mapname	Wehnimer's Landing - House Sylvanfair
+1	mapname	Wehnimer's Landing - House of the Arcane Masters
+1	mapname	Wehnimer's Landing - Lysierian Hills
+1	mapname	Wehnimer's Landing - Moot Hall
+1	mapname	Wehnimer's Landing - Museum
+1	mapname	Wehnimer's Landing - Old Mine Road
+1	mapname	Wehnimer's Landing - Order of the Sphere and Scythe
+1	mapname	Wehnimer's Landing - Outside Gates
+1	mapname	Wehnimer's Landing - Ranger Guild
+1	mapname	Wehnimer's Landing - Reignbeau Caverns (Dyer's Tent)
+1	mapname	Wehnimer's Landing - Rogue Guild
+1	mapname	Wehnimer's Landing - Silvergate Inn
+1	mapname	Wehnimer's Landing - Sorcerer Guild
+1	mapname	Wehnimer's Landing - Spider Temple
+1	mapname	Wehnimer's Landing - Stone Baths
+1	mapname	Wehnimer's Landing - Stronghold and Thanatoph
+1	mapname	Wehnimer's Landing - Swale, The
+1	mapname	Wehnimer's Landing - Talador Festival Grounds
+1	mapname	Wehnimer's Landing - Talador Hunting East
+1	mapname	Wehnimer's Landing - Talador Hunting West
+1	mapname	Wehnimer's Landing - Town Map
+1	mapname	Wehnimer's Landing - Twilight Hall
+1	mapname	Wehnimer's Landing - Upper Trollfang
+1	mapname	Wehnimer's Landing - Wehntoph
+1	mapname	Wehnimer's Landing - Willow Hall
+1	mapname	Wehnimer's Landing - Wizard Guild
+1	mapname	Windfellow's Retreat
+1	mapname	Zul Logoth - Cleric Guild
+1	mapname	Zul Logoth - Czeroth Labyrinth
+1	mapname	Zul Logoth - Dyer's Tent
+1	mapname	Zul Logoth - Eorgina's Palace & Li'aerion
+1	mapname	Zul Logoth - Ranger Guild
+1	mapname	Zul Logoth - Rogue Guild
+1	mapname	Zul Logoth - Sorcerer Guild
+1	mapname	Zul Logoth - Stormpeak
+1	mapname	Zul Logoth - The Hive
+1	mapname	Zul Logoth - Town Map
+1	mapname	Zul Logoth - Wizard Guild
+1	mapname	fest-albatross
+1	mapname	fest-ebon_gate
+1	mapname	fest-festival_of_the_fallen
+1	mapname	fest-highman_games
+1	mapname	fest-lumnea
+1	mapname	fest-midsummers-night
+1	mapname	fest-picklefest
+1	mapname	fest-spitfire
+24	locker annex	House Sylvanfair
+21	locker annex	Twilight Hall
+18	locker annex	House Brigatta
+18	locker annex	Obsidian Tower
+17	locker annex	House Sovyn
+16	locker annex	House of Paupers
+16	locker annex	House of the Rising Phoenix
+16	locker annex	Rone Academy
+16	locker annex	Silvergate Inn
+15	locker annex	White Haven
+15	locker annex	Willow Hall
+11	locker annex	Beacon Hall Archive
+4	locker annex	Helden Hall
+1	locker annex	Cairnfang Manor
+6	mapshortname	Dyer's Tent
+1	mapshortname	Abbey
+1	mapshortname	Adventurer's Rest
+1	mapshortname	Aradhul Road
+1	mapshortname	Argent Aspis
+1	mapshortname	Atoll
+1	mapshortname	Baile Dragan
+1	mapshortname	Beacon Hall Annex
+1	mapshortname	Beacon Hall Archive
+1	mapshortname	Beacon Hall IMT Annex
+1	mapshortname	Black Hand
+1	mapshortname	Black Wolves
+1	mapshortname	Bramble Patch
+1	mapshortname	Broken Lands
+1	mapshortname	Burrow Way
+1	mapshortname	Cairnfang Manor
+1	mapshortname	Caravansary
+1	mapshortname	Catacombs
+1	mapshortname	Cavernhold
+1	mapshortname	Cemetary/Neartofar Forest
+1	mapshortname	Citadel
+1	mapshortname	Cleric Guild (FWI)
+1	mapshortname	Cleric Guild (Icemule)
+1	mapshortname	Cleric Guild (River's Rest)
+1	mapshortname	Cleric Guild (Ta'Illistim)
+1	mapshortname	Cleric Guild (Ta'Vaalor)
+1	mapshortname	Cleric Guild (Teras)
+1	mapshortname	Cleric Guild (VO)
+1	mapshortname	Cleric Guild (Wehnimer's)
+1	mapshortname	Cleric Guild (Zul Logoth)
+1	mapshortname	Clovertooth Hall
+1	mapshortname	Coastal Cliffs
+1	mapshortname	Cysaegir
+1	mapshortname	Cysaegir - Dyer's Dent
+1	mapshortname	Czeroth Labyrinth
+1	mapshortname	Danjirland
+1	mapshortname	Darkstone Castle
+1	mapshortname	Deadfall Forest
+1	mapshortname	Docks and Rusty Cutlass
+1	mapshortname	East, West and North Gates
+1	mapshortname	Eastern Waterway
+1	mapshortname	Ebon Gate - Naidem 2022 - Part 1
+1	mapshortname	Ebon Gate - Naidem 2022 - Part 2
+1	mapshortname	Ebonstone Manor
+1	mapshortname	Elemental Confluence
+1	mapshortname	Empath Guild (FWI)
+1	mapshortname	Empath Guild (Icemule)
+1	mapshortname	Empath Guild (River's Rest)
+1	mapshortname	Empath Guild (Ta'Illistim)
+1	mapshortname	Empath Guild (Ta'Vaalor)
+1	mapshortname	Empath Guild (Teras)
+1	mapshortname	Empath Guild (Wehnimer's)
+1	mapshortname	Eorgina's Palace and Li'aerion
+1	mapshortname	Eye of V'Tull
+1	mapshortname	F'Eyrie
+1	mapshortname	Faendryl Enclave
+1	mapshortname	Fearling Pass
+1	mapshortname	Fenog's Lodge
+1	mapshortname	Fhorian Village
+1	mapshortname	Foggy Valley
+1	mapshortname	Forgotten Vineyard
+1	mapshortname	Graveyard
+1	mapshortname	Gryphon's Holding
+1	mapshortname	Gyldemar
+1	mapshortname	Halcyon Hills
+1	mapshortname	Hand of the Arkati
+1	mapshortname	Hearthstone Manor
+1	mapshortname	Helden Hall
+1	mapshortname	Hinterwilds
+1	mapshortname	House Brigatta (Map 2)
+1	mapshortname	House Daingneach Onoir
+1	mapshortname	House Of The Rising Phoenix
+1	mapshortname	House Paupers
+1	mapshortname	House Sovyn
+1	mapshortname	House Sylvanfair
+1	mapshortname	House White Haven (Map #1)
+1	mapshortname	House White Haven (Map #2)
+1	mapshortname	House of the Arcane Masters
+1	mapshortname	ICICLE (IMT)
+1	mapshortname	Icemule Hall (PRO Hall)
+1	mapshortname	Inking Den
+1	mapshortname	Isharn Enclave
+1	mapshortname	Journey's End
+1	mapshortname	Kharam-Dzu
+1	mapshortname	Kragnek-Dzu
+1	mapshortname	Locksmehr River Trail
+1	mapshortname	Lysierian Hills
+1	mapshortname	Maaghara Tower
+1	mapshortname	Maelstrom Bay
+1	mapshortname	Marsh Keep
+1	mapshortname	Mist Harbor
+1	mapshortname	Monsoon Lagoon
+1	mapshortname	Moonsedge
+1	mapshortname	Moonsedge Crypt
+1	mapshortname	Moonsedge Road & Crawling Shore
+1	mapshortname	Moot Hall
+1	mapshortname	Museum
+1	mapshortname	Nelemar
+1	mapshortname	Night at the Academy
+1	mapshortname	North Beach
+1	mapshortname	OSA Ships
+1	mapshortname	Obsidian Tower
+1	mapshortname	Old Mine Road
+1	mapshortname	Old Ta'Faendryl
+1	mapshortname	Order of the Sphere and Scythe
+1	mapshortname	Outlands
+1	mapshortname	Outside Gates
+1	mapshortname	Pinefar
+1	mapshortname	Pinefar Trading Post
+1	mapshortname	Ranger Guild (Icemule)
+1	mapshortname	Ranger Guild (River's Rest)
+1	mapshortname	Ranger Guild (Ta'Illistim)
+1	mapshortname	Ranger Guild (VO)
+1	mapshortname	Ranger Guild (WL)
+1	mapshortname	Ranger Guild (Zul Logoth)
+1	mapshortname	Ravelin
+1	mapshortname	Red Forest
+1	mapshortname	Reignbeau Caverns (Dyer's Tent)
+1	mapshortname	Reim Fortress Defense
+1	mapshortname	Reim Fortress and Base Camp
+1	mapshortname	Reim Settlement
+1	mapshortname	Rift, The
+1	mapshortname	Rogue Guild (FWI)
+1	mapshortname	Rogue Guild (Icemule)
+1	mapshortname	Rogue Guild (River's Rest)
+1	mapshortname	Rogue Guild (Ta'Illistim)
+1	mapshortname	Rogue Guild (Ta'Vaalor)
+1	mapshortname	Rogue Guild (Teras)
+1	mapshortname	Rogue Guild (VO)
+1	mapshortname	Rogue Guild (Wehnimer's)
+1	mapshortname	Rogue Guild (Zul Logoth)
+1	mapshortname	Rone Academy
+1	mapshortname	Sapphire Gate/Whistler's Pass North
+1	mapshortname	Scatter, The
+1	mapshortname	Silvergate Inn
+1	mapshortname	Silvermule Gaming Hall
+1	mapshortname	Skull Temple
+1	mapshortname	Solhaven
+1	mapshortname	Solhaven Lockers
+1	mapshortname	Sorcerer Guild (FWI)
+1	mapshortname	Sorcerer Guild (Icemule)
+1	mapshortname	Sorcerer Guild (River's Rest)
+1	mapshortname	Sorcerer Guild (Ta'Illistim)
+1	mapshortname	Sorcerer Guild (Ta'Vaalor)
+1	mapshortname	Sorcerer Guild (Teras)
+1	mapshortname	Sorcerer Guild (VO)
+1	mapshortname	Sorcerer Guild (Wehnimer's)
+1	mapshortname	Sorcerer Guild (Zul Logoth)
+1	mapshortname	South Gate Wilds
+1	mapshortname	Spider Temple
+1	mapshortname	Stone Baths
+1	mapshortname	Stormpeak
+1	mapshortname	Stout Street Armory
+1	mapshortname	Stronghold/Thanatoph
+1	mapshortname	Sunholm
+1	mapshortname	Swale, The
+1	mapshortname	Sylvarraend Road
+1	mapshortname	Ta'Illistim
+1	mapshortname	Ta'Illistim - Dyer's Tent
+1	mapshortname	Ta'Illistim Buildings
+1	mapshortname	Ta'Illistim Embassies
+1	mapshortname	Ta'Vaalor
+1	mapshortname	Ta'Vaalor - Dancing Dahcre (Annex)
+1	mapshortname	Ta'Vaalor - Dyer's Tent
+1	mapshortname	Ta'Vaalor - Wyvern Keep
+1	mapshortname	Talador Festival Grounds
+1	mapshortname	Talador Hunting East
+1	mapshortname	Talador Hunting West
+1	mapshortname	Temple
+1	mapshortname	The Hive
+1	mapshortname	Town Walls
+1	mapshortname	Trail between Wehnimer's Landing and Icemule
+1	mapshortname	Troubled Waters
+1	mapshortname	Twilight Hall
+1	mapshortname	Twilight Hall Annex (Icemule Trace)
+1	mapshortname	Underground
+1	mapshortname	Upper Trollfang
+1	mapshortname	Victory Road
+1	mapshortname	Warrens
+1	mapshortname	Warrior Guild (IFW)
+1	mapshortname	Warrior Guild (Ta'Illistim)
+1	mapshortname	Wehnimer's Landing
+1	mapshortname	Wehntoph
+1	mapshortname	Whistler's Pass
+1	mapshortname	Widowmaker's Road
+1	mapshortname	Wilds
+1	mapshortname	Wildwood
+1	mapshortname	Willow Hall
+1	mapshortname	Wizard Guild (Icemule)
+1	mapshortname	Wizard Guild (KD)
+1	mapshortname	Wizard Guild (KF)
+1	mapshortname	Wizard Guild (Mist Harbor)
+1	mapshortname	Wizard Guild (River's Rest)
+1	mapshortname	Wizard Guild (Ta'Illistim)
+1	mapshortname	Wizard Guild (Ta'Vaalor)
+1	mapshortname	Wizard Guild (Wehnimer's)
+1	mapshortname	Wizard Guild (Zul Logoth)
+1	mapshortname	Zul Logoth
+165	locker	
+19	mho	
+11	mho	House Onoir
+10	mho	Faendryl Enclave
+10	mho	Hand of the Arkati
+10	mho	House Dreadnaught
+10	mho	The Ilyan Syndicate
+10	mho	The Order of the Azure Sun
+9	mho	The Gypsy Troupe
+8	mho	The Black Hand Trading Co.
+8	mho	The Drakes Vanguard
+7	mho	Ord an Dragan
+7	mho	The Elanthian Dreadnaught Alliance
+5	mho	Greystorm Society Of Enlightenment
+5	mho	The Order of the Silver Gryphon
+4	mho	G.E.M.S.
+4	mho	The Northern Fury
+3	mho	Moonshine Manor
+89	society	Order of Voln
+41	society	Council of Light
+6	society	Guardians of Sunfist
+128	trap	
+123	premium	
+66	underwater	
+65	maze	
+63	taskroom	
+62	storyline	
+44	pay-to-play	
+26	citizenship	Ta'Vaalor
+12	citizenship	Solhaven
+3	citizenship	Icemule Trace
+1	citizenship	Teras Isle
+1	citizenship	Wehnimer's Landing
+4	trashcan	large wooden barrel
+3	trashcan	oak barrel
+2	trashcan	copper-banded green oak barrel
+2	trashcan	large wastebasket
+2	trashcan	old barrel
+1	trashcan	battered steel-bound barrel
+1	trashcan	copper-bound rough oak barrel
+1	trashcan	dusty wooden crate
+1	trashcan	enchanted hearth
+1	trashcan	green and white oak barrel
+1	trashcan	hollow tree stump
+1	trashcan	iron-bound driftwood wastebarrel
+1	trashcan	ivy-covered iron barrel
+1	trashcan	large purple wooden barrel
+1	trashcan	large wooden crate
+1	trashcan	oaken barrel
+1	trashcan	ocean
+1	trashcan	old green oak barrel
+1	trashcan	old oak beer barrel
+1	trashcan	old pickle barrel
+1	trashcan	ora-banded driftwood barrel
+1	trashcan	painted wooden barrel
+1	trashcan	pale modwir bin
+1	trashcan	ramshackle wicker wastebin
+1	trashcan	round silver-banded barrel
+1	trashcan	rounded whiskey barrel
+1	trashcan	slatted wooden case
+1	trashcan	slightly charred wooden barrel
+1	trashcan	splintered oak barrel
+1	trashcan	tart-etched silver bin
+1	trashcan	wide ceramic canister
+1	trashcan	wide-lipped copper urn
+1	trashcan	wooden barrel
+1	trashcan	wooden trash barrel
+35	noteleport	fwi
+34	mentor	
+34	morphing	
+30	Crimson Legion	
+16	game	GSPlat
+7	game	GSX
+6	game	GSF
+2	boxpool	npc:scruffy human worker
+2	boxpool	table:sturdy wooden table
+1	boxpool	npc:dead halfling pirate
+1	boxpool	npc:disheveled dwarven attendant
+1	boxpool	npc:grimy halfling scoundrel
+1	boxpool	npc:proprietor Jahck
+1	boxpool	npc:pudgy forest gnome attendant
+1	boxpool	npc:shady looking dwarf
+1	boxpool	npc:slender aelotoi woman
+1	boxpool	npc:slender half-elven woman
+1	boxpool	npc:small greasy gnome
+1	boxpool	npc:well-dressed elven merchant
+1	boxpool	npc:wry halfling trickster
+1	boxpool	table:blackened ironwood crate
+1	boxpool	table:crude table
+1	boxpool	table:driftwood trestle table
+1	boxpool	table:elegant mahogany table
+1	boxpool	table:hoarbeam trestle table
+1	boxpool	table:long oak counter
+1	boxpool	table:polished maoral table
+1	boxpool	table:rough walnut table
+1	boxpool	table:slanted pinewood table
+1	boxpool	table:thick mistwood workbench
+1	boxpool	table:tile-inlaid counter
+21	latched	
+13	fwi	teleport
+6	exit	go gangplank:previous in:29038,30142,30119,30176,30166,30130
+2	exit	go curtain:previous
+2	exit	go opening:previous
+1	exit	go path:previous in:2501,3608,1353,1401,1285
+1	exit	out:previous
+12	transport	
+11	jail cell	
+11	sign of darkness	
+5	prof	cleric
+4	prof	sorcerer
+8	seeking	
+5	quest	nexus
+5	town	defense
+3	mobile	
+3	private home	
+2	samepath	northeast,southeast
+1	samepath	northeast,southwest
+1	gender	female
+1	gender	male
+2	pending restoration	
+2	transition	
+1	event	
+1	symbol of return	
+1	workroom	

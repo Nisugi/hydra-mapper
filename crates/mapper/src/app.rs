@@ -129,6 +129,20 @@ enum EditAction {
     },
     /// Mint a plate and move rooms onto it in one action.
     NewPlate { name: String, keys: Vec<RoomKey> },
+    /// Put rooms in a curated area, or (with `None`) take them out.
+    ///
+    /// Distinct from [`EditAction::MoveRooms`] because a plate and an
+    /// area are different things: a plate is a sheet a room is DRAWN on,
+    /// an area is the place it IS. A room can be on a plate and in an
+    /// area at once, and neither answer should overwrite the other.
+    AssignArea {
+        keys: Vec<RoomKey>,
+        to: Option<String>,
+    },
+    /// Mint a curated area and put rooms in it in one action.
+    NewArea { name: String, keys: Vec<RoomKey> },
+    /// Delete a curated area, releasing its rooms.
+    DeleteArea { area: String },
 }
 
 pub struct MapperApp {
@@ -167,6 +181,10 @@ pub struct MapperApp {
     drag: Option<DragState>,
     /// Name being typed for a new plate.
     new_plate: String,
+    /// Name being typed for a new curated area.
+    new_area: String,
+    /// Regions whose areas are folded away in the Region tree.
+    collapsed: BTreeSet<String>,
     /// A room to inspect once its area is on screen, from a room-number
     /// search. Applied after `show_selected`, which clears the selection.
     pending_inspect: Option<RoomId>,
@@ -221,7 +239,8 @@ impl MapperApp {
             Ok(map) => Areas::build(map, &store),
             Err(_) => Areas {
                 official: Vec::new(),
-                mapdb: Vec::new(),
+                region: Vec::new(),
+                location: Vec::new(),
                 derived: Vec::new(),
                 plates: Vec::new(),
             },
@@ -229,7 +248,7 @@ impl MapperApp {
         MapperApp {
             map,
             areas,
-            tab: AreaKind::Mapdb,
+            tab: AreaKind::Location,
             filter: String::new(),
             selected: None,
             camera: Camera::default(),
@@ -245,6 +264,8 @@ impl MapperApp {
             },
             drag: None,
             new_plate: String::new(),
+            new_area: String::new(),
+            collapsed: BTreeSet::new(),
             pending_inspect: None,
             trail: Vec::new(),
             export_note: None,
@@ -265,7 +286,17 @@ impl MapperApp {
     /// drags are skipped rather than solved for nothing.
     fn placements_across_areas(&self, map: &Map) -> Vec<placement::Resolved> {
         let mut out = Vec::new();
-        for kind in [AreaKind::Official, AreaKind::Mapdb, AreaKind::Plates] {
+        // Region is here because a person can drag one like any other
+        // area and expects the correction to survive. It is NOT in the
+        // "which area holds this room" lookups below: a region covers the
+        // whole map, official rooms included, so it would shadow every
+        // more specific name it contains.
+        for kind in [
+            AreaKind::Official,
+            AreaKind::Region,
+            AreaKind::Location,
+            AreaKind::Plates,
+        ] {
             for area in self.areas.list(kind) {
                 let Some(location) = self.store.location(&area.store_key()) else {
                     continue;
@@ -461,7 +492,7 @@ impl MapperApp {
             }
         };
         for room in shown.subset.rooms() {
-            for kind in [AreaKind::Official, AreaKind::Mapdb] {
+            for kind in [AreaKind::Official, AreaKind::Location] {
                 if let Some(area) = self
                     .areas
                     .list(kind)
@@ -476,7 +507,7 @@ impl MapperApp {
             // and that somewhere is an official area which, by excluding
             // its interiors, does not contain the plated room at all.
             for exit in &room.exits {
-                for kind in [AreaKind::Official, AreaKind::Mapdb] {
+                for kind in [AreaKind::Official, AreaKind::Location] {
                     if let Some(area) = self
                         .areas
                         .list(kind)
@@ -508,8 +539,9 @@ impl MapperApp {
         for kind in [
             AreaKind::Plates,
             AreaKind::Official,
-            AreaKind::Mapdb,
+            AreaKind::Location,
             AreaKind::Derived,
+            AreaKind::Region,
         ] {
             if let Some(index) = self.areas.list(kind).iter().position(|a| a.name == name) {
                 self.tab = kind;
@@ -540,7 +572,7 @@ impl MapperApp {
         // Which area each room belongs to, so a plated room's place
         // travels alongside the grid it is drawn on.
         let area_of = |id: RoomId| -> Option<String> {
-            for kind in [AreaKind::Official, AreaKind::Mapdb] {
+            for kind in [AreaKind::Official, AreaKind::Location] {
                 if let Some(area) = self.areas.list(kind).iter().find(|a| a.rooms.contains(&id)) {
                     return Some(area.name.clone());
                 }
@@ -883,6 +915,23 @@ impl MapperApp {
                 }
                 membership_changed = true;
             }
+            EditAction::AssignArea { keys, to } => {
+                for key in keys {
+                    self.store.set_area(key, to.as_deref());
+                }
+                membership_changed = true;
+            }
+            EditAction::NewArea { name, keys } => {
+                let area = self.store.create_area(&name);
+                for key in keys {
+                    self.store.set_area(key, Some(&area));
+                }
+                membership_changed = true;
+            }
+            EditAction::DeleteArea { area } => {
+                self.store.delete_area(&area);
+                membership_changed = true;
+            }
         }
         self.save_store();
         if membership_changed {
@@ -905,6 +954,7 @@ impl MapperApp {
         let mut open = true;
         let store = &self.store;
         let new_plate = &mut self.new_plate;
+        let new_area = &mut self.new_area;
         let edit_mode = self.view.edit_mode && can_edit;
 
         let whole = self.map.as_ref().ok();
@@ -953,6 +1003,10 @@ impl MapperApp {
                 if edit_mode
                     && let Some(action) =
                         visiting_membership(ui, shown, store, whole, id, new_plate)
+                            // A visited room is outside the shown area, so
+                            // it is in no group of that area's layout: room
+                            // at a time is all there is to offer here.
+                            .or_else(|| area_membership(ui, store, whole, id, None, new_area))
                 {
                     *edit_out = Some(action);
                 }
@@ -985,6 +1039,11 @@ impl MapperApp {
             }
             if let Some(facts) = RoomFacts::gather(id, &shown.subset, &shown.layout)
                 && let Some(action) = edges_editor(ui, shown, store, &facts)
+            {
+                *edit_out = Some(action);
+            }
+            if let Some(action) =
+                whole.and_then(|w| area_membership(ui, store, w, id, group_keys(shown, id, w), new_area))
             {
                 *edit_out = Some(action);
             }
@@ -1025,38 +1084,35 @@ impl MapperApp {
         // that is exactly the question an exit leading out of an area
         // provokes.
         if let Some(found) = self.filter.trim().parse::<u32>().ok().map(RoomId) {
-            let held_by = |kind: AreaKind| {
-                self.areas
-                    .list(kind)
-                    .iter()
-                    .position(|a| a.rooms.contains(&found))
-                    .map(|index| (kind, index))
-            };
-            match held_by(AreaKind::Plates)
-                .or_else(|| held_by(AreaKind::Official))
-                .or_else(|| held_by(AreaKind::Mapdb))
-            {
-                Some((kind, index)) => {
-                    let area = &self.areas.list(kind)[index];
-                    if ui
-                        .link(format!("room {} is in {}", found.0, area.name))
-                        .on_hover_text("Show that area and inspect the room")
-                        .clicked()
-                    {
-                        goto = Some((kind, index, found));
-                    }
-                }
-                None => {
-                    ui.weak(format!("room {} is not in this map", found.0));
-                }
-            }
+            goto = room_search(ui, &self.areas, found);
         }
         ui.separator();
 
         let needle = self.filter.to_lowercase();
+        // The Region tab is a tree: regions at the top, the curated areas
+        // whose rooms carry that region nested under them. Every other
+        // tab is a flat list, so rows are ordered here rather than in
+        // `Areas`, which has no opinion about presentation.
+        //
+        // A collapsed region hides its areas but is itself always shown,
+        // because a region with no areas yet is exactly the one someone
+        // needs to click on to start curating it.
+        let order = row_order(self.areas.list(self.tab), self.tab, &self.collapsed);
+        let mut toggle: Option<String> = None;
+        let rows = self.areas.list(self.tab);
         egui::ScrollArea::vertical().show(ui, |ui| {
-            for (index, area) in self.areas.list(self.tab).iter().enumerate() {
-                if !needle.is_empty() && !area.name.to_lowercase().contains(&needle) {
+            for index in order {
+                let area = &rows[index];
+                // A filter matching a region keeps its areas, and one
+                // matching an area keeps it visible under its region:
+                // hiding the parent would leave the child unplaceable.
+                if !needle.is_empty()
+                    && !area.name.to_lowercase().contains(&needle)
+                    && !area
+                        .parent
+                        .as_deref()
+                        .is_some_and(|p| p.to_lowercase().contains(&needle))
+                {
                     continue;
                 }
                 let selection = Selection {
@@ -1074,6 +1130,9 @@ impl MapperApp {
                 // content's full width, which would stop the panel ever
                 // being dragged narrower than the longest area name.
                 ui.horizontal_top(|ui| {
+                    if tree_handle(ui, area, self.tab, rows, &self.collapsed) {
+                        toggle = Some(area.name.clone());
+                    }
                     if picking {
                         // Scoped by area name: every one of these
                         // checkboxes has an empty label, and egui derives
@@ -1110,6 +1169,11 @@ impl MapperApp {
                 });
             }
         });
+        if let Some(name) = toggle
+            && !self.collapsed.remove(&name)
+        {
+            self.collapsed.insert(name);
+        }
         if let Some((kind, index, room)) = goto {
             self.tab = kind;
             self.selected = Some(Selection { kind, index });
@@ -1385,6 +1449,160 @@ fn visiting_membership(
                 keys: vec![key],
             });
             new_plate.clear();
+        }
+    });
+    edit
+}
+
+/// Putting a room in a curated area.
+///
+/// Beside the plate controls and deliberately not merged with them. A
+/// PLATE is a sheet -- a drawing surface, so a room can sit on one and
+/// still belong somewhere else. An AREA is the place the room is. The
+/// two are one mechanism and two meanings, and while the shape of the
+/// curation is still being worked out it is cheaper to keep them apart
+/// than to discover later that one answer was overwriting the other.
+///
+/// The region is not chosen here. It is read from the room's own
+/// `meta:region:`, so an area appears under the right region the moment
+/// it has a room, and the tree cannot disagree with the map.
+fn area_membership(
+    ui: &mut egui::Ui,
+    store: &MapOverrides,
+    whole: &Map,
+    id: RoomId,
+    group: Option<Vec<RoomKey>>,
+    new_area: &mut String,
+) -> Option<EditAction> {
+    let mut edit = None;
+    let key = RoomKey::of(id, whole);
+    // A group is what usually wants assigning -- a building, a run of
+    // street -- so every action here comes in a room flavour and a group
+    // flavour. Assigning 400 hunting rooms one at a time is not curation,
+    // it is data entry.
+    let group = group.filter(|keys| !keys.is_empty());
+
+    ui.add_space(8.0);
+    ui.strong("Area");
+    ui.label(
+        egui::RichText::new("the place a room is, not the sheet it is drawn on")
+            .weak()
+            .small(),
+    );
+    match store.area_moves.get(&key) {
+        Some(area) => {
+            ui.label(format!("In: {}", store.area_name(area)));
+        }
+        None => {
+            ui.label("In: no area yet");
+        }
+    }
+
+    // Removal, before assignment: getting a room OUT is the action
+    // someone reaches for after a mistake, and burying it under the
+    // combo makes a wrong assignment feel permanent.
+    let assigned_here = store.area_moves.contains_key(&key);
+    let assigned_in_group = group.as_ref().map_or(0, |keys| {
+        keys.iter()
+            .filter(|k| store.area_moves.contains_key(k))
+            .count()
+    });
+    if assigned_here || assigned_in_group > 0 {
+        ui.horizontal(|ui| {
+            if ui
+                .add_enabled(assigned_here, egui::Button::new("- room"))
+                .on_hover_text("Take this room out of its area")
+                .clicked()
+            {
+                edit = Some(EditAction::AssignArea {
+                    keys: vec![key],
+                    to: None,
+                });
+            }
+            if let Some(keys) = &group
+                && ui
+                    .add_enabled(assigned_in_group > 0, egui::Button::new("- group"))
+                    .on_hover_text(format!(
+                        "Take all {assigned_in_group} assigned rooms of this group out"
+                    ))
+                    .clicked()
+            {
+                edit = Some(EditAction::AssignArea {
+                    keys: keys.clone(),
+                    to: None,
+                });
+            }
+        });
+    }
+
+    edit.or_else(|| assign_to_area(ui, store, key, group.as_ref(), new_area))
+}
+
+/// The half of the Area panel that puts rooms somewhere: the existing
+/// areas, and the box that makes a new one.
+fn assign_to_area(
+    ui: &mut egui::Ui,
+    store: &MapOverrides,
+    key: RoomKey,
+    group: Option<&Vec<RoomKey>>,
+    new_area: &mut String,
+) -> Option<EditAction> {
+    let mut edit = None;
+    if !store.custom_areas.is_empty() {
+        let mut chosen: Option<String> = None;
+        egui::ComboBox::from_id_salt("assign_to_area")
+            .selected_text("Put in an area...")
+            .show_ui(ui, |ui| {
+                for (area, curated) in &store.custom_areas {
+                    let label = match group {
+                        Some(keys) => format!("{} ({} in group)", curated.name, keys.len()),
+                        None => curated.name.clone(),
+                    };
+                    if ui.selectable_label(false, label).clicked() {
+                        chosen = Some(area.clone());
+                    }
+                }
+            });
+        if let Some(area) = chosen {
+            edit = Some(EditAction::AssignArea {
+                keys: group.cloned().unwrap_or_else(|| vec![key]),
+                to: Some(area),
+            });
+        }
+    }
+
+    ui.horizontal(|ui| {
+        ui.add(
+            egui::TextEdit::singleline(new_area)
+                .hint_text("new area name")
+                .desired_width(120.0),
+        );
+        let named = !new_area.trim().is_empty();
+        if ui
+            .add_enabled(named, egui::Button::new("+ room"))
+            .on_hover_text("Make this area and put this room in it")
+            .clicked()
+        {
+            edit = Some(EditAction::NewArea {
+                name: new_area.trim().to_owned(),
+                keys: vec![key],
+            });
+            new_area.clear();
+        }
+        if let Some(keys) = group
+            && ui
+                .add_enabled(named, egui::Button::new("+ group"))
+                .on_hover_text(format!(
+                    "Make this area and put all {} rooms of this group in it",
+                    keys.len()
+                ))
+                .clicked()
+        {
+            edit = Some(EditAction::NewArea {
+                name: new_area.trim().to_owned(),
+                keys: keys.clone(),
+            });
+            new_area.clear();
         }
     });
     edit
@@ -1787,6 +2005,9 @@ fn canvas_header(
             // Deleting is offered only where the plate itself is
             // on screen, so it cannot be hit while looking at a
             // town that merely lost rooms to one.
+            if let Some(action) = delete_area_button(ui, store, tab, &shown.name) {
+                *edit_out = Some(action);
+            }
             if tab == AreaKind::Plates
                 && let Some(plate) = plate_key_of(store, &shown.name)
             {
@@ -1876,11 +2097,163 @@ fn area_label(
             .filter(|&&id| map.is_some_and(|m| store.is_plated(RoomKey::of(id, m))))
             .count()
     };
+    // A curated area whose rooms disagree about their region says so
+    // rather than being silently filed under the winner. The row still
+    // sits under the majority: the split is worth seeing, not worth
+    // refusing to draw, and it is usually the sign of an area that wants
+    // dividing rather than a mistake.
+    if let Some((top, total)) = area.contested {
+        return format!(
+            "{}  ({}, {top} of {total} in this region)",
+            area.name,
+            area.rooms.len()
+        );
+    }
     if plated > 0 {
         format!("{}  ({}, {plated} on plates)", area.name, area.rooms.len())
     } else {
         format!("{}  ({})", area.name, area.rooms.len())
     }
+}
+
+/// "Delete area", offered only while looking at the area itself.
+///
+/// Never from the region above it: a region row and its areas sit in one
+/// list, and a delete reachable from the parent is one somebody hits
+/// while meaning to tidy the child.
+///
+/// The rooms are untouched -- only the assignment goes -- so this is not
+/// the irreversible kind of delete.
+fn delete_area_button(
+    ui: &mut egui::Ui,
+    store: &MapOverrides,
+    tab: AreaKind,
+    shown: &str,
+) -> Option<EditAction> {
+    if tab != AreaKind::Region {
+        return None;
+    }
+    let (key, _) = store.custom_areas.iter().find(|(_, a)| a.name == shown)?;
+    ui.button("Delete area")
+        .on_hover_text("Release every room; the rooms themselves are untouched")
+        .clicked()
+        .then(|| EditAction::DeleteArea { area: key.clone() })
+}
+
+/// "room 7562 is in Wehnimer's Landing", as a link that goes there.
+///
+/// A bare number in the filter box is a room, not a name: with hundreds
+/// of areas there is otherwise no way to answer "which area holds this
+/// room", and that is exactly the question an exit leading out of an area
+/// provokes.
+///
+/// Region is not searched. It spans the whole map, so it would answer
+/// every query with a region name and shadow the more specific list that
+/// actually tells someone where to look.
+fn room_search(ui: &mut egui::Ui, areas: &Areas, found: RoomId) -> Option<(AreaKind, usize, RoomId)> {
+    let held_by = |kind: AreaKind| {
+        areas
+            .list(kind)
+            .iter()
+            .position(|a| a.rooms.contains(&found))
+            .map(|index| (kind, index))
+    };
+    let Some((kind, index)) = held_by(AreaKind::Plates)
+        .or_else(|| held_by(AreaKind::Official))
+        .or_else(|| held_by(AreaKind::Location))
+    else {
+        ui.weak(format!("room {} is not in this map", found.0));
+        return None;
+    };
+    let area = &areas.list(kind)[index];
+    ui.link(format!("room {} is in {}", found.0, area.name))
+        .on_hover_text("Show that area and inspect the room")
+        .clicked()
+        .then_some((kind, index, found))
+}
+
+/// The whole-map keys of the group `id` sits in, for assigning a
+/// building or a run of street in one action.
+///
+/// Keyed against the WHOLE map rather than the shown subset: an area is a
+/// fact about a room, so which area happened to be on screen when it was
+/// assigned must not change the answer.
+fn group_keys(shown: &Shown, id: RoomId, whole: &Map) -> Option<Vec<RoomKey>> {
+    let group = shown.scene.room(id)?.group;
+    Some(
+        shown
+            .layout
+            .groups
+            .get(group)?
+            .room_ids
+            .iter()
+            .map(|&rid| RoomKey::of(rid, whole))
+            .collect(),
+    )
+}
+
+/// The expander in front of a Region row, and the indent in front of a
+/// curated area. Returns true when the region was clicked to fold.
+///
+/// Every row gets 16 points at the left whether or not it has a handle,
+/// so names line up instead of jittering by whether a region happens to
+/// have areas yet.
+fn tree_handle(
+    ui: &mut egui::Ui,
+    area: &crate::areas::Area,
+    tab: AreaKind,
+    rows: &[crate::areas::Area],
+    collapsed: &BTreeSet<String>,
+) -> bool {
+    if area.parent.is_some() {
+        ui.add_space(16.0);
+        return false;
+    }
+    if tab != AreaKind::Region {
+        return false;
+    }
+    let has_children = rows
+        .iter()
+        .any(|a| a.parent.as_deref() == Some(area.name.as_str()));
+    if !has_children {
+        ui.add_space(16.0);
+        return false;
+    }
+    let shut = collapsed.contains(&area.name);
+    ui.small_button(if shut { "\u{25b8}" } else { "\u{25be}" })
+        .clicked()
+}
+
+/// The rows of a tab, in the order they are drawn.
+///
+/// The Region tab is a tree -- regions, each followed by the curated
+/// areas whose rooms carry that region -- and every other tab is the list
+/// as it stands. Ordering lives here rather than in `Areas`, which holds
+/// what the lists ARE and has no opinion about how they are shown.
+///
+/// A collapsed region still appears; only its areas are folded away. A
+/// region with no areas yet is exactly the one someone needs to click on
+/// to start curating it.
+fn row_order(rows: &[crate::areas::Area], tab: AreaKind, collapsed: &BTreeSet<String>) -> Vec<usize> {
+    if tab != AreaKind::Region {
+        return (0..rows.len()).collect();
+    }
+    let mut out = Vec::new();
+    for (i, region) in rows.iter().enumerate() {
+        if region.parent.is_some() {
+            continue; // a curated area: drawn under its region, below
+        }
+        out.push(i);
+        if collapsed.contains(&region.name) {
+            continue;
+        }
+        for (j, area) in rows.iter().enumerate() {
+            if area.parent.as_deref() == Some(region.name.as_str()) {
+                out.push(j);
+            }
+        }
+    }
+    out
 }
 
 /// A cell offset in words: "3 east, 2 north".

@@ -475,6 +475,11 @@ fn populate_edges(
             continue;
         };
         for exit in &room.exits {
+            // A line is a claim that you can walk there that way. A
+            // teleport, a routine, an unported crossing: no line.
+            if !crate::regions::is_passage(exit) {
+                continue;
+            }
             let target_id = exit.to;
             let Some(&target_group) = group_of.get(&target_id) else {
                 continue;
@@ -674,6 +679,42 @@ mod tests {
         assert_eq!(scene.sheet.rooms.len(), 2);
         assert_eq!(scene.units.len(), 1);
         assert_eq!(scene.units[STREETS].kind, UnitKind::Streets);
+    }
+
+    /// A teleport is not a walk, so it is not a line. The premium halls
+    /// carry a pass-through to their town's urchin hideout beside their
+    /// ordinary doors, and the hideout is nowhere near them: drawing it
+    /// ran a connector clear across the sheet to a room nobody can walk
+    /// to. Two separate streets here, so the teleport between them is a
+    /// cross-group edge -- the case a connector is drawn for.
+    #[test]
+    fn a_teleport_draws_no_line() {
+        let mut rooms = vec![
+            room(1, 9_000_001, &[(2, "north")]),
+            room(2, 9_000_002, &[(1, "south")]),
+            room(3, 9_000_003, &[(4, "north")]),
+            room(4, 9_000_004, &[(3, "south")]),
+        ];
+        let teleport = Exit {
+            to: RoomId(3),
+            kind: ExitKind::Cardinal,
+            crossing: cena_map::Crossing::PassThrough(cena_map::Pass),
+            cost: Some(Cost::Fixed(1.0)),
+        };
+        rooms[0].exits.push(teleport);
+        let map = Map::from_rooms(rooms).expect("no duplicate ids");
+        let layout = crate::generate_layout(&map);
+        let scene = build_scene("Test", &layout, &map);
+
+        assert!(
+            !scene
+                .sheet
+                .edges
+                .iter()
+                .any(|e| (e.a_room, e.b_room) == (RoomId(1), RoomId(3))
+                    || (e.a_room, e.b_room) == (RoomId(3), RoomId(1))),
+            "the teleport drew a line"
+        );
     }
 
     #[test]
