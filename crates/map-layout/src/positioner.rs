@@ -226,21 +226,32 @@ pub fn position_rooms(map: &Map, dirs: &DirectionMap) -> Vec<Group> {
         // room among its neighbours, and the re-weld cascades outward but
         // will not move the anchor, so neither can make the coordinated
         // shift some arrangements need. An arrangement exists in that
-        // case, so take it.
+        // case -- but it is ranked, not drawn: it satisfies every bearing
+        // and can stretch the component out of shape doing it.
         if !violations.is_empty()
-            && let Some(placed) = crate::satisfiable::place_by_order(&room_order, map, dirs)
+            && let Some(mut placed) = crate::satisfiable::place_by_order(&room_order, map, dirs)
         {
+            compact_component(&mut placed);
+            optimize_component(&room_order, &mut placed, map, dirs);
             let fixed = validate_component(&room_order, &placed, map, dirs);
-            // Only if it is actually better. The ordering pass satisfies
-            // every direction it knows about, but `validate_component`
-            // reads exits it does not constrain -- a one-way edge whose
-            // reverse disagrees -- so this is checked rather than assumed.
-            // Two rooms on one cell count against it as a violation
-            // would: it satisfies every bearing and draws as nothing.
-            if fixed.len() + stacked(&placed) < violations.len() + stacked(&positions) {
+            // **Only a clean win is taken**: fewer violations, no rooms
+            // stacked, and no longer in total edge length after its own
+            // hill climb. The ordering pass satisfies every direction it
+            // knows about, but `validate_component` reads exits it does
+            // not constrain, so fewer violations is checked, not assumed.
+            // And the length test is what keeps it honest: taken on
+            // violations alone it swapped the Landing's wing columns to
+            // fix one bearing (edges +30%) and tangled Mist Harbor's
+            // streets (a 1,063-room group, edges nearly doubled). A
+            // violation is drawn and can be corrected; a tangle cannot be
+            // read.
+            if fixed.len() < violations.len()
+                && stacked(&placed) == 0
+                && edge_length(&room_order, &placed, map)
+                    <= edge_length(&room_order, &positions, map)
+            {
                 positions = placed;
-                compact_component(&mut positions);
-                violations = validate_component(&room_order, &positions, map, dirs);
+                violations = fixed;
             }
         }
 
@@ -968,15 +979,30 @@ fn reweld_violations(
     }
 }
 
-/// Collapse fully-empty rows and columns by rank-mapping the distinct x and
-/// y values to 0..n-1. Relative order is preserved, so every edge keeps its
-/// direction signs.
+/// Total Chebyshev length of every exit between rooms of the component:
+/// how stretched it is drawn.
+fn edge_length(room_order: &[RoomId], positions: &HashMap<RoomId, Cell>, map: &Map) -> i64 {
+    room_order
+        .iter()
+        .filter_map(|&id| map.room(id))
+        .flat_map(|room| {
+            room.exits.iter().filter_map(move |e| {
+                let (a, b) = (positions.get(&room.id)?, positions.get(&e.to)?);
+                Some(i64::from((a.x - b.x).abs().max((a.y - b.y).abs())))
+            })
+        })
+        .sum()
+}
+
 /// How many rooms share a cell with an earlier one.
 fn stacked(positions: &HashMap<RoomId, Cell>) -> usize {
     let mut seen: HashSet<Cell> = HashSet::new();
     positions.values().filter(|&&c| !seen.insert(c)).count()
 }
 
+/// Collapse fully-empty rows and columns by rank-mapping the distinct x and
+/// y values to 0..n-1. Relative order is preserved, so every edge keeps its
+/// direction signs.
 fn compact_component(positions: &mut HashMap<RoomId, Cell>) {
     if positions.is_empty() {
         return;
