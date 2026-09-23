@@ -467,3 +467,57 @@ fn stranding_never_takes_a_room_someone_can_reach() {
         );
     }
 }
+
+/// Deletion takes only rooms that fail all three tests, and leaves no
+/// exit pointing at nothing.
+///
+/// A deleted room cannot be restored by fixing a file and re-running, so
+/// unlike every other pass there is no violation to report and no second
+/// chance. This is the check that stands in for both.
+#[test]
+fn deletion_leaves_no_dangling_exit_and_takes_nothing_live() {
+    let Some((_, map)) = real_map() else {
+        eprintln!("skipping: gs.map not present");
+        return;
+    };
+    let Ok(curation) = Curation::load(&curation_dir()) else {
+        eprintln!("skipping: curation/ not readable");
+        return;
+    };
+    let reachable = cena_retag::reach::walkable(&map);
+    let plan = plan(&map, &curation);
+
+    for change in &plan.changes {
+        let cena_retag::Change::DeleteRoom { id, .. } = change else {
+            continue;
+        };
+        let room = map
+            .rooms()
+            .iter()
+            .find(|r| r.id.0 == *id)
+            .expect("deleted room exists");
+        assert!(
+            !reachable.contains(id),
+            "deleting a walkable room: {id} {:?}",
+            room.title.first()
+        );
+        assert!(
+            room.uid.is_empty(),
+            "deleting a room the game still numbers: {id} {:?}",
+            room.title.first()
+        );
+    }
+
+    let rooms = apply(map.rooms(), &plan);
+    let ids: std::collections::BTreeSet<u32> = rooms.iter().map(|r| r.id.0).collect();
+    for room in &rooms {
+        for exit in &room.exits {
+            assert!(
+                ids.contains(&exit.to.0),
+                "room {} exits to {}, which is not in the map",
+                room.id.0,
+                exit.to.0
+            );
+        }
+    }
+}

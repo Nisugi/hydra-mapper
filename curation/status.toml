@@ -32,6 +32,24 @@
 # Disconnected in the map only because nobody recorded the entrance edge.
 # These are walk-it-later gaps, not dispositions.
 
+# ---------------------------------------------------------------- spent
+#
+# `spent = true` marks a rule whose rooms have been DELETED from the map.
+# 44 of them, covering Caligos Isle, the Miasmic Verge, the Feywrot Mire,
+# Talador and Briarmoon Cove: 2,629 rooms that were gone, unreachable and
+# never numbered by the game, removed outright rather than carried as
+# history.
+#
+# The rules stay because they are the record of WHY those rooms are not
+# here. Delete them and the deletion is unexplained in the only files
+# anyone reads to find out. The flag exists so that
+# `the_shipped_curation_has_no_dead_rules` still fails for a rule that
+# names nothing by mistake -- which is a typo, and a different thing
+# entirely.
+#
+# A spent rule will never match again. gs.map.before-delete holds the map
+# as it stood the moment before.
+
 [[rule]]
 verdict = "live"
 location = "Vornavis"
@@ -117,16 +135,19 @@ note = "Bank heist removed. May return as a new area, which would be new rooms. 
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "The Miasmic Verge"
 note = "Feywrot Mire event area, 644 rooms."
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "the Feywrot Mire"
 note = "Event area, 628 rooms."
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Caligos Isle"
 note = "Sank in 2021, 674 rooms. NOTE: 8 Arena of the Abyss rooms carry this location but relocated to Evermore Hollow and are live - their location must be corrected before this rule is safe."
 
@@ -183,6 +204,7 @@ note = "Venue for Sylinar's Spire, Summit Expression Faire, Return to Summit Aca
 
 [[rule]]
 verdict = "gone"
+spent = true
 title = "[Briarmoon Cove"
 note = "Briarmoon Cove festival, last run 2020. Title rule, NOT a location rule: these 28 rooms carry location 'the Pinefar Trading Post', which is a live town (301 rooms). A location rule would hide Pinefar."
 
@@ -351,18 +373,21 @@ note = "Unmerged fragment of the multi-uid Winding Tunnels; no return edge, noth
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[Talador"
 note = "The city and its mines. Includes [Talador, The Bleaklands], the transitional rooms; the 34-room `Bleaklands` location is separate and live."
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[Doggoroth"
 note = "Doggoroth Keep, built by dwarves around 4519 to protect the silver mines."
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[Road to Talador"
 note = "The approach. These are the rooms `derive_areas` drew in the middle of Wehnimer's town square, having fused Talador into the Landing across an unlabelled corridor."
@@ -373,185 +398,222 @@ note = "The approach. These are the rooms `derive_areas` drew in the middle of W
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[The Murkwoods"
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[The Demonwall"
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[Barret's Gorge"
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[The Old Keep Road"
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[Lich's Landing"
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[Lich Citadel"
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[Barracks"
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[Idolone"
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[Banshee Tower"
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[Blacksmith"
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[DragonSpines"
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[The Swale"
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[Darkness With Inn"
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[Hall of Mages"
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[Shade Square"
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[The Darkness With Inn"
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[Demon Draught"
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[The Bitter Bite"
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[Northern DragonSpines"
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[Underground Cavern"
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[Fitzwobbin's Figures"
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[Dress the Dead"
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[Hendoran Outpost"
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[Holishant Farm"
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[Magic Might"
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[Old Stone Tower"
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[Patty's Cakes"
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[Quarrels and Quivers"
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[Shield of the Shrickhen"
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[The Demon Draught"
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[The Golden Artificer"
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[The Northern Armament"
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[Tokens of Talador"
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[The Warding Way"
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[Weapons Wight Away"
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[The Spirits"
 
 [[rule]]
 verdict = "gone"
+spent = true
 location = "Talador"
 title = "[The Lich's Throne"

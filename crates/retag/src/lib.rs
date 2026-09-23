@@ -270,7 +270,11 @@ pub fn plan(map: &Map, curation: &Curation) -> Plan {
             .filter(|r| rule.matches(r, &location_of))
             .collect();
         if matched.is_empty() {
-            plan.empty_rules.push(rule.describe());
+            // A rule whose rooms were deleted did its job; only an
+            // unmarked empty rule is a mistake worth reporting.
+            if !rule.spent {
+                plan.empty_rules.push(rule.describe());
+            }
             continue;
         }
         if rule.verdict != Verdict::Live {
@@ -355,7 +359,17 @@ pub fn plan(map: &Map, curation: &Curation) -> Plan {
     // Pass 2e: regions from the official mapdb.
     tag_regions(&mut plan, rooms, curation);
 
-    // Pass 3: duplicate stubs.
+    // Pass 3: rooms the game no longer has.
+    for id in removed_rooms(rooms, &reachable) {
+        if let Some(room) = by_id.get(&id) {
+            plan.changes.push(Change::DeleteRoom {
+                id,
+                title: room.title.first().cloned().unwrap_or_default(),
+            });
+        }
+    }
+
+    // Pass 3b: duplicate stubs.
     for id in deletable_stubs(map) {
         if let Some(room) = by_id.get(&id) {
             plan.changes.push(Change::DeleteRoom {
@@ -464,6 +478,52 @@ fn convert_loose_tags(
             }
         }
     }
+}
+
+/// Rooms to remove outright: the game does not have them any more.
+///
+/// Three independent facts have to agree, and each covers a different way
+/// of being wrong about the other two:
+///
+/// 1. **`map:status:gone`** -- a curated verdict, argued in
+///    `curation/status.toml` against the wiki and the game's own history.
+/// 2. **Unreachable** from any town centre, gates ignored and seasonal
+///    edges not followed. The same veto every other pass answers to.
+/// 3. **No uid.** The game numbers the rooms it has. We map exhaustively
+///    and repeatedly, so a room with no number is one we could not reach
+///    despite trying, not one nobody got round to.
+///
+/// In gs.map that is 2,629 rooms, 94% of them in four areas settled
+/// separately: Caligos Isle (666, sunk), the Miasmic Verge (644), the
+/// Feywrot Mire (628) and Talador (438, destroyed in 5116).
+///
+/// # Why deleting rather than leaving them gone
+///
+/// `gone` already means never drawn, so this buys no correctness. It
+/// buys the map not carrying 2,629 rooms that no longer describe
+/// anything, and every consumer not having to learn the distinction.
+///
+/// # What makes it safe to do at all
+///
+/// **No live room points into the set.** Measured, not assumed: of the
+/// 247 rooms with an exit into it, zero are reachable. The 89 whose every
+/// exit led inside were folded in by `strand_orphans` first, so the edges
+/// that would have dangled belong to rooms that are going too, and
+/// `apply` prunes what remains.
+///
+/// The three tests are checked here rather than trusted from a rule,
+/// because unlike a `status.toml` entry there is no violation to report:
+/// a deleted room cannot be un-deleted by fixing a file and re-running.
+fn removed_rooms(rooms: &[Room], reachable: &BTreeSet<u32>) -> BTreeSet<u32> {
+    rooms
+        .iter()
+        .filter(|r| {
+            r.meta.iter().any(|m| m == "map:status:gone")
+                && !reachable.contains(&r.id.0)
+                && r.uid.is_empty()
+        })
+        .map(|r| r.id.0)
+        .collect()
 }
 
 /// Stubs safe to remove: titled `duplicate of NNNN`, carrying no

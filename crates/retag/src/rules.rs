@@ -87,6 +87,19 @@ pub struct Rule {
     pub event: Option<String>,
     #[serde(default)]
     pub note: Option<String>,
+    /// The rooms this rule named have since been deleted, so it matches
+    /// nothing and never will again.
+    ///
+    /// Kept rather than removed because the rule IS the record of why
+    /// 2,629 rooms are not in the map. Deleting it would leave the
+    /// deletion unexplained in the only files anyone reads to find out;
+    /// leaving it unmarked would make `the_shipped_curation_has_no_dead_rules`
+    /// fail forever, which trains people to ignore it.
+    ///
+    /// Not the same as a rule that matches nothing by mistake. That is a
+    /// typo, and the test still catches it.
+    #[serde(default)]
+    pub spent: bool,
 }
 
 impl Rule {
