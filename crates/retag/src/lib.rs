@@ -25,6 +25,78 @@ use cena_map::{Map, Room};
 
 pub use rules::{Curation, LoadError, Rule, Verdict};
 
+/// Mark rooms whose **only** way out leads into a room already gone.
+///
+/// Derived rather than listed, because what strands a room is a fact
+/// about the graph and a hand-written list of 89 ids would be a snapshot
+/// of one run of it. The rules in `status.toml` name places; this names
+/// the consequence of those names.
+///
+/// The seed is the settled set: `map:status:gone`, unreachable from any
+/// town centre, and never numbered by the game. A room is added when
+/// every one of its exits lands in that set and it is itself unreachable
+/// and unnumbered -- then the set grows and it runs again, because taking
+/// a shop can strand the room behind it.
+///
+/// In gs.map this converges after one round and finds 89 rooms, every one
+/// a single-exit festival shop opening onto a Feywrot Mire clearing, a
+/// Pinefar stall, or the like: `[Zombie Snack Shack]`, `[Bog Botanicals]`,
+/// `[Birds of Paradise, Parlour]`. They were missed because the curation
+/// names places by location or title and these have neither -- 67 of the
+/// 89 have no `location` at all, and no title pattern covers
+/// `[Crazy Gravy]`.
+///
+/// # What it will not take
+///
+/// A room reachable from a town centre, whatever its exits say. A room
+/// the game still numbers. A room with no exits at all, which says
+/// nothing either way and is left to `deletable_stubs` and the
+/// `is_connected` test that already handle it. The walkability veto is
+/// the same one every other pass answers to, and it is checked here
+/// directly rather than reported as a violation, because this pass
+/// generates its own matches and a rule that cannot be written wrong
+/// needs no complaint about it.
+fn strand_orphans(plan: &mut Plan, rooms: &[Room], reachable: &BTreeSet<u32>) {
+    let mut dead: BTreeSet<u32> = rooms
+        .iter()
+        .filter(|r| {
+            r.meta.iter().any(|m| m == "map:status:gone")
+                && !reachable.contains(&r.id.0)
+                && r.uid.is_empty()
+        })
+        .map(|r| r.id.0)
+        .collect();
+
+    let mut added: Vec<u32> = Vec::new();
+    loop {
+        let round: Vec<u32> = rooms
+            .iter()
+            .filter(|r| {
+                !dead.contains(&r.id.0)
+                    && !reachable.contains(&r.id.0)
+                    && r.uid.is_empty()
+                    && !r.exits.is_empty()
+                    && r.exits.iter().all(|e| dead.contains(&e.to.0))
+            })
+            .map(|r| r.id.0)
+            .collect();
+        if round.is_empty() {
+            break;
+        }
+        for id in &round {
+            dead.insert(*id);
+        }
+        added.extend(round);
+    }
+
+    for id in added {
+        plan.changes.push(Change::AddMeta {
+            id,
+            meta: "map:status:gone".to_owned(),
+        });
+    }
+}
+
 /// Write `meta:region:<name>` from the official mapdb's `loc` field.
 ///
 /// Joined by **uid only**. A title join would invent agreement -- 20,128
@@ -276,6 +348,9 @@ pub fn plan(map: &Map, curation: &Curation) -> Plan {
             });
         }
     }
+
+    // Pass 2d2: rooms stranded behind a gone area.
+    strand_orphans(&mut plan, rooms, &reachable);
 
     // Pass 2e: regions from the official mapdb.
     tag_regions(&mut plan, rooms, curation);

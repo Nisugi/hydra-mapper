@@ -419,3 +419,51 @@ fn an_unjoined_room_gets_no_region() {
         );
     }
 }
+
+/// A room stranded behind a gone area is gone; a reachable one never is.
+///
+/// The stranding pass generates its own matches instead of reading a
+/// rule, so the walkability veto cannot catch a mistake in it the way it
+/// catches a bad `status.toml` entry. This is that check: nothing it
+/// marks may be walkable, and nothing it marks may still be numbered by
+/// the game.
+#[test]
+fn stranding_never_takes_a_room_someone_can_reach() {
+    let Some((_, map)) = real_map() else {
+        eprintln!("skipping: gs.map not present");
+        return;
+    };
+    let Ok(curation) = Curation::load(&curation_dir()) else {
+        eprintln!("skipping: curation/ not readable");
+        return;
+    };
+    let reachable = cena_retag::reach::walkable(&map);
+    let before: std::collections::BTreeSet<u32> = map
+        .rooms()
+        .iter()
+        .filter(|r| r.meta.iter().any(|m| m == "map:status:gone"))
+        .map(|r| r.id.0)
+        .collect();
+
+    let rooms = apply(map.rooms(), &plan(&map, &curation));
+    for room in &rooms {
+        if !room.meta.iter().any(|m| m == "map:status:gone") {
+            continue;
+        }
+        if before.contains(&room.id.0) {
+            continue; // already gone by a named rule
+        }
+        assert!(
+            !reachable.contains(&room.id.0),
+            "stranding took a walkable room: {} {:?}",
+            room.id.0,
+            room.title.first()
+        );
+        assert!(
+            room.uid.is_empty(),
+            "stranding took a room the game still numbers: {} {:?}",
+            room.id.0,
+            room.title.first()
+        );
+    }
+}
