@@ -11,7 +11,7 @@ use crate::classifier::Classification;
 use crate::overrides::EdgeOverride;
 use crate::packer::PackInfo;
 use crate::positioner::Group;
-use crate::{classifier, direction, interior_shelf, outdoor_packing, positioner};
+use crate::{classifier, direction, interior_shelf, outdoor_packing, positioner, regions};
 
 /// A generated layout: every component with internal positions and sheet
 /// offsets, plus the interior/outdoor split and packing debug info.
@@ -53,6 +53,24 @@ pub fn generate_layout_reference(map: &Map) -> Layout {
 }
 
 fn generate_layout_impl(map: &Map, edges: &[EdgeOverride]) -> Layout {
+    // A removed room and an urchin hideout are not places, whoever chose
+    // the selection: they get no cell, and exits into them are exits out
+    // of the selection. (Rooms nothing reaches need the whole map to see;
+    // that is `regions::placeable_rooms`, the caller's filter.)
+    let real;
+    let map = if map.rooms().iter().all(regions::is_real_room) {
+        map
+    } else {
+        let rooms = map
+            .rooms()
+            .iter()
+            .filter(|r| regions::is_real_room(r))
+            .cloned()
+            .collect();
+        real = Map::from_rooms(rooms).unwrap_or_else(|_| unreachable!("a subset of unique ids"));
+        &real
+    };
+
     let mut dirs = direction::DirectionMap::build(map);
     // Before positioning: a correction is an input to the solve, not a
     // patch on its result.

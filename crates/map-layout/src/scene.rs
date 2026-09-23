@@ -717,6 +717,35 @@ mod tests {
         );
     }
 
+    /// A removed room and an urchin hideout get no cell, whoever put them
+    /// in the selection, and the rooms beside them still draw.
+    #[test]
+    fn a_gone_room_and_a_hideout_are_not_drawn() {
+        let mut rooms = vec![
+            room(1, 9_000_001, &[(2, "north"), (3, "south"), (4, "east")]),
+            room(2, 9_000_002, &[(1, "south")]),
+            room(3, 9_000_003, &[(1, "north")]),
+            room(4, 9_000_004, &[(1, "west")]),
+        ];
+        rooms[2].meta.push("map:status:gone".to_owned());
+        rooms[3].meta.push("map:virtual room".to_owned());
+        let map = Map::from_rooms(rooms).expect("no duplicate ids");
+        let layout = crate::generate_layout(&map);
+        let scene = build_scene("Test", &layout, &map);
+
+        let drawn: Vec<RoomId> = scene.sheet.rooms.iter().map(|r| r.id).collect();
+        assert_eq!(drawn.len(), 2, "drew {drawn:?}");
+        assert!(scene.room(RoomId(3)).is_none() && scene.room(RoomId(4)).is_none());
+        assert!(
+            scene
+                .sheet
+                .edges
+                .iter()
+                .all(|e| e.a_room.0 <= 2 && e.b_room.0 <= 2),
+            "an edge reached a room that is not drawn"
+        );
+    }
+
     #[test]
     fn connector_labels() {
         assert_eq!(connector_label("go dock"), Some("dock".into()));

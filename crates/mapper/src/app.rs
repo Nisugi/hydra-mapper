@@ -283,6 +283,7 @@ impl MapperApp {
                 location: Vec::new(),
                 derived: Vec::new(),
                 plates: Vec::new(),
+                placeable: HashSet::new(),
             },
         };
         // **Regions start shut.** 52 of them with their areas open is 222
@@ -364,7 +365,7 @@ impl MapperApp {
                 if location.group_offsets.is_empty() && location.room_pins.is_empty() {
                     continue;
                 }
-                let rooms = areas::layout_rooms(&area.rooms, map);
+                let rooms = areas::layout_rooms(&area.rooms, map, &self.areas.placeable);
                 let Ok(subset) = Map::from_rooms(rooms) else {
                     continue;
                 };
@@ -485,7 +486,7 @@ impl MapperApp {
             else {
                 continue;
             };
-            let rooms = areas::layout_rooms(&area.rooms, map);
+            let rooms = areas::layout_rooms(&area.rooms, map, &self.areas.placeable);
             let Ok(subset) = Map::from_rooms(rooms) else {
                 continue;
             };
@@ -870,7 +871,7 @@ impl MapperApp {
                 area.kind == AreaKind::Plates || !self.store.is_plated(RoomKey::of(id, map))
             })
             .collect();
-        let rooms = areas::layout_rooms(&own, map);
+        let rooms = areas::layout_rooms(&own, map, &self.areas.placeable);
         if rooms.is_empty() {
             self.shown = None;
             return;

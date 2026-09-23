@@ -121,8 +121,13 @@ pub fn is_real_room(room: &Room) -> bool {
 /// the game removed. The map cannot say where it goes, so it goes
 /// nowhere.
 ///
-/// This is not a `gone` detector -- only 5 of the 714 such rooms carry
-/// that tag. It is the separate fact that there is nothing to draw.
+/// This is not a `gone` detector. It is the separate fact that there is
+/// nothing to draw.
+///
+/// **Only links with real rooms count.** A room whose every exit leads
+/// into a removed one is as unplaceable as a room with no exits: "A Hide
+/// and Leather Tent" (7 rooms) and "Virelion Hall" (6) were surviving on
+/// exits into gone rooms, then laid out as zones with no geometry.
 ///
 /// Measured on `gs.map`: 790 rooms, 784 of which were reaching an area.
 /// 186 of the 191 rooms of "the sewers of Bloodriven Village" are this,
@@ -139,8 +144,34 @@ pub fn is_real_room(room: &Room) -> bool {
 /// recorded it was moved around by a script rather than walking, the map
 /// does not say, and this rule does not need to know: it drops rooms
 /// whose position is unknowable, not rooms it has judged dead.
-fn is_connected(room: &Room, pointed_at: &HashSet<RoomId>) -> bool {
-    !room.exits.is_empty() || pointed_at.contains(&room.id)
+fn is_connected(room: &Room, map: &Map, pointed_at: &HashSet<RoomId>) -> bool {
+    room.exits
+        .iter()
+        .any(|e| e.to != room.id && map.room(e.to).is_some_and(is_real_room))
+        || pointed_at.contains(&room.id)
+}
+
+/// Every room worth placing on a map: a real room ([`is_real_room`])
+/// that something real connects it to ([`is_connected`]).
+///
+/// Whole-map, because "nothing reaches it" cannot be read off a
+/// selection: a room whose only neighbour is in the next area is still
+/// reachable. A caller choosing rooms to lay out filters by this first;
+/// [`crate::generate_layout`] drops gone and virtual rooms itself, but it
+/// only sees the selection and so cannot drop the unreachable ones.
+#[must_use]
+pub fn placeable_rooms(map: &Map) -> HashSet<RoomId> {
+    let pointed_at: HashSet<RoomId> = map
+        .rooms()
+        .iter()
+        .filter(|r| is_real_room(r))
+        .flat_map(|r| r.exits.iter().filter(move |e| e.to != r.id).map(|e| e.to))
+        .collect();
+    map.rooms()
+        .iter()
+        .filter(|r| is_real_room(r) && is_connected(r, map, &pointed_at))
+        .map(|r| r.id)
+        .collect()
 }
 
 /// Whether an exit is something a person can walk along, and so whether
@@ -247,15 +278,11 @@ pub fn derive_areas(map: &Map) -> Vec<DerivedArea> {
     // A menu is not a place, a removed room is not a place, and a room
     // nothing reaches is nowhere. None of them reach an area at all, so
     // no consumer downstream has to know they exist.
-    let pointed_at: HashSet<RoomId> = map
-        .rooms()
-        .iter()
-        .flat_map(|r| r.exits.iter().map(|e| e.to))
-        .collect();
+    let placeable = placeable_rooms(map);
     let rooms: Vec<Room> = map
         .rooms()
         .iter()
-        .filter(|r| is_real_room(r) && is_connected(r, &pointed_at))
+        .filter(|r| placeable.contains(&r.id))
         .cloned()
         .collect();
     let rooms = rooms.as_slice();
