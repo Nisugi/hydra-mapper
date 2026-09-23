@@ -18,6 +18,7 @@ mod focus;
 mod inspect;
 mod overrides;
 mod placement;
+mod room_table;
 mod svg;
 
 use std::path::PathBuf;
@@ -33,6 +34,22 @@ use app::MapperApp;
 const MAP_ENV: &str = "CENA_MAP";
 
 fn main() -> eframe::Result {
+    // `cena-mapper --export-areas [map]`: write the room/area/region table
+    // beside the store and exit, no window.
+    if std::env::args().nth(1).as_deref() == Some("--export-areas") {
+        let path = std::env::args()
+            .nth(2)
+            .map(PathBuf::from)
+            .or_else(|| std::env::var_os(MAP_ENV).map(PathBuf::from));
+        match app::export_areas_headless(path.as_deref()) {
+            Ok(note) => println!("{note}"),
+            Err(problem) => {
+                eprintln!("{problem}");
+                std::process::exit(1);
+            }
+        }
+        return Ok(());
+    }
     let path = map_path();
     let options = eframe::NativeOptions::default();
     eframe::run_native(

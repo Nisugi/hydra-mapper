@@ -385,13 +385,14 @@ impl MapperApp {
     /// The bar above everything: the export button, and whatever the
     /// corrections as a whole have to say. Returns which export was
     /// asked for: the combiner submission, or the region assignments.
-    fn corrections_bar(&mut self, ui: &mut egui::Ui, can_edit: bool) -> (bool, bool) {
+    fn corrections_bar(&mut self, ui: &mut egui::Ui, can_edit: bool) -> (bool, bool, bool) {
         // A store that will not load or save is said once, at the top,
         // because it means corrections are not being kept. The export
         // note shares the bar: both are about the corrections as a whole,
         // not about whatever area is on screen.
         let mut export_now = false;
         let mut export_regions_now = false;
+        let mut export_areas_now = false;
         if self.store_problem.is_some() || self.export_note.is_some() || can_edit {
             egui::Panel::top("corrections").show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
@@ -417,6 +418,10 @@ impl MapperApp {
                         )
                         .clicked();
                 });
+                export_areas_now = ui
+                    .add_enabled(self.map.is_ok(), egui::Button::new("Export areas"))
+                    .on_hover_text("Write every room's area and region as a TSV beside the store")
+                    .clicked();
                 // Picking which areas to draw is a question asked while
                 // browsing the list, so its toggle lives here rather than
                 // with the canvas: the canvas header only exists once an
@@ -445,7 +450,7 @@ impl MapperApp {
             });
         });
         }
-        (export_now, export_regions_now)
+        (export_now, export_regions_now, export_areas_now)
     }
 
     /// Draw every ticked area, and every plate hanging off one, as SVG
@@ -716,6 +721,16 @@ impl MapperApp {
             }
         }
         let _ = map;
+    }
+
+    /// Every room's area and region, as the store has them now, to
+    /// `<store>.areas.tsv`. See [`crate::room_table`].
+    fn export_areas(&mut self) {
+        let (Ok(map), Some(store_path)) = (&self.map, self.store_path.as_deref()) else {
+            self.export_note = Some("Nothing to export: no map is loaded.".to_owned());
+            return;
+        };
+        self.export_note = Some(write_areas(map, &self.store, store_path));
     }
 
     fn export_corrections(&mut self) {
@@ -2607,8 +2622,9 @@ impl eframe::App for MapperApp {
         let can_edit = self.store_path.is_some() && self.store_problem.is_none();
 
         match self.corrections_bar(ui, can_edit) {
-            (true, _) => self.export_corrections(),
-            (_, true) => self.export_regions(),
+            (true, _, _) => self.export_corrections(),
+            (_, true, _) => self.export_regions(),
+            (_, _, true) => self.export_areas(),
             _ => {}
         }
 
@@ -3143,6 +3159,29 @@ fn cells_dragged(drag: DragState, camera: Camera, scale: i32) -> Cell {
         x: (drag.accumulated.x / px).round() as i32,
         y: (drag.accumulated.y / px).round() as i32,
     }
+}
+
+/// Write the room table beside the store; the note says where, or why not.
+fn write_areas(map: &Map, store: &MapOverrides, store_path: &Path) -> String {
+    let path = store_path.with_extension("areas.tsv");
+    match std::fs::write(&path, crate::room_table::areas_tsv(map, store)) {
+        Ok(()) => format!("Wrote {} rooms to {}", map.rooms().len(), path.display()),
+        Err(error) => format!("Could not write {}: {error}", path.display()),
+    }
+}
+
+/// `--export-areas`: the same export, with no window.
+///
+/// # Errors
+///
+/// When the map will not load or the store will not parse -- the table
+/// would say every room is unassigned, which is worse than nothing.
+pub fn export_areas_headless(path: Option<&Path>) -> Result<String, String> {
+    let map = load_map(path).map_err(|p| p.to_string())?;
+    let store_path = overrides::store_path(path.ok_or("no map path")?);
+    let store =
+        MapOverrides::load(&store_path).map_err(|e| format!("{} {e}", store_path.display()))?;
+    Ok(write_areas(&map, &store, &store_path))
 }
 
 fn load_map(path: Option<&Path>) -> Result<Map, LoadProblem> {
