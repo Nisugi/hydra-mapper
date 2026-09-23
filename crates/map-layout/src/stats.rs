@@ -57,7 +57,7 @@ impl LayoutStats {
         let mut connector_lens: Vec<i32> = Vec::new();
         let mut seen: HashSet<(RoomId, RoomId)> = HashSet::new();
         for room in map.rooms() {
-            for exit in &room.exits {
+            for exit in room.exits.iter().filter(|e| crate::regions::is_passage(e)) {
                 let target = exit.to;
                 let (Some(&a), Some(&b)) = (fin.get(&room.id), fin.get(&target)) else {
                     continue;

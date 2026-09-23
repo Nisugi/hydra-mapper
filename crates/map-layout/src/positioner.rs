@@ -290,6 +290,13 @@ fn directional_bfs(
             if map.room(target_id).is_none() || !unpositioned.contains(&target_id) {
                 continue;
             }
+            // A routine or a teleport is not a walk: it says nothing about
+            // where its far end sits, so it neither places a room nor
+            // joins one to this group. Without this the Rift was drawn
+            // beside the Birthing Sands as one place.
+            if !crate::regions::is_passage(exit) {
+                continue;
+            }
             let Some(direction) = dirs.get(room_id, target_id) else {
                 // A `go door`, `go archway`, `go yett`. It states no
                 // bearing, but it may still say these two rooms are
@@ -475,14 +482,15 @@ fn open_air(map: &Map) -> HashSet<RoomId> {
         .map(|room| room.id)
         .collect();
 
-    // Compass-linked runs of outdoor rooms.
+    // Walk-linked runs of outdoor rooms. A teleport between two outdoor
+    // places does not make them one run.
     let mut adjacent: HashMap<RoomId, Vec<RoomId>> = HashMap::new();
     for room in map.rooms() {
         if !outdoor.contains(&room.id) {
             continue;
         }
         for exit in &room.exits {
-            if !outdoor.contains(&exit.to) {
+            if !outdoor.contains(&exit.to) || !crate::regions::is_passage(exit) {
                 continue;
             }
             adjacent.entry(room.id).or_default().push(exit.to);

@@ -717,6 +717,56 @@ mod tests {
         );
     }
 
+    /// A teleport is not a door and not a corridor: a street that
+    /// teleports into a building is not its entrance, and two buildings a
+    /// teleport joins are two buildings. (The Rift was a wing of the
+    /// Birthing Sands; Teras had 42 doors that were routines.)
+    #[test]
+    fn a_teleport_is_neither_a_door_nor_a_wing() {
+        let indoor = |id: u32, exits: &[(u32, &str)]| {
+            let mut r = room(id, i64::from(id), exits);
+            r.paths = vec!["Obvious exits: out".to_owned()];
+            r
+        };
+        let mut rooms = vec![
+            // Four street rooms: a street of two is a courtyard.
+            room(1, 1, &[(2, "north"), (10, "go door")]),
+            room(2, 2, &[(1, "south"), (3, "north")]),
+            room(3, 3, &[(2, "south"), (4, "north")]),
+            room(4, 4, &[(3, "south")]),
+            indoor(10, &[(1, "out")]),
+            indoor(20, &[(21, "north")]),
+            indoor(21, &[(20, "south")]),
+        ];
+        let teleport = |to: u32| Exit {
+            to: RoomId(to),
+            kind: ExitKind::Go,
+            crossing: cena_map::Crossing::PassThrough(cena_map::Pass),
+            cost: Some(Cost::Fixed(1.0)),
+        };
+        rooms[1].exits.push(teleport(20)); // street 2 -> building B
+        rooms[4].exits.push(teleport(21)); // building A -> building B
+        let map = Map::from_rooms(rooms).expect("no duplicate ids");
+        let layout = crate::generate_layout(&map);
+        let scene = build_scene("Test", &layout, &map);
+
+        let unit_a = scene.unit_of(RoomId(10)).expect("A is drawn");
+        let unit_b = scene.unit_of(RoomId(20)).expect("B is drawn");
+        assert_ne!(unit_a, STREETS);
+        assert_ne!(unit_b, STREETS);
+        assert_ne!(unit_a, unit_b, "a teleport joined two buildings");
+        assert_eq!(scene.units[unit_a].door_rooms, vec![RoomId(10)]);
+        assert!(
+            scene.units[unit_b].door_rooms.is_empty(),
+            "a teleport made a door: {:?}",
+            scene.units[unit_b].door_rooms
+        );
+        assert!(
+            !scene.room(RoomId(2)).expect("drawn").entrance,
+            "the street a teleport leaves from got a door marker"
+        );
+    }
+
     /// A removed room and an urchin hideout get no cell, whoever put them
     /// in the selection, and the rooms beside them still draw.
     #[test]

@@ -240,7 +240,7 @@ fn doors_and_streets(
                 let Some(room) = map.room(id) else {
                     continue;
                 };
-                for exit in &room.exits {
+                for exit in room.exits.iter().filter(|e| crate::regions::is_passage(e)) {
                     if outdoor_cell.contains_key(&exit.to) {
                         note(cluster, exit.to);
                     }
@@ -252,7 +252,7 @@ fn doors_and_streets(
         let Some(room) = map.room(street) else {
             continue;
         };
-        for exit in &room.exits {
+        for exit in room.exits.iter().filter(|e| crate::regions::is_passage(e)) {
             if let Some(&g) = group_of_room.get(&exit.to) {
                 note(clusters.get(&g).copied().unwrap_or(g), street);
             }
@@ -277,7 +277,7 @@ fn doors_and_streets(
         let Some(room) = map.room(street) else {
             continue;
         };
-        for exit in &room.exits {
+        for exit in room.exits.iter().filter(|e| crate::regions::is_passage(e)) {
             if outdoor_cell.contains_key(&exit.to) && exit.to != street {
                 street_adj.entry(street).or_default().push(exit.to);
                 street_adj.entry(exit.to).or_default().push(street);
@@ -535,7 +535,7 @@ fn passages_within(
             let Some(room) = map.room(room_id) else {
                 continue;
             };
-            for exit in &room.exits {
+            for exit in room.exits.iter().filter(|e| crate::regions::is_passage(e)) {
                 let target_id = exit.to;
                 let Some(&other) = group_of.get(&target_id) else {
                     continue;

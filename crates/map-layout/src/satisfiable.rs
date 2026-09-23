@@ -421,7 +421,7 @@ fn neighbours_within(
         let Some(r) = map.room(room) else {
             continue;
         };
-        for exit in &r.exits {
+        for exit in r.exits.iter().filter(|e| crate::regions::is_passage(e)) {
             if exit.to != room && present.contains(&exit.to) {
                 out.entry(room).or_default().push(exit.to);
                 out.entry(exit.to).or_default().push(room);
