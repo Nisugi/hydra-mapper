@@ -410,11 +410,11 @@ impl MapperApp {
                     // corrections, `retag` takes facts about places.
                     export_regions_now = ui
                         .add_enabled(
-                            !self.store.region_moves.is_empty(),
-                            egui::Button::new("Export regions"),
+                            !self.store.region_moves.is_empty() || !self.store.area_moves.is_empty(),
+                            egui::Button::new("Export to curation"),
                         )
                         .on_hover_text(
-                            "Write the region assignments as [[assign]] blocks                              to paste into curation/regions.toml",
+                            "Write every area and region assignment to curation/assignments.toml for retag to bake into gs.map",
                         )
                         .clicked();
                 });
@@ -634,93 +634,35 @@ impl MapperApp {
     /// working state, keyed for its own use, whereas this is what another
     /// program consumes -- uid-keyed, in the `dirto` vocabulary the layout
     /// engine already reads.
-    /// Write the region assignments as a `curation/` block.
+    /// Write the store's areas and region assignments to
+    /// `curation/assignments.toml`, beside the map, for `retag` to bake in.
     ///
-    /// **Why a separate export rather than the combiner one.** That file
-    /// is a submission of layout corrections -- drags, pins, plates,
-    /// pictures -- and its consumer is the combiner. A region assignment
-    /// is not a correction to a drawing; it is a fact about a place, and
-    /// its consumer is `retag`, which bakes it into `gs.map` where Hydra
-    /// and every other reader will find it.
-    ///
-    /// Written by **uid** where a room has one, because `[[assign]]`
-    /// blocks live in a file that outlives any single map build and our
-    /// own ids are renumbered when the map is rebuilt.
-    fn export_regions(&mut self) {
-        let (Ok(map), Some(store_path)) = (&self.map, self.store_path.as_deref()) else {
+    /// **Why not the combiner export.** That file is a submission of
+    /// layout corrections -- drags, pins, plates, pictures -- and its
+    /// consumer is the combiner. Which area and region a room is in is a
+    /// fact about a place, and its consumer is `retag`, which writes it
+    /// into `gs.map` where Hydra and every other reader will find it.
+    fn export_curation(&mut self) {
+        let Some(store_path) = self.store_path.as_deref() else {
             self.export_note = Some("Nothing to export: no map is loaded.".to_owned());
             return;
         };
-        if self.store.region_moves.is_empty() {
-            self.export_note = Some("No region assignments yet.".to_owned());
-            return;
-        }
-        let mut by_region: BTreeMap<&str, (Vec<i64>, Vec<u32>)> = BTreeMap::new();
-        for (key, region) in &self.store.region_moves {
-            let entry = by_region.entry(region.as_str()).or_default();
-            match key {
-                RoomKey::Uid(uid) => entry.0.push(*uid),
-                RoomKey::Id(id) => entry.1.push(*id),
-            }
-        }
-        let mut out = String::from(
-            "# Region assignments made in the mapper.
-             #
-             # Paste into `curation/regions.toml`. These outrank the mapdb
-             # join, the folds and the spread: a room named here says its
-             # region outright and needs none of that machinery.
-
-",
-        );
-        for (region, (uids, ids)) in &by_region {
-            let _ = writeln!(out, "[[assign]]");
-            let _ = writeln!(out, "region = {region:?}");
-            if !uids.is_empty() {
-                let mut sorted = uids.clone();
-                sorted.sort_unstable();
-                let _ = writeln!(out, "# {} rooms", sorted.len());
-                let _ = writeln!(out, "uids = [");
-                for chunk in sorted.chunks(12) {
-                    let line: Vec<String> = chunk.iter().map(i64::to_string).collect();
-                    let _ = writeln!(out, "  {},", line.join(", "));
-                }
-                let _ = writeln!(out, "]");
-            }
-            if !ids.is_empty() {
-                // A room the game has never numbered. Named by our id,
-                // which a map rebuild renumbers -- so it is written
-                // separately and said to be the weaker claim.
-                let mut sorted = ids.clone();
-                sorted.sort_unstable();
-                let _ = writeln!(
-                    out,
-                    "# {} rooms with no uid; ids do not survive a rebuild",
-                    sorted.len()
-                );
-                let _ = writeln!(out, "ids = [");
-                for chunk in sorted.chunks(12) {
-                    let line: Vec<String> = chunk.iter().map(u32::to_string).collect();
-                    let _ = writeln!(out, "  {},", line.join(", "));
-                }
-                let _ = writeln!(out, "]");
-            }
-            out.push('\n');
-        }
-        let path = store_path.with_extension("regions.toml");
-        match std::fs::write(&path, out) {
-            Ok(()) => {
-                let rooms = self.store.region_moves.len();
-                self.export_note = Some(format!(
-                    "Wrote {rooms} region assignment(s) in {} region(s) to {}",
-                    by_region.len(),
-                    path.display()
-                ));
-            }
-            Err(error) => {
-                self.export_note = Some(format!("Could not write {}: {error}", path.display()));
-            }
-        }
-        let _ = map;
+        let dir = store_path
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join("curation");
+        let path = dir.join("assignments.toml");
+        let text = crate::room_table::assignments_toml(&self.store);
+        let written = std::fs::create_dir_all(&dir).and_then(|()| std::fs::write(&path, text));
+        self.export_note = Some(match written {
+            Ok(()) => format!(
+                "Wrote {} area assignment(s) and {} region assignment(s) to {};                  run `retag apply` to bake them into the map",
+                self.store.area_moves.len(),
+                self.store.region_moves.len(),
+                path.display()
+            ),
+            Err(error) => format!("Could not write {}: {error}", path.display()),
+        });
     }
 
     /// Every room's area and region, as the store has them now, to
@@ -2636,7 +2578,7 @@ impl eframe::App for MapperApp {
 
         match self.corrections_bar(ui, can_edit) {
             (true, _, _) => self.export_corrections(),
-            (_, true, _) => self.export_regions(),
+            (_, true, _) => self.export_curation(),
             (_, _, true) => self.export_areas(),
             _ => {}
         }
@@ -3181,6 +3123,36 @@ fn write_areas(map: &Map, store: &MapOverrides, store_path: &Path) -> String {
         Ok(()) => format!("Wrote {} rooms to {}", map.rooms().len(), path.display()),
         Err(error) => format!("Could not write {}: {error}", path.display()),
     }
+}
+
+/// `--export-curation`: `curation/assignments.toml` from the store beside
+/// the map, with no window.
+///
+/// # Errors
+///
+/// When there is no map path, or the store will not parse -- an empty
+/// store would write a file unassigning every room.
+pub fn export_curation_headless(path: Option<&Path>) -> Result<String, String> {
+    let store_path = overrides::store_path(path.ok_or("no map path")?);
+    let store =
+        MapOverrides::load(&store_path).map_err(|e| format!("{} {e}", store_path.display()))?;
+    if store.area_moves.is_empty() && store.region_moves.is_empty() {
+        return Err(format!("{} holds no assignments", store_path.display()));
+    }
+    let dir = store_path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("curation");
+    let target = dir.join("assignments.toml");
+    std::fs::create_dir_all(&dir)
+        .and_then(|()| std::fs::write(&target, crate::room_table::assignments_toml(&store)))
+        .map_err(|e| format!("Could not write {}: {e}", target.display()))?;
+    Ok(format!(
+        "Wrote {} area and {} region assignment(s) to {}",
+        store.area_moves.len(),
+        store.region_moves.len(),
+        target.display()
+    ))
 }
 
 /// `--export-areas`: the same export, with no window.

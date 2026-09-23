@@ -74,6 +74,103 @@ fn clean(field: &str) -> String {
     field.replace(['\t', '\n', '\r'], " ")
 }
 
+/// `curation/assignments.toml`: every curated area with its rooms, and
+/// every region a person assigned, for `retag` to bake into the map.
+///
+/// The whole file, every time, in a stable order -- areas by key, rooms
+/// by uid then id -- so a re-export that changes nothing changes no line,
+/// and a diff shows exactly the rooms that moved.
+#[must_use]
+pub fn assignments_toml(store: &MapOverrides) -> String {
+    use std::collections::BTreeMap;
+
+    const PREAMBLE: &str = "\
+# Written by the mapper (Export to curation). Do not edit by hand:
+# the next export replaces this file from the store.
+#
+# `retag` bakes it into gs.map: each room here gets `meta:area:<name>`,
+# and each [[assign]] region outranks the mapdb join, the folds and
+# the spread. Rooms are named by uid, or by id where the game never
+# numbered them; ids do not survive a map rebuild.
+
+";
+    let mut out = String::from(PREAMBLE);
+    let split = |keys: &mut Vec<RoomKey>| {
+        keys.sort_unstable();
+        let uids: Vec<i64> = keys
+            .iter()
+            .filter_map(|k| match k {
+                RoomKey::Uid(u) => Some(*u),
+                RoomKey::Id(_) => None,
+            })
+            .collect();
+        let ids: Vec<u32> = keys
+            .iter()
+            .filter_map(|k| match k {
+                RoomKey::Id(i) => Some(*i),
+                RoomKey::Uid(_) => None,
+            })
+            .collect();
+        (uids, ids)
+    };
+    let list = |out: &mut String, field: &str, values: Vec<String>| {
+        if values.is_empty() {
+            return;
+        }
+        let _ = writeln!(out, "{field} = [");
+        for chunk in values.chunks(12) {
+            let _ = writeln!(out, "  {},", chunk.join(", "));
+        }
+        let _ = writeln!(out, "]");
+    };
+
+    let mut by_area: BTreeMap<&str, Vec<RoomKey>> = BTreeMap::new();
+    for (key, area) in &store.area_moves {
+        by_area.entry(area.as_str()).or_default().push(*key);
+    }
+    for (area, keys) in &mut by_area {
+        let (uids, ids) = split(keys);
+        let _ = writeln!(out, "[[area]]");
+        let _ = writeln!(out, "key = {area:?}");
+        let _ = writeln!(out, "name = {:?}", store.area_name(area));
+        let _ = writeln!(out, "# {} rooms", keys.len());
+        list(
+            &mut out,
+            "uids",
+            uids.iter().map(ToString::to_string).collect(),
+        );
+        list(
+            &mut out,
+            "ids",
+            ids.iter().map(ToString::to_string).collect(),
+        );
+        out.push('\n');
+    }
+
+    let mut by_region: BTreeMap<&str, Vec<RoomKey>> = BTreeMap::new();
+    for (key, region) in &store.region_moves {
+        by_region.entry(region.as_str()).or_default().push(*key);
+    }
+    for (region, keys) in &mut by_region {
+        let (uids, ids) = split(keys);
+        let _ = writeln!(out, "[[assign]]");
+        let _ = writeln!(out, "region = {region:?}");
+        let _ = writeln!(out, "# {} rooms", keys.len());
+        list(
+            &mut out,
+            "uids",
+            uids.iter().map(ToString::to_string).collect(),
+        );
+        list(
+            &mut out,
+            "ids",
+            ids.iter().map(ToString::to_string).collect(),
+        );
+        out.push('\n');
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -35,13 +35,20 @@ const MAP_ENV: &str = "CENA_MAP";
 
 fn main() -> eframe::Result {
     // `cena-mapper --export-areas [map]`: write the room/area/region table
-    // beside the store and exit, no window.
-    if std::env::args().nth(1).as_deref() == Some("--export-areas") {
+    // beside the store and exit, no window. `--export-curation [map]`:
+    // write curation/assignments.toml for retag, likewise.
+    let flag = std::env::args().nth(1);
+    if let Some(flag) = flag.as_deref().filter(|f| f.starts_with("--export-")) {
         let path = std::env::args()
             .nth(2)
             .map(PathBuf::from)
             .or_else(|| std::env::var_os(MAP_ENV).map(PathBuf::from));
-        match app::export_areas_headless(path.as_deref()) {
+        let result = match flag {
+            "--export-areas" => app::export_areas_headless(path.as_deref()),
+            "--export-curation" => app::export_curation_headless(path.as_deref()),
+            other => Err(format!("unknown flag {other}")),
+        };
+        match result {
             Ok(note) => println!("{note}"),
             Err(problem) => {
                 eprintln!("{problem}");
