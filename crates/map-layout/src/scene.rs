@@ -5,7 +5,7 @@
 //! any later embedder both draw from the same scene. Rooms carry final
 //! sheet cells; edges are pre-classified: solid directional edges, stubs
 //! for directional edges stretched past `LONG_EDGE_CELLS`, and dashed
-//! labeled connectors (skipped past `CONNECTOR_MAX_CELLS`).
+//! labeled connectors (skipped past `CONNECTOR_MAX_CELLS` outdoor cells).
 //!
 //! **One sheet, and a focus.** Every room of an area has one cell, in one
 //! frame: the streets at [`OUTDOOR_SCALE`], each building hung beside the
@@ -15,11 +15,11 @@
 //! map whichever part of it is in focus. Nothing is laid out twice and
 //! nothing is echoed; changing focus moves no room.
 //!
-//! **v1 has no override source** (`plan/26` §0: no editor yet), so the edge
-//! restyling Vellum's `build_scene` takes (`Hide`/`Dash`/`Dots`/`Connector`
-//! overrides) is not ported: every edge draws as the solver and classifier
-//! decided. The seam is `crate::overrides`, not this module, when that
-//! system exists.
+//! **Edges draw by the directions the layout was solved with**:
+//! [`Layout::edges`] carries the curated edge corrections, and this reads
+//! them, so a forced bearing is a line and an un-welded edge is not.
+//! Vellum's pure restyling overrides (`Hide`/`Dash`/`Dots`) are not
+//! ported.
 
 use std::collections::{HashMap, HashSet};
 
@@ -37,7 +37,8 @@ pub const LONG_EDGE_CELLS: i32 = 8;
 /// Connectors longer than this are not drawn at all.
 pub const CONNECTOR_MAX_CELLS: i32 = 30;
 
-/// Outdoor groups are drawn at this many cells per solver cell. The
+/// Outdoor groups are drawn at this many cells per solver cell by default
+/// ([`Layout::town_scale`] is the one a given layout was built at). The
 /// interiors are laid out in that frame already -- each building hung
 /// beside its street at [`crate::interior_shelf::TOWN_SCALE`] -- so
 /// scaling the streets to match puts every room of the area on one
@@ -285,7 +286,9 @@ fn connector_label(command: &str) -> Option<String> {
 /// Every room of the area on one sheet, its units, and its edges.
 #[must_use]
 pub fn build_scene(location: &str, layout: &Layout, map: &Map) -> MapScene {
-    let dirs = DirectionMap::build(map);
+    // The directions the solver placed by, corrections included.
+    let mut dirs = DirectionMap::build(map);
+    dirs.apply_edge_overrides(map, &layout.edges);
 
     let mut scene = MapScene {
         location: location.to_owned(),
@@ -298,7 +301,7 @@ pub fn build_scene(location: &str, layout: &Layout, map: &Map) -> MapScene {
         let scale = if interiors.contains(&group.index) {
             1
         } else {
-            OUTDOOR_SCALE
+            layout.town_scale
         };
         scene.group_scale.insert(group.index, scale);
     }
@@ -493,18 +496,35 @@ fn populate_edges(
             let inside = (unit_a == unit_b && unit_a != STREETS).then_some(unit_a);
             let (kind, label) = if room_group == target_group {
                 // A same-group edge: solid when its stated direction
-                // resolves, a stub when it stretches past
-                // LONG_EDGE_CELLS solver cells, nothing when direction
-                // analysis found none.
-                if dirs.get(room.id, target_id).is_none() {
-                    continue;
-                }
-                let kind = if len > LONG_EDGE_CELLS * scene.scale_of(room_group) {
-                    SceneEdgeKind::Stub
+                // resolves either way, a stub when it stretches past
+                // LONG_EDGE_CELLS solver cells. A walk with no bearing
+                // either way -- `go path`, `climb gully` -- is still a walk,
+                // and draws as a dashed connector: while rooms are being
+                // sorted into areas, a link you cannot see is a link you
+                // cannot judge. (It drew nothing: 9,644 pairs on `gs.map`.)
+                let bearing = dirs
+                    .get(room.id, target_id)
+                    .or_else(|| dirs.get(target_id, room.id));
+                if bearing.is_none() {
+                    let cmd = match &exit.crossing {
+                        cena_map::Crossing::Command(cmd) => cmd.as_str(),
+                        _ => "",
+                    };
+                    // Stretched, it is a stub like a stretched compass
+                    // edge: the link stays visible at both ends without a
+                    // line across the whole sheet (Mist Harbor had one of
+                    // 212 cells, the Landing one of 1,496).
+                    let kind = if len > LONG_EDGE_CELLS * scene.scale_of(room_group) {
+                        SceneEdgeKind::Stub
+                    } else {
+                        SceneEdgeKind::Connector
+                    };
+                    (kind, connector_label(cmd))
+                } else if len > LONG_EDGE_CELLS * scene.scale_of(room_group) {
+                    (SceneEdgeKind::Stub, None)
                 } else {
-                    SceneEdgeKind::Directional
-                };
-                (kind, None)
+                    (SceneEdgeKind::Directional, None)
+                }
             } else {
                 // A cross-group edge. Between two buildings that are not
                 // one cluster, nothing draws: that is not a passage a
@@ -513,7 +533,7 @@ fn populate_edges(
                 if unit_a != STREETS && unit_b != STREETS && unit_a != unit_b {
                     continue;
                 }
-                if len > CONNECTOR_MAX_CELLS * OUTDOOR_SCALE {
+                if len > CONNECTOR_MAX_CELLS * layout.town_scale {
                     continue;
                 }
                 let cmd = match &exit.crossing {
@@ -717,6 +737,169 @@ mod tests {
         );
     }
 
+    /// A teleport is not a door and not a corridor: a street that
+    /// teleports into a building is not its entrance, and two buildings a
+    /// teleport joins are two buildings. (The Rift was a wing of the
+    /// Birthing Sands; Teras had 42 doors that were routines.)
+    #[test]
+    fn a_teleport_is_neither_a_door_nor_a_wing() {
+        let indoor = |id: u32, exits: &[(u32, &str)]| {
+            let mut r = room(id, i64::from(id), exits);
+            r.paths = vec!["Obvious exits: out".to_owned()];
+            r
+        };
+        let mut rooms = vec![
+            // Four street rooms: a street of two is a courtyard.
+            room(1, 1, &[(2, "north"), (10, "go door")]),
+            room(2, 2, &[(1, "south"), (3, "north")]),
+            room(3, 3, &[(2, "south"), (4, "north")]),
+            room(4, 4, &[(3, "south")]),
+            indoor(10, &[(1, "out")]),
+            indoor(20, &[(21, "north")]),
+            indoor(21, &[(20, "south")]),
+        ];
+        let teleport = |to: u32| Exit {
+            to: RoomId(to),
+            kind: ExitKind::Go,
+            crossing: cena_map::Crossing::PassThrough(cena_map::Pass),
+            cost: Some(Cost::Fixed(1.0)),
+        };
+        rooms[1].exits.push(teleport(20)); // street 2 -> building B
+        rooms[4].exits.push(teleport(21)); // building A -> building B
+        let map = Map::from_rooms(rooms).expect("no duplicate ids");
+        let layout = crate::generate_layout(&map);
+        let scene = build_scene("Test", &layout, &map);
+
+        let unit_a = scene.unit_of(RoomId(10)).expect("A is drawn");
+        let unit_b = scene.unit_of(RoomId(20)).expect("B is drawn");
+        assert_ne!(unit_a, STREETS);
+        assert_ne!(unit_b, STREETS);
+        assert_ne!(unit_a, unit_b, "a teleport joined two buildings");
+        assert_eq!(scene.units[unit_a].door_rooms, vec![RoomId(10)]);
+        assert!(
+            scene.units[unit_b].door_rooms.is_empty(),
+            "a teleport made a door: {:?}",
+            scene.units[unit_b].door_rooms
+        );
+        assert!(
+            !scene.room(RoomId(2)).expect("drawn").entrance,
+            "the street a teleport leaves from got a door marker"
+        );
+    }
+
+    /// The scene draws by the directions the layout was solved with. A
+    /// bearing forced onto a `go door` draws as a line; a compass edge
+    /// un-welded to a connector no longer draws as a solid one.
+    #[test]
+    fn edge_corrections_reach_the_drawing() {
+        use crate::overrides::{EdgeAction, EdgeOverride};
+        let map = Map::from_rooms(vec![
+            room(1, 1, &[(2, "go door"), (3, "north")]),
+            room(2, 2, &[(1, "go door")]),
+            room(3, 3, &[(1, "south")]),
+        ])
+        .expect("no duplicate ids");
+        let edges = [
+            EdgeOverride {
+                a: RoomId(1),
+                b: RoomId(2),
+                action: EdgeAction::Direction(Dir::East),
+            },
+            EdgeOverride {
+                a: RoomId(1),
+                b: RoomId(3),
+                action: EdgeAction::Connector,
+            },
+        ];
+        let layout = crate::generate_layout_with(&map, &edges);
+        let scene = build_scene("Test", &layout, &map);
+        let edge = |x: u32, y: u32| {
+            scene.sheet.edges.iter().find(|e| {
+                let pair = (e.a_room.0.min(e.b_room.0), e.a_room.0.max(e.b_room.0));
+                pair == (x, y)
+            })
+        };
+
+        assert_eq!(
+            edge(1, 2).map(|e| e.kind),
+            Some(SceneEdgeKind::Directional),
+            "the forced bearing did not draw"
+        );
+        assert!(
+            edge(1, 3).is_none_or(|e| e.kind != SceneEdgeKind::Directional),
+            "the un-welded edge still drew as a compass line"
+        );
+    }
+
+    /// A walk with no bearing between two rooms of one group draws, as a
+    /// dashed connector with its command; a pair with a bearing either way
+    /// stays one solid line, whichever exit is met first.
+    #[test]
+    fn a_walk_with_no_bearing_draws_as_a_connector() {
+        let map = Map::from_rooms(vec![
+            room(1, 1, &[(2, "north"), (3, "go path")]),
+            room(2, 2, &[(1, "south")]),
+            room(3, 3, &[(1, "go path"), (4, "go arch")]),
+            room(4, 4, &[(3, "east")]),
+        ])
+        .expect("no duplicate ids");
+        let layout = crate::generate_layout(&map);
+        let scene = build_scene("Test", &layout, &map);
+        let edge = |x: u32, y: u32| {
+            let found: Vec<&SceneEdge> = scene
+                .sheet
+                .edges
+                .iter()
+                .filter(|e| {
+                    let pair = (e.a_room.0.min(e.b_room.0), e.a_room.0.max(e.b_room.0));
+                    pair == (x, y)
+                })
+                .collect();
+            assert_eq!(found.len(), 1, "pair {x}-{y} drew {} lines", found.len());
+            found[0].clone()
+        };
+
+        assert_eq!(
+            scene.room(RoomId(3)).map(|r| r.group),
+            scene.room(RoomId(1)).map(|r| r.group)
+        );
+        let path = edge(1, 3);
+        assert_eq!(path.kind, SceneEdgeKind::Connector);
+        assert_eq!(path.label.as_deref(), Some("path"));
+        assert_eq!(edge(1, 2).kind, SceneEdgeKind::Directional);
+        // `go arch` one way, `east` the other: one line, and a solid one.
+        assert_eq!(edge(3, 4).kind, SceneEdgeKind::Directional);
+    }
+
+    /// A removed room and an urchin hideout get no cell, whoever put them
+    /// in the selection, and the rooms beside them still draw.
+    #[test]
+    fn a_gone_room_and_a_hideout_are_not_drawn() {
+        let mut rooms = vec![
+            room(1, 9_000_001, &[(2, "north"), (3, "south"), (4, "east")]),
+            room(2, 9_000_002, &[(1, "south")]),
+            room(3, 9_000_003, &[(1, "north")]),
+            room(4, 9_000_004, &[(1, "west")]),
+        ];
+        rooms[2].meta.push("map:status:gone".to_owned());
+        rooms[3].meta.push("map:virtual room".to_owned());
+        let map = Map::from_rooms(rooms).expect("no duplicate ids");
+        let layout = crate::generate_layout(&map);
+        let scene = build_scene("Test", &layout, &map);
+
+        let drawn: Vec<RoomId> = scene.sheet.rooms.iter().map(|r| r.id).collect();
+        assert_eq!(drawn.len(), 2, "drew {drawn:?}");
+        assert!(scene.room(RoomId(3)).is_none() && scene.room(RoomId(4)).is_none());
+        assert!(
+            scene
+                .sheet
+                .edges
+                .iter()
+                .all(|e| e.a_room.0 <= 2 && e.b_room.0 <= 2),
+            "an edge reached a room that is not drawn"
+        );
+    }
+
     #[test]
     fn connector_labels() {
         assert_eq!(connector_label("go dock"), Some("dock".into()));
@@ -732,13 +915,8 @@ mod tests {
         );
     }
 
-    /// A street of enough corners to be a town, each with shops behind
-    /// doors. **One sheet, one frame:** every room has one cell, the
-    /// street rooms at the outdoor scale, each shop beside its own
-    /// corner, joined to it by a door edge; the shops are building units
-    /// whose door rooms are the shops, and the corners are the streets.
-    #[test]
-    fn a_town_is_one_sheet_with_the_shops_beside_their_corners() {
+    /// Twelve street corners in a row, two shops behind doors at each.
+    fn corner_town() -> Map {
         const CORNERS: u32 = 12;
         let shop = |id: u32, street: u32| Room {
             id: RoomId(id),
@@ -776,7 +954,52 @@ mod tests {
             }
             rooms.push(room(street, i64::from(street), &exits));
         }
-        let map = Map::from_rooms(rooms).expect("no duplicate ids");
+        Map::from_rooms(rooms).expect("no duplicate ids")
+    }
+
+    /// The town scale is a knob: at any scale the streets sit at
+    /// multiples of it, neighbours one scale apart, and no two rooms share
+    /// a cell.
+    #[test]
+    fn the_town_scale_re_lays_the_town() {
+        let map = corner_town();
+        for scale in [1, 2, 3, 6, 9] {
+            let params = crate::LayoutParams { town_scale: scale };
+            let layout = crate::generate_layout_tuned(&map, &[], params);
+            assert_eq!(layout.town_scale, scale);
+            let scene = build_scene("street", &layout, &map);
+            assert_eq!(scene.sheet.rooms.len(), map.rooms().len());
+            let mut cells: Vec<Cell> = scene.sheet.rooms.iter().map(|r| r.cell).collect();
+            cells.sort_unstable_by_key(|c| (c.x, c.y));
+            let before = cells.len();
+            cells.dedup();
+            assert_eq!(
+                cells.len(),
+                before,
+                "two rooms share a cell at scale {scale}"
+            );
+            let corner = scene.room(RoomId(1000)).expect("drawn");
+            let next = scene.room(RoomId(1001)).expect("drawn");
+            assert_eq!(scene.scale_of(corner.group), scale);
+            assert_eq!((corner.cell.x % scale, corner.cell.y % scale), (0, 0));
+            assert_eq!(
+                (next.cell.x - corner.cell.x)
+                    .abs()
+                    .max((next.cell.y - corner.cell.y).abs()),
+                scale,
+                "neighbouring corners are not one scale apart at scale {scale}"
+            );
+        }
+    }
+
+    /// A street of enough corners to be a town, each with shops behind
+    /// doors. **One sheet, one frame:** every room has one cell, the
+    /// street rooms at the outdoor scale, each shop beside its own
+    /// corner, joined to it by a door edge; the shops are building units
+    /// whose door rooms are the shops, and the corners are the streets.
+    #[test]
+    fn a_town_is_one_sheet_with_the_shops_beside_their_corners() {
+        let map = corner_town();
         let layout = crate::generate_layout(&map);
         assert!(!layout.interiors.is_empty(), "the shops did not shelve");
         let scene = build_scene("street", &layout, &map);

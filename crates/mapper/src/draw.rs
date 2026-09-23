@@ -346,15 +346,48 @@ fn draw_edges(
         // Scaled so lines thin out as the view pulls back, but never to
         // nothing.
         let width = (camera.scale * 1.5).max(0.5);
-        let stroke = match edge.kind {
-            SceneEdgeKind::Directional | SceneEdgeKind::Stub => {
-                Stroke::new(width, DIRECTIONAL_LINE)
+        match edge.kind {
+            SceneEdgeKind::Directional => {
+                painter.line_segment([a, b], Stroke::new(width, DIRECTIONAL_LINE));
             }
-            SceneEdgeKind::Connector => Stroke::new(width * 0.7, CONNECTOR_LINE),
-        };
-        painter.line_segment([a, b], stroke);
+            SceneEdgeKind::Connector => {
+                painter.line_segment([a, b], Stroke::new(width * 0.7, CONNECTOR_LINE));
+            }
+            // Stretched too far to draw whole: a short tick out of each
+            // end toward the other, labelled with the room it leads to, so
+            // the link is there to see without a line across the sheet. A
+            // stub with a movement label is a bearingless walk, drawn in
+            // the connector colour.
+            SceneEdgeKind::Stub => {
+                let color = if edge.label.is_some() {
+                    CONNECTOR_LINE
+                } else {
+                    DIRECTIONAL_LINE
+                };
+                let cell = (camera.to_screen(Cell { x: 1, y: 0 }, canvas)
+                    - camera.to_screen(Cell { x: 0, y: 0 }, canvas))
+                .length();
+                let reach = (cell * STUB_CELLS).min((b - a).length() / 2.0);
+                let dir = (b - a).normalized();
+                let font = egui::FontId::proportional((cell * 0.9).clamp(7.0, 12.0));
+                for (from, toward, partner) in [(a, dir, edge.b_room), (b, -dir, edge.a_room)] {
+                    let tip = from + toward * reach;
+                    painter.line_segment([from, tip], Stroke::new(width, color));
+                    painter.text(
+                        tip,
+                        egui::Align2::CENTER_CENTER,
+                        partner.0.to_string(),
+                        font.clone(),
+                        color,
+                    );
+                }
+            }
+        }
     }
 }
+
+/// How far a stub reaches out of each end, in sheet cells.
+const STUB_CELLS: f32 = 1.5;
 
 /// A room in focus is a square; one out of focus is a dot on the road --
 /// larger where a door leads in -- so the whole area is always there to

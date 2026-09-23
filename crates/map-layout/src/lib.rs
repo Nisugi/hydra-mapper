@@ -20,9 +20,10 @@
 //! number. Up/down borrow the north/south offsets in the plane, same as
 //! Vellum's own engine (spec §10, "out of scope: up/down layering").
 //!
-//! **v1 renders; it does not edit.** The override system (position pins,
-//! edge overrides, classification flips) that lets a person hand-correct a
-//! bad layout is not ported yet; see `overrides` and `plan/26` §0.
+//! **Corrections are inputs, not patches.** Edge corrections (`overrides`)
+//! go into the solve through [`generate_layout_with`] and travel with the
+//! [`Layout`] to the scene. Position pins and group offsets are the
+//! caller's: `cena-mapper` applies them to the finished layout.
 
 // `implicit_hasher` asks internal `HashMap`/`HashSet` parameters to
 // generalise over `BuildHasher`. Every one it flags in this crate is fed
@@ -52,7 +53,10 @@ pub use classifier::Classification;
 pub use direction::{Dir, DirectionMap};
 pub use overrides::{EdgeAction, EdgeOverride};
 pub use packer::PackInfo;
-pub use pipeline::{Layout, generate_layout, generate_layout_reference, generate_layout_with};
+pub use pipeline::{
+    Layout, LayoutParams, generate_layout, generate_layout_reference, generate_layout_tuned,
+    generate_layout_with,
+};
 pub use positioner::{Cell, Group, PackMethod, Violation};
 pub use satisfiable::{Axis, Problem, is_satisfiable, place_by_order, problems};
 pub use scene::{MapScene, SheetScene, Unit, UnitKind, build_scene};

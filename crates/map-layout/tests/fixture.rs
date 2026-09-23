@@ -141,8 +141,7 @@ fn hard_invariants_hold() {
     assert_eq!(stats.rooms, 7);
 
     let again = generate_layout(&map);
-    let repeat_stats = LayoutStats::compute(&again, &map);
-    assert_eq!(stats, repeat_stats, "same rooms in, same layout out");
+    assert_eq!(layout, again, "same rooms in, same layout out");
 }
 
 /// The bank is a real building: two indoor rooms, reached by one doorway

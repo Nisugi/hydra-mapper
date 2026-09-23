@@ -165,6 +165,9 @@ pub struct Areas {
     pub location: Vec<Area>,
     pub derived: Vec<Area>,
     pub plates: Vec<Area>,
+    /// Every room worth laying out, whichever list names it: see
+    /// [`layout_rooms`].
+    pub placeable: HashSet<RoomId>,
 }
 
 impl Areas {
@@ -209,6 +212,7 @@ impl Areas {
             location: location_areas(map, &claimed),
             derived: derived_areas(map),
             plates: plate_areas(map, store),
+            placeable: cena_map_layout::regions::placeable_rooms(map),
         }
     }
 
@@ -534,8 +538,27 @@ fn location_areas(map: &Map, claimed: &HashSet<RoomId>) -> Vec<Area> {
 /// Only rooms that would otherwise be **wholly cut off** pull anything in,
 /// so an area that is already whole is laid out from exactly its own
 /// rooms, as before.
+///
+/// **Only a place is laid out**, own or pulled: `placeable` is
+/// [`regions::placeable_rooms`], so a removed room, an urchin hideout
+/// and a room nothing reaches are left off whichever list named them. And
+/// only a walk attaches: a teleport says nothing about where two rooms
+/// sit, so it pulls nothing in.
+///
+/// [`regions::placeable_rooms`]: cena_map_layout::regions::placeable_rooms
 #[must_use]
-pub fn layout_rooms(area_rooms: &[RoomId], map: &Map) -> Vec<cena_map::Room> {
+pub fn layout_rooms(
+    area_rooms: &[RoomId],
+    map: &Map,
+    placeable: &HashSet<RoomId>,
+) -> Vec<cena_map::Room> {
+    let is_passage = cena_map_layout::regions::is_passage;
+    let area_rooms: Vec<RoomId> = area_rooms
+        .iter()
+        .copied()
+        .filter(|id| placeable.contains(id))
+        .collect();
+    let area_rooms = area_rooms.as_slice();
     let own: HashSet<RoomId> = area_rooms.iter().copied().collect();
 
     // Who points at a room, so a one-way door inward still counts as an
@@ -544,7 +567,7 @@ pub fn layout_rooms(area_rooms: &[RoomId], map: &Map) -> Vec<cena_map::Room> {
     let mut inbound: BTreeMap<RoomId, Vec<RoomId>> = BTreeMap::new();
     for room in map.rooms() {
         for exit in &room.exits {
-            if own.contains(&exit.to) && !own.contains(&room.id) {
+            if own.contains(&exit.to) && !own.contains(&room.id) && is_passage(exit) {
                 inbound.entry(exit.to).or_default().push(room.id);
             }
         }
@@ -558,9 +581,10 @@ pub fn layout_rooms(area_rooms: &[RoomId], map: &Map) -> Vec<cena_map::Room> {
         let neighbours: Vec<RoomId> = room
             .exits
             .iter()
+            .filter(|e| is_passage(e))
             .map(|e| e.to)
             .chain(inbound.get(&id).into_iter().flatten().copied())
-            .filter(|n| map.room(*n).is_some())
+            .filter(|n| placeable.contains(n))
             .collect();
         // A room with a neighbour of its own is attached already; only one
         // with none is stranded by the boundary.
@@ -581,6 +605,7 @@ pub fn layout_rooms(area_rooms: &[RoomId], map: &Map) -> Vec<cena_map::Room> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cena_map_layout::regions::placeable_rooms;
 
     /// The bundled file parses and both kinds of row are present, so a
     /// mangled copy fails here rather than as an empty list in the window.
@@ -872,7 +897,7 @@ mod tests {
         ])
         .expect("no duplicate ids");
 
-        let rooms = layout_rooms(&[shop], &map);
+        let rooms = layout_rooms(&[shop], &map, &placeable_rooms(&map));
         let ids: Vec<RoomId> = rooms.iter().map(|r| r.id).collect();
         assert!(ids.contains(&shop));
         assert!(
@@ -894,7 +919,10 @@ mod tests {
         ])
         .expect("no duplicate ids");
 
-        let ids: Vec<RoomId> = layout_rooms(&[a, b], &map).iter().map(|r| r.id).collect();
+        let ids: Vec<RoomId> = layout_rooms(&[a, b], &map, &placeable_rooms(&map))
+            .iter()
+            .map(|r| r.id)
+            .collect();
         assert_eq!(ids.len(), 2, "pulled in a neighbour that was not needed");
         assert!(!ids.contains(&outside));
     }
@@ -911,21 +939,65 @@ mod tests {
         ])
         .expect("no duplicate ids");
 
-        let ids: Vec<RoomId> = layout_rooms(&[shop], &map).iter().map(|r| r.id).collect();
+        let ids: Vec<RoomId> = layout_rooms(&[shop], &map, &placeable_rooms(&map))
+            .iter()
+            .map(|r| r.id)
+            .collect();
         assert!(
             ids.contains(&street),
             "a room reachable only one way was left stranded"
         );
     }
 
-    /// A room with no exits at all has nothing to pull in -- 27 rooms of
-    /// `gs.map` are dead records, and inventing a neighbour for them would
-    /// be worse than leaving them alone.
+    /// A room with no exits at all is nowhere: nothing to place it by, and
+    /// inventing a neighbour for it would be worse than leaving it off.
     #[test]
-    fn a_room_with_no_exits_pulls_nothing() {
+    fn a_room_with_no_exits_is_not_laid_out() {
         let lone = RoomId(1);
         let map = Map::from_rooms(vec![room_linked(lone, "nowhere", &[])]).expect("one room");
-        assert_eq!(layout_rooms(&[lone], &map).len(), 1);
+        assert!(layout_rooms(&[lone], &map, &placeable_rooms(&map)).is_empty());
+    }
+
+    /// A gone room is not laid out even when a list names it, and a
+    /// stranded room does not pull one in as its doorway.
+    #[test]
+    fn a_gone_room_is_neither_laid_out_nor_pulled_in() {
+        let (shop, street, old) = (RoomId(1), RoomId(2), RoomId(3));
+        let mut gone = room_linked(old, "streets", &[shop]);
+        gone.meta.push("map:status:gone".to_owned());
+        let map = Map::from_rooms(vec![
+            room_linked(shop, "shops", &[street, old]),
+            room_linked(street, "streets", &[shop]),
+            gone,
+        ])
+        .expect("no duplicate ids");
+
+        let ids: Vec<RoomId> = layout_rooms(&[shop, old], &map, &placeable_rooms(&map))
+            .iter()
+            .map(|r| r.id)
+            .collect();
+        assert_eq!(ids, vec![shop, street]);
+    }
+
+    /// A teleport is not a doorway: a room stranded by the boundary pulls
+    /// in what it walks to, not where a routine lands it.
+    #[test]
+    fn a_teleport_pulls_nothing_in() {
+        let (shop, street, far) = (RoomId(1), RoomId(2), RoomId(3));
+        let mut map_shop = room_linked(shop, "shops", &[street, far]);
+        map_shop.exits[1].crossing = cena_map::Crossing::PassThrough(cena_map::Pass);
+        let map = Map::from_rooms(vec![
+            map_shop,
+            room_linked(street, "streets", &[shop]),
+            room_linked(far, "far away", &[]),
+        ])
+        .expect("no duplicate ids");
+
+        let ids: Vec<RoomId> = layout_rooms(&[shop], &map, &placeable_rooms(&map))
+            .iter()
+            .map(|r| r.id)
+            .collect();
+        assert!(!ids.contains(&far), "pulled in a room across a teleport");
     }
 
     /// A room with just enough filled in to carry an id, a location and

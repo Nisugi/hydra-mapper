@@ -13,7 +13,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use cena_map::{Map, RoomId};
 
 use crate::classifier::Entrance;
-use crate::packer::{Edge, GROUP_PADDING, find_free_offset, uid_delta};
+use crate::packer::{Edge, GROUP_PADDING, chebyshev, find_free_offset, uid_delta};
 use crate::positioner::{Cell, Group, PackMethod};
 
 /// One shelved building: member group -> cluster-local frame offset, and
@@ -47,6 +47,7 @@ fn shelf_items(
     map: &Map,
     entrances: &HashMap<usize, Vec<Entrance>>,
     outdoor: &[usize],
+    scale: i32,
 ) -> Vec<Item> {
     // Where each outdoor room sits, so a building can be shelved near the
     // others off the same street rather than at its group index.
@@ -81,6 +82,7 @@ fn shelf_items(
             map,
             entrances,
             &outdoor_cell,
+            scale,
         ));
     }
     for (&cluster, members) in &members_of {
@@ -92,6 +94,7 @@ fn shelf_items(
                 map,
                 entrances,
                 &outdoor_cell,
+                scale,
             ));
         }
     }
@@ -240,7 +243,7 @@ fn doors_and_streets(
                 let Some(room) = map.room(id) else {
                     continue;
                 };
-                for exit in &room.exits {
+                for exit in room.exits.iter().filter(|e| crate::regions::is_passage(e)) {
                     if outdoor_cell.contains_key(&exit.to) {
                         note(cluster, exit.to);
                     }
@@ -252,7 +255,7 @@ fn doors_and_streets(
         let Some(room) = map.room(street) else {
             continue;
         };
-        for exit in &room.exits {
+        for exit in room.exits.iter().filter(|e| crate::regions::is_passage(e)) {
             if let Some(&g) = group_of_room.get(&exit.to) {
                 note(clusters.get(&g).copied().unwrap_or(g), street);
             }
@@ -277,7 +280,7 @@ fn doors_and_streets(
         let Some(room) = map.room(street) else {
             continue;
         };
-        for exit in &room.exits {
+        for exit in room.exits.iter().filter(|e| crate::regions::is_passage(e)) {
             if outdoor_cell.contains_key(&exit.to) && exit.to != street {
                 street_adj.entry(street).or_default().push(exit.to);
                 street_adj.entry(exit.to).or_default().push(street);
@@ -298,6 +301,7 @@ fn shelf_item(
     map: &Map,
     entrances: &HashMap<usize, Vec<Entrance>>,
     outdoor_cell: &HashMap<RoomId, Cell>,
+    scale: i32,
 ) -> Item {
     let mut local: HashMap<usize, Cell> = HashMap::new();
     if anchors.is_empty() && members.len() == 1 {
@@ -316,7 +320,7 @@ fn shelf_item(
         } else {
             Vec::new()
         };
-        merge_cluster_members(groups, &all, map, &mut local, anchors, &skeleton);
+        merge_cluster_members(groups, &all, map, &mut local, anchors, &skeleton, scale);
     }
     // Normalize the frame to a (0,0) top-left, the echoes included.
     let mut min = Cell {
@@ -397,27 +401,39 @@ pub fn pack_interior_shelf(
     map: &Map,
     entrances: &HashMap<usize, Vec<Entrance>>,
     outdoor: &[usize],
+    scale: i32,
 ) {
     if interior.is_empty() {
         return;
     }
 
-    let mut items = shelf_items(groups, interior, clusters, map, entrances, outdoor);
+    let mut items = shelf_items(groups, interior, clusters, map, entrances, outdoor, scale);
 
     // The town frame goes where it is: its cells are the outdoor sheet's
     // own, scaled, and moving it would break the one picture. Everything
-    // else shelves in rows below it.
-    let mut below = 0;
+    // else shelves in rows below it -- and below the streets themselves,
+    // which are there whether or not a building hangs off them. (Reading
+    // only the town frame put the rows at the origin, on top of the
+    // streets, in an area where no building opens onto a street.)
+    // `GROUP_PADDING` empty rows between: the last occupied row is
+    // inclusive.
+    let mut below = outdoor
+        .iter()
+        .flat_map(|&o| {
+            let g = &groups[o];
+            g.room_ids.iter().map(move |&id| g.final_cell(id).y * scale)
+        })
+        .max()
+        .map_or(0, |y| y + 1 + GROUP_PADDING);
     items.retain(|item| {
-        let Some((min, max)) = item.town else {
+        let Some((_, max)) = item.town else {
             return true;
         };
         for (idx, cell) in &item.local {
             groups[*idx].base_offset = Some(*cell);
             groups[*idx].packing = Some(PackMethod::InteriorShelf);
         }
-        below = below.max(max.y + GROUP_PADDING);
-        let _ = min;
+        below = below.max(max.y + 1 + GROUP_PADDING);
         false
     });
 
@@ -535,7 +551,7 @@ fn passages_within(
             let Some(room) = map.room(room_id) else {
                 continue;
             };
-            for exit in &room.exits {
+            for exit in room.exits.iter().filter(|e| crate::regions::is_passage(e)) {
                 let target_id = exit.to;
                 let Some(&other) = group_of.get(&target_id) else {
                     continue;
@@ -594,6 +610,7 @@ fn merge_cluster_members(
     local: &mut HashMap<usize, Cell>,
     anchors: &[RoomId],
     skeleton: &[Cell],
+    scale: i32,
 ) {
     let edges = passages_within(groups, members, map, anchors);
 
@@ -631,11 +648,11 @@ fn merge_cluster_members(
             groups[idx].positions[&room]
         }
     };
-    let width_of = |idx: usize| {
+    let min_x_of = |idx: usize| {
         if anchor_at(idx).is_some() {
-            1
+            0
         } else {
-            groups[idx].bounds().width()
+            groups[idx].bounds().min_x
         }
     };
     let free_for = |idx: usize, proposed: Cell, occupied: &HashSet<Cell>| {
@@ -655,13 +672,13 @@ fn merge_cluster_members(
         local.insert(seed, Cell::default());
         place(seed, Cell::default(), &mut occupied);
     } else {
-        let cells = lay_street(groups, anchors, skeleton, &edges);
+        let cells = lay_street(skeleton, scale);
         for (i, &c) in cells.iter().enumerate() {
             let idx = anchor_index(i);
             local.insert(idx, c);
             place(idx, c, &mut occupied);
         }
-        reserve_roads(skeleton, &cells, &edges, &mut occupied);
+        reserve_roads(skeleton, &cells, &edges, &mut occupied, scale);
     }
 
     loop {
@@ -677,25 +694,82 @@ fn merge_cluster_members(
             continue;
         };
 
-        let edge = *placed_edges
-            .iter()
-            .min_by_key(|e| e.uid_delta)
-            .unwrap_or_else(|| unreachable!("placed_edges is non-empty"));
-        let neighbor_room = room_at(edge.other_group, edge.other_room_id, local);
-        let internal = internal_of(idx, edge.room_id);
-        // Land the passage endpoints as close together as the frame
-        // allows.
-        let proposed = Cell {
-            x: neighbor_room.x - internal.x,
-            y: neighbor_room.y - internal.y,
+        // A door's two ends: the member's room in its own frame, and the
+        // placed room it opens onto.
+        let ends = |e: &Edge| {
+            (
+                internal_of(idx, e.room_id),
+                room_at(e.other_group, e.other_room_id, local),
+            )
         };
-        let off = free_for(idx, proposed, &occupied).unwrap_or(Cell {
-            x: proposed.x + width_of(edge.other_group) + 1,
-            y: proposed.y,
-        });
+        // Nothing free near: past everything placed so far, at the door's
+        // height -- stretched, but on cells of its own. (It was one width
+        // to the right, unchecked, and landed on street rooms in a dense
+        // grid.)
+        let settle = |proposed: Cell| {
+            free_for(idx, proposed, &occupied).unwrap_or_else(|| {
+                let max_x = occupied.iter().map(|c| c.x).max().unwrap_or(0);
+                Cell {
+                    x: max_x + 2 - min_x_of(idx),
+                    y: proposed.y,
+                }
+            })
+        };
+        let off = land_by_best_door(&placed_edges, ends, settle);
         local.insert(idx, off);
         place(idx, off, &mut occupied);
     }
+}
+
+/// Where a building lands, by the door it is entered through.
+///
+/// The door with the nearest uids is that one (the reference's rule).
+/// Between doors the uids cannot tell apart -- no uids at all, most often
+/// -- the one whose landing stretches the building's other placed doors
+/// least; then room ids. Never list order: the lists come from a hash map,
+/// and a shop entered from two street rooms hung beside either one, run to
+/// run.
+fn land_by_best_door(
+    placed_edges: &[Edge],
+    ends: impl Fn(&Edge) -> (Cell, Cell),
+    settle: impl Fn(Cell) -> Cell,
+) -> Cell {
+    let nearest = placed_edges
+        .iter()
+        .map(|e| e.uid_delta)
+        .min()
+        .unwrap_or_else(|| unreachable!("placed_edges is non-empty"));
+    let mut tied: Vec<&Edge> = placed_edges
+        .iter()
+        .filter(|e| e.uid_delta == nearest)
+        .collect();
+    tied.sort_by_key(|e| (e.other_room_id, e.room_id));
+    tied.dedup_by_key(|e| (e.other_room_id, e.room_id));
+    let shifted = |c: Cell, off: Cell| Cell {
+        x: c.x + off.x,
+        y: c.y + off.y,
+    };
+    // Every placed door's length once the member sits at `off`.
+    let stretch = |off: Cell| -> i32 {
+        placed_edges
+            .iter()
+            .map(|e| {
+                let (here, there) = ends(e);
+                chebyshev(shifted(here, off), there)
+            })
+            .sum()
+    };
+    tied.iter()
+        .map(|e| {
+            // Land the door's ends as close together as the frame allows.
+            let (here, there) = ends(e);
+            settle(Cell {
+                x: there.x - here.x,
+                y: there.y - here.y,
+            })
+        })
+        .min_by_key(|&off| stretch(off))
+        .unwrap_or_else(|| unreachable!("placed_edges is non-empty"))
 }
 
 /// One connected set of buildings and the street rooms they open onto,
@@ -745,6 +819,7 @@ fn reserve_roads(
     cells: &[Cell],
     edges: &HashMap<usize, Vec<Edge>>,
     occupied: &mut HashSet<Cell>,
+    scale: i32,
 ) {
     for (i, &a) in skeleton.iter().enumerate() {
         for e in edges
@@ -759,7 +834,7 @@ fn reserve_roads(
                 continue;
             }
             let (dx, dy) = ((b.x - a.x).signum(), (b.y - a.y).signum());
-            for step in 1..TOWN_SCALE {
+            for step in 1..scale {
                 occupied.insert(Cell {
                     x: cells[i].x + dx * step,
                     y: cells[i].y + dy * step,
@@ -769,17 +844,15 @@ fn reserve_roads(
     }
 }
 
-/// How many cells one outdoor cell becomes on the interiors sheet.
+/// How many sheet cells one outdoor solver cell becomes, by default: the
+/// streets are laid at this scale so `TOWN_SCALE - 1` free cells sit
+/// between neighbouring street rooms for buildings. A layout parameter,
+/// not a zoom: [`crate::LayoutParams::town_scale`] overrides it.
 pub const TOWN_SCALE: i32 = 4;
 
 /// The town laid down in its own shape, scaled so the buildings fit
 /// between its rooms. See the comments inside for how.
-fn lay_street(
-    groups: &[Group],
-    anchors: &[RoomId],
-    skeleton: &[Cell],
-    edges: &HashMap<usize, Vec<Edge>>,
-) -> Vec<Cell> {
+fn lay_street(skeleton: &[Cell], scale: i32) -> Vec<Cell> {
     // **The town goes down first, at scale.** Every echo is placed at its
     // outdoor cell times `TOWN_SCALE`: exact directions, exact adjacency,
     // the outdoor sheet's own shape, with `TOWN_SCALE - 1` free cells
@@ -788,15 +861,13 @@ fn lay_street(
     // same picture -- a player can carry the town's shape from one to the
     // other -- and a building with doors on two streets lands between
     // them because the streets are where they were.
-    let _ = (groups, anchors, edges);
-    let cells: Vec<Cell> = skeleton
+    skeleton
         .iter()
         .map(|c| Cell {
-            x: c.x * TOWN_SCALE,
-            y: c.y * TOWN_SCALE,
+            x: c.x * scale,
+            y: c.y * scale,
         })
-        .collect();
-    cells
+        .collect()
 }
 
 /// The unplaced member with the most passages to placed ones, and those
@@ -1120,5 +1191,165 @@ mod tests {
                 (c.y - first.y).abs()
             );
         }
+    }
+
+    const OUT: &str = "Obvious paths: east, west";
+    const IN: &str = "Obvious exits: out";
+
+    /// Every room on a cell of its own, on the one sheet.
+    fn assert_one_room_per_cell(map: &Map) {
+        let layout = generate_layout(map);
+        let scene = crate::build_scene("Test", &layout, map);
+        let mut cells: Vec<Cell> = scene.sheet.rooms.iter().map(|r| r.cell).collect();
+        cells.sort_unstable_by_key(|c| (c.x, c.y));
+        let before = cells.len();
+        cells.dedup();
+        assert_eq!(cells.len(), before, "two rooms share a cell");
+    }
+
+    /// A building whose door leads out of the selection has no street to
+    /// hang beside, so it shelves in the rows below the town -- below the
+    /// streets, not at the origin on top of them. ("A Hide and Leather
+    /// Tent": its interior and a street room were both drawn at (0,0).)
+    #[test]
+    fn a_building_with_no_street_shelves_below_the_streets() {
+        let mut rooms = Vec::new();
+        for i in 0..5u32 {
+            let mut exits = Vec::new();
+            if i > 0 {
+                exits.push(exit(i - 1, "west"));
+            }
+            if i < 4 {
+                exits.push(exit(i + 1, "east"));
+            }
+            rooms.push(room(i, "[Street]", OUT, exits));
+        }
+        // Its only door is to room 999, which is not in the selection.
+        rooms.push(room(
+            100,
+            "[Tent]",
+            IN,
+            vec![door(999, "flap"), exit(101, "north")],
+        ));
+        rooms.push(room(
+            101,
+            "[Tent]",
+            IN,
+            vec![exit(100, "south"), exit(102, "north")],
+        ));
+        rooms.push(room(102, "[Tent]", IN, vec![exit(101, "south")]));
+        let map = Map::from_rooms(rooms).expect("no duplicate ids");
+        assert_one_room_per_cell(&map);
+
+        let layout = generate_layout(&map);
+        let street_bottom = (0..5u32)
+            .map(|i| {
+                let g = layout
+                    .groups
+                    .iter()
+                    .find(|g| g.room_ids.contains(&RoomId(i)));
+                g.expect("placed").final_cell(RoomId(i)).y * TOWN_SCALE
+            })
+            .max()
+            .expect("five streets");
+        for id in 100..=102u32 {
+            let g = layout
+                .groups
+                .iter()
+                .find(|g| g.room_ids.contains(&RoomId(id)));
+            let y = g.expect("placed").final_cell(RoomId(id)).y;
+            assert!(
+                y > street_bottom,
+                "tent room {id} at y={y} is not below the street"
+            );
+        }
+    }
+
+    /// A shop entered from two street rooms, with no uids to say which is
+    /// its front door, hangs beside the same one every time. Its door
+    /// edges came out of a hash map, and the first of a tie won: 105 of
+    /// 200 runs put it by one street room and 95 by the other.
+    #[test]
+    fn a_shop_with_two_street_doors_hangs_in_the_same_place_every_run() {
+        let mut rooms = Vec::new();
+        for i in 0..8u32 {
+            let mut exits = Vec::new();
+            if i > 0 {
+                exits.push(exit(i - 1, "west"));
+            }
+            if i < 7 {
+                exits.push(exit(i + 1, "east"));
+            }
+            if i == 1 || i == 6 {
+                exits.push(door(100, "shop"));
+            }
+            rooms.push(room(i, "[Street]", OUT, exits));
+        }
+        rooms.push(room(100, "[Shop]", IN, vec![door(999, "back")]));
+        let map = Map::from_rooms(rooms).expect("no duplicate ids");
+        let first = generate_layout(&map);
+        for _ in 0..50 {
+            assert_eq!(
+                generate_layout(&map),
+                first,
+                "the layout changed between runs"
+            );
+        }
+    }
+
+    /// A hall too big for any pocket of a dense street grid: every cell
+    /// between two street rooms is a road, which leaves 3x3 holes, and a
+    /// 5x5 hall fits none within the search radius. It was placed one
+    /// width along anyway, onto street rooms.
+    #[test]
+    fn a_building_that_fits_nowhere_near_still_gets_cells_of_its_own() {
+        const N: u32 = 24;
+        let id = |x: u32, y: u32| y * N + x;
+        let hall = |x: u32, y: u32| 10_000 + y * 5 + x;
+        let mut rooms = Vec::new();
+        for y in 0..N {
+            for x in 0..N {
+                let mut exits = Vec::new();
+                if x > 0 {
+                    exits.push(exit(id(x - 1, y), "west"));
+                }
+                if x + 1 < N {
+                    exits.push(exit(id(x + 1, y), "east"));
+                }
+                if y > 0 {
+                    exits.push(exit(id(x, y - 1), "north"));
+                }
+                if y + 1 < N {
+                    exits.push(exit(id(x, y + 1), "south"));
+                }
+                if (x, y) == (N / 2, N / 2) {
+                    exits.push(door(hall(0, 0), "hall"));
+                }
+                rooms.push(room(id(x, y), "[Grid]", "Obvious paths: north", exits));
+            }
+        }
+        for y in 0..5 {
+            for x in 0..5 {
+                let mut exits = Vec::new();
+                if x > 0 {
+                    exits.push(exit(hall(x - 1, y), "west"));
+                }
+                if x + 1 < 5 {
+                    exits.push(exit(hall(x + 1, y), "east"));
+                }
+                if y > 0 {
+                    exits.push(exit(hall(x, y - 1), "north"));
+                }
+                if y + 1 < 5 {
+                    exits.push(exit(hall(x, y + 1), "south"));
+                }
+                if (x, y) == (0, 0) {
+                    exits.push(exit(id(N / 2, N / 2), "out"));
+                }
+                rooms.push(room(hall(x, y), "[Hall]", IN, exits));
+            }
+        }
+        let map = Map::from_rooms(rooms).expect("no duplicate ids");
+        assert_one_room_per_cell(&map);
     }
 }

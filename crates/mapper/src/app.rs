@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use cena_map::{Map, RoomId};
 use cena_map_layout::Cell;
 use cena_map_layout::{
-    Dir, EdgeAction, Layout, MapScene, build_scene, generate_layout, generate_layout_with,
+    Dir, EdgeAction, Layout, LayoutParams, MapScene, build_scene, generate_layout_tuned,
 };
 
 use crate::areas::{self, AreaKind, Areas};
@@ -159,6 +159,9 @@ enum EditAction {
 }
 
 pub struct MapperApp {
+    /// The layout's knobs, set from the canvas header. A change re-solves
+    /// the shown area.
+    params: LayoutParams,
     /// `Err` once, at startup, and shown instead of a window full of
     /// nothing; loading never happens again from inside the app (v1 is a
     /// one-shot viewer, not a file-open dialog -- `plan/26` names that as
@@ -283,6 +286,7 @@ impl MapperApp {
                 location: Vec::new(),
                 derived: Vec::new(),
                 plates: Vec::new(),
+                placeable: HashSet::new(),
             },
         };
         // **Regions start shut.** 52 of them with their areas open is 222
@@ -305,6 +309,7 @@ impl MapperApp {
             eprintln!("could not save the seeded areas: {error}");
         }
         MapperApp {
+            params: LayoutParams::default(),
             map,
             areas,
             tab: AreaKind::Location,
@@ -364,16 +369,12 @@ impl MapperApp {
                 if location.group_offsets.is_empty() && location.room_pins.is_empty() {
                     continue;
                 }
-                let rooms = areas::layout_rooms(&area.rooms, map);
+                let rooms = areas::layout_rooms(&area.rooms, map, &self.areas.placeable);
                 let Ok(subset) = Map::from_rooms(rooms) else {
                     continue;
                 };
                 let edges = location.edge_overrides(&subset);
-                let mut layout = if edges.is_empty() {
-                    generate_layout(&subset)
-                } else {
-                    generate_layout_with(&subset, &edges)
-                };
+                let mut layout = generate_layout_tuned(&subset, &edges, self.params);
                 overrides::apply(&mut layout, &subset, location);
                 out.extend(placement::resolve(&layout, &subset, location));
             }
@@ -384,13 +385,14 @@ impl MapperApp {
     /// The bar above everything: the export button, and whatever the
     /// corrections as a whole have to say. Returns which export was
     /// asked for: the combiner submission, or the region assignments.
-    fn corrections_bar(&mut self, ui: &mut egui::Ui, can_edit: bool) -> (bool, bool) {
+    fn corrections_bar(&mut self, ui: &mut egui::Ui, can_edit: bool) -> (bool, bool, bool) {
         // A store that will not load or save is said once, at the top,
         // because it means corrections are not being kept. The export
         // note shares the bar: both are about the corrections as a whole,
         // not about whatever area is on screen.
         let mut export_now = false;
         let mut export_regions_now = false;
+        let mut export_areas_now = false;
         if self.store_problem.is_some() || self.export_note.is_some() || can_edit {
             egui::Panel::top("corrections").show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
@@ -416,6 +418,10 @@ impl MapperApp {
                         )
                         .clicked();
                 });
+                export_areas_now = ui
+                    .add_enabled(self.map.is_ok(), egui::Button::new("Export areas"))
+                    .on_hover_text("Write every room's area and region as a TSV beside the store")
+                    .clicked();
                 // Picking which areas to draw is a question asked while
                 // browsing the list, so its toggle lives here rather than
                 // with the canvas: the canvas header only exists once an
@@ -444,7 +450,7 @@ impl MapperApp {
             });
         });
         }
-        (export_now, export_regions_now)
+        (export_now, export_regions_now, export_areas_now)
     }
 
     /// Draw every ticked area, and every plate hanging off one, as SVG
@@ -485,7 +491,7 @@ impl MapperApp {
             else {
                 continue;
             };
-            let rooms = areas::layout_rooms(&area.rooms, map);
+            let rooms = areas::layout_rooms(&area.rooms, map, &self.areas.placeable);
             let Ok(subset) = Map::from_rooms(rooms) else {
                 continue;
             };
@@ -493,11 +499,7 @@ impl MapperApp {
             let edges = location
                 .map(|l| l.edge_overrides(&subset))
                 .unwrap_or_default();
-            let mut layout = if edges.is_empty() {
-                generate_layout(&subset)
-            } else {
-                generate_layout_with(&subset, &edges)
-            };
+            let mut layout = generate_layout_tuned(&subset, &edges, self.params);
             if let Some(location) = location {
                 overrides::apply(&mut layout, &subset, location);
             }
@@ -721,6 +723,16 @@ impl MapperApp {
         let _ = map;
     }
 
+    /// Every room's area and region, as the store has them now, to
+    /// `<store>.areas.tsv`. See [`crate::room_table`].
+    fn export_areas(&mut self) {
+        let (Ok(map), Some(store_path)) = (&self.map, self.store_path.as_deref()) else {
+            self.export_note = Some("Nothing to export: no map is loaded.".to_owned());
+            return;
+        };
+        self.export_note = Some(write_areas(map, &self.store, store_path));
+    }
+
     fn export_corrections(&mut self) {
         let (Ok(map), Some(store_path)) = (&self.map, self.store_path.as_deref()) else {
             self.export_note = Some("Nothing to export: no map is loaded.".to_owned());
@@ -845,6 +857,21 @@ impl MapperApp {
         self.rebuild_shown(Fit::Keep);
     }
 
+    /// A knob moved last frame: re-solve what is shown, keeping focus and
+    /// selection, and frame the new sheet.
+    fn apply_knobs(&mut self) {
+        if self
+            .shown
+            .as_ref()
+            .is_some_and(|s| s.layout.town_scale != self.params.town_scale.max(1))
+        {
+            self.rebuild_shown(Fit::Keep);
+            if let Some(shown) = &mut self.shown {
+                shown.needs_fit = true;
+            }
+        }
+    }
+
     fn rebuild_shown(&mut self, fit: Fit) {
         let Ok(map) = &self.map else {
             return;
@@ -870,7 +897,7 @@ impl MapperApp {
                 area.kind == AreaKind::Plates || !self.store.is_plated(RoomKey::of(id, map))
             })
             .collect();
-        let rooms = areas::layout_rooms(&own, map);
+        let rooms = areas::layout_rooms(&own, map, &self.areas.placeable);
         if rooms.is_empty() {
             self.shown = None;
             return;
@@ -891,11 +918,7 @@ impl MapperApp {
         let edges = location
             .map(|l| l.edge_overrides(&subset))
             .unwrap_or_default();
-        let mut layout = if edges.is_empty() {
-            generate_layout(&subset)
-        } else {
-            generate_layout_with(&subset, &edges)
-        };
+        let mut layout = generate_layout_tuned(&subset, &edges, self.params);
         if let Some(location) = location {
             overrides::apply(&mut layout, &subset, location);
         }
@@ -1591,7 +1614,16 @@ fn inspector(
             }
         }
         if !facts.tags.is_empty() {
-            ui.label(format!("Tags: {}", facts.tags.join(", ")));
+            // Forage names make a room's tag list run to a hundred entries,
+            // which pushed its exits and layout off the panel. Always
+            // foldable; shut to start with once it is long.
+            let count = facts.tags.len();
+            egui::CollapsingHeader::new(format!("Tags ({count})"))
+                .id_salt("tags_collapsed")
+                .default_open(count <= TAGS_BEFORE_COLLAPSING)
+                .show(ui, |ui| {
+                    ui.label(facts.tags.join(", "));
+                });
         }
         if facts.entrance {
             ui.colored_label(ENTRANCE_COLOR, "Hosts a doorway into an interior");
@@ -1679,6 +1711,10 @@ fn inspector(
 /// read at a glance. Nothing is hidden: the header says how many there
 /// are and opens to the same list.
 const EXITS_BEFORE_COLLAPSING: usize = 12;
+
+/// Tags past this many start folded: a room's forage names alone can run
+/// to a hundred.
+const TAGS_BEFORE_COLLAPSING: usize = 8;
 
 /// The exit list, with rooms outside this area as links to follow.
 fn exit_list(ui: &mut egui::Ui, facts: &RoomFacts, follow: &mut Option<RoomId>) {
@@ -2585,6 +2621,7 @@ impl eframe::App for MapperApp {
             });
             return;
         }
+        self.apply_knobs();
 
         let mut edit: Option<EditAction> = None;
         let edit_out = &mut edit;
@@ -2598,8 +2635,9 @@ impl eframe::App for MapperApp {
         let can_edit = self.store_path.is_some() && self.store_problem.is_none();
 
         match self.corrections_bar(ui, can_edit) {
-            (true, _) => self.export_corrections(),
-            (_, true) => self.export_regions(),
+            (true, _, _) => self.export_corrections(),
+            (_, true, _) => self.export_regions(),
+            (_, _, true) => self.export_areas(),
             _ => {}
         }
 
@@ -2634,6 +2672,7 @@ impl eframe::App for MapperApp {
                 &self.store,
                 self.tab,
                 &mut self.view,
+                &mut self.params,
                 can_edit,
                 edit_out,
                 go_to_plate,
@@ -2707,6 +2746,7 @@ fn canvas_header(
     store: &MapOverrides,
     tab: AreaKind,
     view: &mut draw::View,
+    params: &mut LayoutParams,
     can_edit: bool,
     edit_out: &mut Option<EditAction>,
     go_to_plate: &mut Option<String>,
@@ -2760,13 +2800,7 @@ fn canvas_header(
                 });
         }
         ui.separator();
-        if ui.button("Fit").clicked() {
-            shown.needs_fit = true;
-        }
-        ui.toggle_value(&mut view.labels, "Labels")
-            .on_hover_text("Draw room titles (hover still shows them)");
-        ui.toggle_value(&mut view.interiors, "Interiors")
-            .on_hover_text("Draw every interior room as a dot, not only each building's door");
+        view_controls(ui, shown, view, params);
         ui.separator();
         // Editing is refused outright while the store would not
         // load: the file holds hand curation, and saving over it
@@ -3140,6 +3174,29 @@ fn cells_dragged(drag: DragState, camera: Camera, scale: i32) -> Cell {
     }
 }
 
+/// Write the room table beside the store; the note says where, or why not.
+fn write_areas(map: &Map, store: &MapOverrides, store_path: &Path) -> String {
+    let path = store_path.with_extension("areas.tsv");
+    match std::fs::write(&path, crate::room_table::areas_tsv(map, store)) {
+        Ok(()) => format!("Wrote {} rooms to {}", map.rooms().len(), path.display()),
+        Err(error) => format!("Could not write {}: {error}", path.display()),
+    }
+}
+
+/// `--export-areas`: the same export, with no window.
+///
+/// # Errors
+///
+/// When the map will not load or the store will not parse -- the table
+/// would say every room is unassigned, which is worse than nothing.
+pub fn export_areas_headless(path: Option<&Path>) -> Result<String, String> {
+    let map = load_map(path).map_err(|p| p.to_string())?;
+    let store_path = overrides::store_path(path.ok_or("no map path")?);
+    let store =
+        MapOverrides::load(&store_path).map_err(|e| format!("{} {e}", store_path.display()))?;
+    Ok(write_areas(&map, &store, &store_path))
+}
+
 fn load_map(path: Option<&Path>) -> Result<Map, LoadProblem> {
     let Some(path) = path else {
         return Err(LoadProblem::NoPath);
@@ -3153,6 +3210,25 @@ fn load_map(path: Option<&Path>) -> Result<Map, LoadProblem> {
         path: path_str,
         error,
     })
+}
+
+/// Fit, the drawing toggles, and the layout's knobs. A knob re-solves
+/// the shown area when it moves.
+fn view_controls(
+    ui: &mut egui::Ui,
+    shown: &mut Shown,
+    view: &mut draw::View,
+    params: &mut LayoutParams,
+) {
+    if ui.button("Fit").clicked() {
+        shown.needs_fit = true;
+    }
+    ui.toggle_value(&mut view.labels, "Labels")
+        .on_hover_text("Draw room titles (hover still shows them)");
+    ui.toggle_value(&mut view.interiors, "Interiors")
+        .on_hover_text("Draw every interior room as a dot, not only each building's door");
+    ui.separator();
+    ui.add(egui::Slider::new(&mut params.town_scale, 1..=12).text("Town scale"));
 }
 
 #[cfg(test)]
