@@ -43,6 +43,8 @@ const SELECTED_STROKE: Color32 = Color32::from_rgb(250, 250, 250);
 /// because a hundred of them are on screen at once and the sheet still
 /// has to be readable underneath.
 const PICKED_FILL: Color32 = Color32::from_rgb(40, 66, 96);
+/// The Ctrl-drag selection box, translucent so the rooms show through.
+const BOX_FILL: Color32 = Color32::from_rgba_premultiplied(30, 45, 65, 60);
 const HOVER_STROKE: Color32 = Color32::from_rgb(200, 220, 250);
 const GHOST_STROKE: Color32 = Color32::from_rgb(250, 220, 120);
 
@@ -51,14 +53,22 @@ const GHOST_STROKE: Color32 = Color32::from_rgb(250, 220, 120);
 ///
 /// Only the click is reported. Hovering is handled here, as a tooltip, so
 /// the caller never needs to know about it.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Hit {
     /// The room just clicked. `None` on a drag, so panning never changes
     /// the selection.
     pub clicked: Option<RoomId>,
-    /// Whether Ctrl was held on that click: add this room's group to the
-    /// selection rather than inspecting it.
-    pub add_to_selection: bool,
+    /// Ctrl was held on that click: pick this ONE room rather than
+    /// inspecting it.
+    pub ctrl: bool,
+    /// Shift was held on that click: pick the room's whole group.
+    pub shift: bool,
+    /// A Ctrl-drag box just closed: every square inside it, to pick.
+    ///
+    /// Squares only -- rooms in focus. A dot is a room of some other
+    /// building drawn out of focus, and sweeping a box across a street
+    /// should not quietly take the doorway of every shop along it.
+    pub boxed: Vec<RoomId>,
     /// In edit mode: the room a drag just started on, and whether Alt was
     /// held (move one room rather than its whole group).
     pub drag_started: Option<(RoomId, bool)>,
@@ -115,6 +125,7 @@ impl Focus<'_> {
 /// `camera` is borrowed mutably because the same gesture that draws the
 /// frame also moves the view: egui reports the drag on the response the
 /// painter is allocated from, so there is no earlier point to handle it.
+#[allow(clippy::too_many_arguments)] // one call site, each a distinct fact
 pub fn scene(
     ui: &mut egui::Ui,
     scene: &MapScene,
@@ -140,8 +151,19 @@ pub fn scene(
     let canvas = response.rect;
     painter.rect_filled(canvas, 0.0, CANVAS_BG);
 
-    // In edit mode a drag moves rooms, so the view must not pan with it.
-    apply_input(ui, &response, camera, edit_mode);
+    // A drag that STARTS with Ctrl held is a selection box, for the whole
+    // of the drag: where it began is remembered, so letting go of Ctrl
+    // halfway does not turn it into a pan or a move.
+    let box_key = response.id.with("selection_box");
+    if response.drag_started() && ui.input(|i| i.modifiers.command) {
+        let origin = ui.input(|i| i.pointer.press_origin());
+        ui.data_mut(|d| d.insert_temp(box_key, origin));
+    }
+    let box_origin: Option<Pos2> = ui.data(|d| d.get_temp::<Option<Pos2>>(box_key)).flatten();
+
+    // In edit mode a drag moves rooms, and a box drag draws a box; in
+    // neither may the view pan along with it.
+    apply_input(ui, &response, camera, edit_mode || box_origin.is_some());
 
     let hovered = response
         .hover_pos()
@@ -150,10 +172,26 @@ pub fn scene(
     // select whichever one the release happened over.
     let mut hit = Hit {
         clicked: response.clicked().then_some(hovered).flatten(),
-        add_to_selection: ui.input(|i| i.modifiers.command),
+        ctrl: ui.input(|i| i.modifiers.command),
+        shift: ui.input(|i| i.modifiers.shift),
         ..Hit::default()
     };
-    if edit_mode {
+    let box_rect = box_origin.and_then(|origin| {
+        ui.input(|i| i.pointer.latest_pos())
+            .map(|now| Rect::from_two_pos(origin, now))
+    });
+    if box_origin.is_some() && response.drag_stopped() {
+        if let Some(rect) = box_rect {
+            hit.boxed = sheet
+                .rooms
+                .iter()
+                .filter(|r| focus.has(r.id))
+                .filter(|r| rect.contains(camera.to_screen(r.cell, canvas)))
+                .map(|r| r.id)
+                .collect();
+        }
+        ui.data_mut(|d| d.remove::<Option<Pos2>>(box_key));
+    } else if edit_mode && box_origin.is_none() {
         if response.drag_started() {
             hit.drag_started = hovered.map(|id| (id, ui.input(|i| i.modifiers.alt)));
         }
@@ -174,6 +212,15 @@ pub fn scene(
     }
     if let Some((group, room, delta)) = ghost {
         draw_ghost(&painter, sheet, *camera, canvas, group, room, delta);
+    }
+    if let (Some(rect), false) = (box_rect, response.drag_stopped()) {
+        painter.rect(
+            rect,
+            0.0,
+            BOX_FILL,
+            Stroke::new(1.0, HOVER_STROKE),
+            StrokeKind::Inside,
+        );
     }
     if let Some(id) = hovered {
         hover_tooltip(&response, sheet, id);

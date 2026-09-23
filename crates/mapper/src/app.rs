@@ -198,19 +198,24 @@ pub struct MapperApp {
     new_area: String,
     /// Regions whose areas are folded away in the Region tree.
     collapsed: BTreeSet<String>,
-    /// Groups picked out with Ctrl-click, to be assigned together.
+    /// Rooms picked out to be assigned together.
     ///
-    /// **Why groups rather than rooms.** Assigning is nearly always done
-    /// a group at a time -- a building, a run of street -- and a map has
-    /// over a hundred two- and three-room groups that each want putting
-    /// somewhere. Ctrl-clicking one room of each and assigning once is
-    /// the difference between a minute and an afternoon.
+    /// **Rooms, not groups.** It was groups first, and that was wrong: a
+    /// "group" is the solver's connected component, which on a town sheet
+    /// is every outdoor room drawn -- 246 of them on Mist Harbor. Picking
+    /// fifteen of those was impossible; Ctrl-click took all 246 or none.
+    /// So the unit is the room, and three gestures pick different amounts:
     ///
-    /// Held as group indices of the shown area, and cleared when the
-    /// shown area changes: an index means nothing against another
-    /// layout, and a selection that survived would assign the wrong
-    /// rooms silently.
-    selected_groups: BTreeSet<usize>,
+    ///   Ctrl-click   one room
+    ///   Shift-click  the room's whole group -- right for the hundred-odd
+    ///                two- and three-room groups that each want putting
+    ///                somewhere
+    ///   Ctrl-drag    every square inside the box
+    ///
+    /// Kept to the rooms of the shown sheet: a new area empties it, and a
+    /// room an edit takes off this sheet (a plate move) drops out, so
+    /// nothing off screen is assigned by a panel describing what is on it.
+    picked_rooms: BTreeSet<RoomId>,
     /// A room to inspect once its area is on screen, from a room-number
     /// search. Applied after `show_selected`, which clears the selection.
     pending_inspect: Option<RoomId>,
@@ -320,7 +325,7 @@ impl MapperApp {
             new_plate: String::new(),
             new_area: String::new(),
             collapsed,
-            selected_groups: BTreeSet::new(),
+            picked_rooms: BTreeSet::new(),
             pending_inspect: None,
             trail: Vec::new(),
             export_note: None,
@@ -908,6 +913,10 @@ impl MapperApp {
             // area just left would be worse than no button.
             self.inspected = None;
             self.trail.clear();
+            // Nor does a picked set: a region and an official area share
+            // rooms, and a selection made on one would otherwise follow
+            // into the other half-visible.
+            self.picked_rooms.clear();
         } else if self
             .inspected
             .is_some_and(|id| scene.room(id).is_none() && subset.room(id).is_none())
@@ -920,10 +929,9 @@ impl MapperApp {
             // the case the trail exists for.
             self.inspected = self.trail.pop();
         }
-        // A selection is group indices of the layout being replaced, and
-        // an index means nothing against the next one. Keeping it would
-        // assign whichever rooms happened to land on those numbers.
-        self.selected_groups.clear();
+        // The picked rooms survive a re-solve of the same area -- ids do
+        // not move -- but not onto a sheet that does not draw them.
+        self.picked_rooms.retain(|&id| scene.room(id).is_some());
         self.shown = Some(Shown {
             name,
             focus,
@@ -954,58 +962,97 @@ impl MapperApp {
         self.inspected = (self.inspected != Some(id)).then_some(id);
     }
 
-    /// The selection as the panel needs it: how many groups, how many
-    /// rooms, and every key to assign.
-    fn picked(&self) -> (usize, usize, Vec<RoomKey>) {
-        let keys = self
-            .map
-            .as_ref()
-            .ok()
-            .map(|w| self.selected_keys(w))
-            .unwrap_or_default();
-        (self.selected_groups.len(), self.selected_rooms(), keys)
+    /// The selection as the panel needs it: how many rooms, and every key
+    /// to assign.
+    fn picked(&self) -> (usize, Vec<RoomKey>) {
+        let keys: Vec<RoomKey> = self.map.as_ref().ok().map_or_else(Vec::new, |whole| {
+            let mut keys: Vec<RoomKey> = self
+                .picked_rooms
+                .iter()
+                .map(|&id| RoomKey::of(id, whole))
+                .collect();
+            keys.sort_unstable();
+            keys.dedup();
+            keys
+        });
+        (self.picked_rooms.len(), keys)
     }
 
-    /// Ctrl-click: put this room's group in the selection, or take it
-    /// out if it is already there.
-    ///
-    /// Toggling rather than adding, because the mistake a person makes
-    /// while picking a hundred groups is clicking one twice, and having
-    /// to start again would be worse than the tedium it replaces.
-    fn toggle_selected(&mut self, id: RoomId) {
-        let Some(shown) = &self.shown else { return };
-        let Some(group) = shown.scene.room(id).map(|room| room.group) else {
-            return;
-        };
-        if !self.selected_groups.remove(&group) {
-            self.selected_groups.insert(group);
+    /// What a click or a box on the canvas does: inspect, or pick.
+    fn pointer(&mut self, hit: &draw::Hit) {
+        if let Some(id) = hit.clicked {
+            if hit.shift {
+                self.toggle_group(id);
+            } else if hit.ctrl {
+                self.toggle_room(id);
+            } else {
+                self.clicked(id);
+            }
+        }
+        // A box ADDS: sweeping a second box over part of the first should
+        // grow the selection, not punch holes in it. Ctrl-click is there
+        // for taking single rooms back out.
+        if let Some(&first) = hit.boxed.first() {
+            self.seed_with_inspected(first);
+            self.picked_rooms.extend(hit.boxed.iter().copied());
         }
     }
 
-    /// Every room key in the selected groups, for an assignment.
-    fn selected_keys(&self, whole: &Map) -> Vec<RoomKey> {
-        let Some(shown) = &self.shown else {
-            return Vec::new();
-        };
-        let mut keys: Vec<RoomKey> = self
-            .selected_groups
-            .iter()
-            .filter_map(|&g| shown.layout.groups.get(g))
-            .flat_map(|g| g.room_ids.iter().map(|&id| RoomKey::of(id, whole)))
-            .collect();
-        keys.sort_unstable();
-        keys.dedup();
-        keys
+    /// The room already clicked joins a selection being started.
+    ///
+    /// Click one room, Ctrl-click a second: two rooms are picked, which is
+    /// what everyone expects of Ctrl-click and what the first version did
+    /// not do -- the plain click inspected a room and the Ctrl-click then
+    /// started a selection without it.
+    fn seed_with_inspected(&mut self, clicked: RoomId) {
+        if self.picked_rooms.is_empty()
+            && let Some(first) = self.inspected
+            && first != clicked
+            && self
+                .shown
+                .as_ref()
+                .is_some_and(|s| s.scene.room(first).is_some())
+        {
+            self.picked_rooms.insert(first);
+        }
     }
 
-    /// How many rooms the selection covers, for the label.
-    fn selected_rooms(&self) -> usize {
-        let Some(shown) = &self.shown else { return 0 };
-        self.selected_groups
-            .iter()
-            .filter_map(|&g| shown.layout.groups.get(g))
-            .map(|g| g.room_ids.len())
-            .sum()
+    /// Ctrl-click: pick this one room, or unpick it.
+    ///
+    /// Toggling rather than adding, because the mistake someone makes
+    /// while picking fifteen rooms is clicking one twice, and having to
+    /// start again would be worse than the tedium it replaces.
+    fn toggle_room(&mut self, id: RoomId) {
+        self.seed_with_inspected(id);
+        if !self.picked_rooms.remove(&id) {
+            self.picked_rooms.insert(id);
+        }
+    }
+
+    /// Shift-click: pick the room's whole group, or unpick it if every
+    /// room of it is already picked.
+    ///
+    /// For the hundred-odd two- and three-room groups -- a shop, a back
+    /// room -- that each want putting somewhere. Not for a town's street
+    /// group, which is the whole sheet; that is what the box is for.
+    fn toggle_group(&mut self, id: RoomId) {
+        let Some(shown) = &self.shown else { return };
+        let Some(members) = shown
+            .scene
+            .room(id)
+            .and_then(|room| shown.layout.groups.get(room.group))
+            .map(|g| g.room_ids.clone())
+        else {
+            return;
+        };
+        self.seed_with_inspected(id);
+        if members.iter().all(|m| self.picked_rooms.contains(m)) {
+            for m in &members {
+                self.picked_rooms.remove(m);
+            }
+        } else {
+            self.picked_rooms.extend(members);
+        }
     }
 
     /// Track a drag across frames and turn a finished one into an edit.
@@ -1167,7 +1214,7 @@ impl MapperApp {
 
     /// The inspector when there is a selection but no inspected room.
     fn selection_only_panel(&mut self, ui: &mut egui::Ui, can_edit: bool) -> Option<EditAction> {
-        let (picked_groups, picked_rooms, picked_keys) = self.picked();
+        let (picked_rooms, picked_keys) = self.picked();
         let mut edit = None;
         let mut clear_selection = false;
         let whole = self.map.as_ref().ok()?;
@@ -1185,7 +1232,6 @@ impl MapperApp {
                 ui,
                 store,
                 &Picked {
-                    groups: picked_groups,
                     rooms: picked_rooms,
                     keys: &picked_keys,
                 },
@@ -1198,7 +1244,7 @@ impl MapperApp {
             }
         });
         if clear_selection || edit.is_some() {
-            self.selected_groups.clear();
+            self.picked_rooms.clear();
         }
         edit
     }
@@ -1207,10 +1253,10 @@ impl MapperApp {
     /// the canvas whatever space is left.
     fn inspector_panel(&mut self, ui: &mut egui::Ui, can_edit: bool) -> Option<EditAction> {
         // A selection with nothing inspected still needs somewhere to
-        // act. Picking ten groups and finding no panel -- because the
+        // act. Picking fifteen rooms and finding no panel -- because the
         // last click was a Ctrl-click, which selects rather than
         // inspects -- is the state this avoids.
-        if self.inspected.is_none() && !self.selected_groups.is_empty() {
+        if self.inspected.is_none() && !self.picked_rooms.is_empty() {
             return self.selection_only_panel(ui, can_edit);
         }
         let (Some(shown), Some(id)) = (&self.shown, self.inspected) else {
@@ -1219,7 +1265,7 @@ impl MapperApp {
         // Gathered before the mutable borrows below: the panel closure
         // holds `&mut self.new_area`, so nothing can call a `&self`
         // method after that point.
-        let (picked_groups, picked_rooms, picked_keys) = self.picked();
+        let (picked_rooms, picked_keys) = self.picked();
         let mut clear_selection = false;
 
         let mut edit = None;
@@ -1297,14 +1343,13 @@ impl MapperApp {
             if !edit_mode {
                 return;
             }
-            // The selection acts on many groups at once, so it comes
+            // The selection acts on many rooms at once, so it comes
             // before the controls for the one room being inspected.
             if let Some(whole) = whole
                 && let Some(action) = selection_panel(
                     ui,
                     store,
                     &Picked {
-                        groups: picked_groups,
                         rooms: picked_rooms,
                         keys: &picked_keys,
                     },
@@ -1355,7 +1400,7 @@ impl MapperApp {
             self.inspected = self.trail.pop();
         }
         // An assignment consumes the selection -- leaving it picked
-        // invites assigning the same hundred groups twice -- but only
+        // invites assigning the same rooms twice -- but only
         // one made FROM the selection. Unpinning a room or fixing an
         // edge is unrelated and must not throw the picking away.
         let acted_on_selection = !picked_keys.is_empty()
@@ -1370,7 +1415,7 @@ impl MapperApp {
                 _ => false,
             };
         if clear_selection || acted_on_selection {
-            self.selected_groups.clear();
+            self.picked_rooms.clear();
         }
         edit
     }
@@ -1802,21 +1847,19 @@ fn visiting_membership(
     edit
 }
 
-/// What the Ctrl-click selection covers.
+/// What the selection covers.
 #[derive(Clone, Copy)]
 struct Picked<'a> {
-    groups: usize,
     rooms: usize,
     keys: &'a [RoomKey],
 }
 
-/// The multi-group selection: what is picked, and what to do with it.
+/// The selection: what is picked, and what to do with it.
 ///
-/// **Why this exists.** Assigning went from a room at a time to a group
-/// at a time, which was the right unit -- a building, a run of street --
-/// and still far too slow. A map has well over a hundred two- and
-/// three-room groups that each need putting on some map, and doing them
-/// one at a time is an afternoon. Ctrl-click each, assign once.
+/// **Why this exists.** The per-room controls offer "- room" and
+/// "- group", and on a town sheet the group is the whole outdoor
+/// component -- 246 rooms on Mist Harbor -- so there was nothing between
+/// one room and all of them. Pick exactly the rooms meant, act once.
 ///
 /// Shown only when something is picked, so the ordinary inspector is
 /// unchanged for anyone not doing a bulk pass.
@@ -1829,18 +1872,14 @@ fn selection_panel(
     new_plate: &mut String,
     clear: &mut bool,
 ) -> Option<EditAction> {
-    let Picked {
-        groups,
-        rooms,
-        keys,
-    } = *picked;
-    if groups == 0 {
+    let Picked { rooms, keys } = *picked;
+    if rooms == 0 {
         return None;
     }
     let mut edit = None;
     ui.separator();
-    ui.strong(format!("Selected: {groups} group(s), {rooms} room(s)"));
-    ui.weak("Ctrl-click a room to add or remove its group");
+    ui.strong(format!("Selected: {rooms} room(s)"));
+    ui.weak("Ctrl-click: a room.  Shift-click: its group.  Ctrl-drag: a box.");
     if ui.button("Clear selection").clicked() {
         *clear = true;
     }
@@ -2343,7 +2382,49 @@ fn edges_editor(
     let saved = store.location(&shown.store_key);
 
     ui.add_space(8.0);
-    ui.strong("Edges");
+    // Collapsed past the same length as the exit list, for the same
+    // reason: an Elemental Confluence room has sixty-odd edges, and
+    // listing them inline put the Area and Plate controls out of reach.
+    // The header says how many carry a correction, so collapsing it
+    // cannot hide that anything was changed.
+    let editable = facts.exits.iter().filter(|e| e.to_title.is_some()).count();
+    if editable > EXITS_BEFORE_COLLAPSING {
+        let corrected = facts
+            .exits
+            .iter()
+            .filter(|e| e.to_title.is_some())
+            .filter(|e| {
+                saved.is_some_and(|l| {
+                    l.edge_action(here, RoomKey::of(e.to, &shown.subset))
+                        .is_some()
+                })
+            })
+            .count();
+        let title = if corrected > 0 {
+            format!("Edges ({editable}, {corrected} corrected)")
+        } else {
+            format!("Edges ({editable})")
+        };
+        egui::CollapsingHeader::new(title)
+            .id_salt("edges_collapsed")
+            .default_open(false)
+            .show(ui, |ui| edge_rows(ui, shown, facts, here, saved, &mut edit));
+    } else {
+        ui.strong("Edges");
+        edge_rows(ui, shown, facts, here, saved, &mut edit);
+    }
+    edit
+}
+
+/// One row per editable edge: the command, and the correction combo.
+fn edge_rows(
+    ui: &mut egui::Ui,
+    shown: &Shown,
+    facts: &RoomFacts,
+    here: RoomKey,
+    saved: Option<&crate::overrides::LocationOverrides>,
+    edit: &mut Option<EditAction>,
+) {
     for exit in &facts.exits {
         // An exit leading out of this area cannot be corrected here: the
         // solver never saw the far room, so constraining it would mean
@@ -2364,7 +2445,7 @@ fn edges_editor(
                             .selectable_label(current == action, edge_label(action))
                             .clicked()
                         {
-                            edit = Some(EditAction::SetEdge {
+                            *edit = Some(EditAction::SetEdge {
                                 a: here,
                                 b: there,
                                 action,
@@ -2381,7 +2462,6 @@ fn edges_editor(
         });
         ui.small(format!("   -> {title}"));
     }
-    edit
 }
 
 /// The editing half of the inspector: which plate this room is on, and the
@@ -2590,12 +2670,7 @@ impl eframe::App for MapperApp {
                 streets: shown.focus.streets(),
                 doors: shown.focus.doors(),
             };
-            let picked: HashSet<RoomId> = self
-                .selected_groups
-                .iter()
-                .filter_map(|&g| shown.layout.groups.get(g))
-                .flat_map(|g| g.room_ids.iter().copied())
-                .collect();
+            let picked: HashSet<RoomId> = self.picked_rooms.iter().copied().collect();
             let hit = draw::scene(
                 ui,
                 &shown.scene,
@@ -2606,13 +2681,7 @@ impl eframe::App for MapperApp {
                 self.view,
                 ghost,
             );
-            if let Some(id) = hit.clicked {
-                if hit.add_to_selection {
-                    self.toggle_selected(id);
-                } else {
-                    self.clicked(id);
-                }
-            }
+            self.pointer(&hit);
             if edit_out.is_none() {
                 *edit_out = self.handle_drag(&hit);
             }
@@ -2707,7 +2776,7 @@ fn canvas_header(
                 .on_hover_text("Drag a group to move it; hold Alt for one room");
         });
         if view.edit_mode {
-            ui.label("drag a group (Alt: one room)");
+            ui.label("drag a group (Alt: one room) · pick: Ctrl-click, Shift-click, Ctrl-drag");
             // Deleting is offered only where the plate itself is
             // on screen, so it cannot be hit while looking at a
             // town that merely lost rooms to one.
