@@ -372,6 +372,32 @@ fn a_region_is_only_written_where_a_uid_matched() {
             "room {} has a region but no uid",
             room.id.0
         );
+        // A plane carries a name no uid gives it, because its uids give
+        // NINE different ones -- see `[[plane]]` in regions.toml. The
+        // check for those is that they are a plane at all.
+        if let Some(plane) = curation
+            .regions
+            .planes
+            .iter()
+            .find(|p| p.region == name)
+        {
+            assert!(
+                room.title.iter().any(|t| t.contains(&plane.title)),
+                "room {} carries plane region {name:?} without its title",
+                room.id.0
+            );
+            let regions: std::collections::BTreeSet<&str> = room
+                .uid
+                .iter()
+                .filter_map(|u| region_of.get(&u.0).copied())
+                .collect();
+            assert!(
+                regions.len() > 1,
+                "room {} is named a plane but its uids agree on {regions:?}",
+                room.id.0
+            );
+            continue;
+        }
         let agrees = room
             .uid
             .iter()
@@ -383,6 +409,62 @@ fn a_region_is_only_written_where_a_uid_matched() {
         );
     }
     assert!(tagged > 20_000, "expected the bulk of the map, got {tagged}");
+}
+
+/// A room whose uids land in several regions is not any of them.
+///
+/// The Elemental Confluence is nine instances of 63 rooms, one per town,
+/// and our 53 rooms each carry all nine numbers. Taking the first drew a
+/// plane inside Wehnimer's Landing, below the town square, with 477
+/// scripted exits fanning out to every other town.
+#[test]
+fn a_room_in_nine_regions_is_named_for_itself() {
+    let Some((_, map)) = real_map() else {
+        eprintln!("skipping: gs.map not present");
+        return;
+    };
+    let Ok(curation) = Curation::load(&curation_dir()) else {
+        eprintln!("skipping: curation/ not readable");
+        return;
+    };
+    let mut region_of: std::collections::BTreeMap<i64, &str> = std::collections::BTreeMap::new();
+    for region in &curation.regions.regions {
+        for uid in &region.uids {
+            region_of.insert(*uid, region.name.as_str());
+        }
+    }
+    let rooms = apply(map.rooms(), &plan(&map, &curation));
+    let mut planes = 0usize;
+    for room in &rooms {
+        let regions: std::collections::BTreeSet<&str> = room
+            .uid
+            .iter()
+            .filter_map(|u| region_of.get(&u.0).copied())
+            .collect();
+        if regions.len() < 2 {
+            continue;
+        }
+        planes += 1;
+        let carried: Vec<&String> = room
+            .meta
+            .iter()
+            .filter(|m| m.starts_with("region:"))
+            .collect();
+        assert_eq!(
+            carried.len(),
+            1,
+            "room {} carries {carried:?}; a room has one region or none",
+            room.id.0
+        );
+        let name = carried[0].strip_prefix("region:").unwrap_or_default();
+        assert!(
+            !regions.contains(name),
+            "room {} took {name:?} from one of its {} instances",
+            room.id.0,
+            regions.len()
+        );
+    }
+    assert!(planes > 0, "no multi-region room found; the case is untested");
 }
 
 /// A room the mapdb never listed keeps no region at all.

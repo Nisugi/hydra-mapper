@@ -317,6 +317,27 @@ pub struct Curation {
 pub struct RegionFile {
     #[serde(default, rename = "region")]
     pub regions: Vec<Region>,
+    /// Places that exist once in our map and many times in theirs.
+    #[serde(default, rename = "plane")]
+    pub planes: Vec<Plane>,
+}
+
+/// A place the game instances per town, which we hold one copy of.
+///
+/// The Elemental Confluence is nine instances of 63 rooms, one hanging
+/// off each town, and the mapdb labels each with that town's name. We
+/// merged them: all 53 of our rooms carry all nine uids. So no town's
+/// name is more true than the others', and taking the first would have
+/// drawn a plane inside Wehnimer's Landing -- which it did, until
+/// someone looked at the map and saw it under the town square.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Plane {
+    /// Matched against the room title.
+    pub title: String,
+    /// The region to write instead.
+    pub region: String,
+    #[serde(default)]
+    pub note: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

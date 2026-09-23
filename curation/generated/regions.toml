@@ -3669,3 +3669,29 @@ uids = [
   13150418, 13150419, 13150420, 13150421, 13150422, 13150423, 13150424, 13150425,
 ]
 
+
+# --------------------------------------------------------------- planes
+# HAND-WRITTEN, unlike everything above. Kept in this file because it is
+# meaningless without the uid table it corrects.
+#
+# A room the game numbers once belongs where that number says. A room it
+# numbers NINE times, once per town, is a plane those towns open onto.
+#
+# The Elemental Confluence is nine instances of 63 rooms -- 580xxx
+# through 588xxx, labelled Wehnimer's Landing, Ta'Illistim, Ta'Vaalor,
+# Teras, Solhaven, River's Rest, Zul Logoth, Icemule Trace and Mist
+# Harbor. We hold ONE merged copy of 53 rooms carrying all nine numbers,
+# so no town's name is more true than the others'.
+#
+# Without this the first uid won and the Confluence was drawn inside
+# Wehnimer's Landing, sitting below the town square with 477 scripted
+# exits fanning out to every other town.
+
+[[plane]]
+title = "Elemental Confluence"
+region = "the Elemental Confluence"
+note = """Reached by a wandering portal, not from anywhere. The wiki is explicit: "There is no way to map the Elemental Confluence because the elemental planes are constantly shifting against each other."
+
+Every one of its 3,234 exits is scripted; not one is a plain command. It is a hub wearing a place's clothes, and naming it after itself at least stops it claiming to be a town.
+
+We hold 53 rooms of the 63 in each instance. The other ten are a separate 580901-580910 block with NO exits at all -- the spawn rooms the portal drops you into. Unreachable from inside by design, which is why they were never mapped and why they are not missing."""

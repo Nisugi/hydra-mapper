@@ -115,10 +115,43 @@ fn tag_regions(plan: &mut Plan, rooms: &[Room], curation: &Curation) {
         }
     }
     for room in rooms {
-        let Some(name) = room.uid.iter().find_map(|u| region_of.get(&u.0).copied()) else {
-            continue;
+        // A room the game numbers once belongs where that number says.
+        // A room it numbers NINE times, once per town, is a plane the
+        // towns each open onto -- and `find_map` would take whichever
+        // instance happened to be listed first.
+        let mut found: BTreeSet<&str> = BTreeSet::new();
+        for uid in &room.uid {
+            if let Some(name) = region_of.get(&uid.0) {
+                found.insert(name);
+            }
+        }
+        let name = match found.len() {
+            0 => continue,
+            1 => (*found.iter().next().unwrap_or(&"")).to_owned(),
+            // Named for itself. It is one place in our map and nine in
+            // theirs, so no town's name is more true than the others'.
+            _ => curation
+                .regions
+                .planes
+                .iter()
+                .find(|p| room.title.iter().any(|t| t.contains(&p.title)))
+                .map_or_else(String::new, |p| p.region.clone()),
         };
+        if name.is_empty() {
+            continue;
+        }
         let meta = format!("region:{name}");
+        // A plane's region changed once the plane rule existed, so the
+        // stale one has to go: `AddMeta` alone would leave a room
+        // claiming two regions.
+        for old in room.meta.iter().filter(|m| m.starts_with("region:")) {
+            if *old != meta {
+                plan.changes.push(Change::DropMeta {
+                    id: room.id.0,
+                    meta: old.clone(),
+                });
+            }
+        }
         if room.meta.iter().any(|m| *m == meta) {
             continue;
         }
