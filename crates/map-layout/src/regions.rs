@@ -68,7 +68,11 @@ pub const TINY_ROOMS: usize = 6;
 /// [`Crossing::PassThrough`] to a hideout as well, which
 /// [`is_passage`] already declines to follow. The room stays; the
 /// teleport does not.
-pub const VIRTUAL_ROOM_TAG: &str = "urchin-hideout";
+/// Spelled in `meta`, not `tags`. The disposition migration moved this
+/// one too, and it went unnoticed for the same reason `gone` did: the
+/// test kept compiling and kept matching nothing, so all 16 hideouts
+/// were being drawn.
+pub const VIRTUAL_ROOM_META: &str = "map:virtual room";
 
 /// The `meta` key on a room that has been taken out of the game.
 ///
@@ -100,8 +104,7 @@ pub const REMOVED_ROOM_META: &str = "map:status:gone";
 /// clothes, and not something the game no longer has.
 #[must_use]
 pub fn is_real_room(room: &Room) -> bool {
-    !room.tags.iter().any(|t| t == VIRTUAL_ROOM_TAG)
-        && !room.meta.iter().any(|m| m == REMOVED_ROOM_META)
+    !room.meta.iter().any(|m| m == VIRTUAL_ROOM_META || m == REMOVED_ROOM_META)
 }
 
 /// Whether anything at all connects a room to the rest of the map: an
@@ -210,6 +213,31 @@ pub fn region_of(location: &str) -> &str {
     }
 }
 
+/// The region a room belongs to: the official answer if there is one,
+/// otherwise the one read out of `location`.
+///
+/// `meta:region:` is Simutronics' own grouping, lifted from their room
+/// database and applied by `retag`. It is preferred because [`region_of`]
+/// is inference and this is not, and because the two disagree at a scale
+/// that matters: `derive_areas` made Wehnimer's Landing 3,050 rooms
+/// across 17 locations, fusing Talador into it across an unlabelled
+/// corridor. The official field says 1,413.
+///
+/// The fallback is not a formality. 14,623 rooms -- 40% of the map --
+/// have no uid the mapdb lists, so they have no official region and
+/// `location` remains the only thing that speaks for them. Those are
+/// mostly newer content and player shops, not junk.
+///
+/// Both are labels, not partitions: the grouping is still read off the
+/// graph by [`units`] and [`derive_areas`], and this only says which
+/// pieces are allowed to be the same place.
+fn region_name(room: &Room) -> Option<String> {
+    room.meta
+        .iter()
+        .find_map(|m| m.strip_prefix("region:").map(str::to_owned))
+        .or_else(|| room.location.as_deref().map(|l| region_of(l).to_owned()))
+}
+
 /// Every area the map's rooms fall into, largest first.
 #[must_use]
 pub fn derive_areas(map: &Map) -> Vec<DerivedArea> {
@@ -240,12 +268,7 @@ pub fn derive_areas(map: &Map) -> Vec<DerivedArea> {
     let unit_sense: Vec<Sense> = members.iter().map(|m| majority(m, &sense)).collect();
     let unit_region: Vec<Option<String>> = members
         .iter()
-        .map(|m| {
-            rooms[m[0]]
-                .location
-                .as_deref()
-                .map(|l| region_of(l).to_owned())
-        })
+        .map(|m| region_name(&rooms[m[0]]))
         .collect();
 
     let mut parent: Vec<usize> = (0..unit_count).collect();
@@ -433,10 +456,11 @@ pub const HUB_REGIONS: usize = 3;
 /// (see [`HUB_REGIONS`]).
 fn adjacency(rooms: &[Room]) -> Vec<Vec<usize>> {
     let index: HashMap<RoomId, usize> = rooms.iter().enumerate().map(|(i, r)| (r.id, i)).collect();
-    let region: Vec<Option<&str>> = rooms
-        .iter()
-        .map(|r| r.location.as_deref().map(region_of))
-        .collect();
+    // The SAME source `unit_region` uses. Two different answers to "what
+    // region is this room in" would let adjacency merge across a boundary
+    // the units then refuse to share, which is a fused town.
+    let owned: Vec<Option<String>> = rooms.iter().map(region_name).collect();
+    let region: Vec<Option<&str>> = owned.iter().map(Option::as_deref).collect();
     let passage = |exit: &cena_map::Exit| is_passage(exit);
     let is_hub: Vec<bool> = rooms
         .iter()
@@ -641,13 +665,6 @@ mod tests {
     const OUT: &str = "Obvious paths: north";
     const IN: &str = "Obvious exits: out";
 
-    fn tagged(id: u32, title: &str, location: Option<&str>, tag: &str, to: &[u32]) -> Room {
-        Room {
-            tags: vec![tag.to_owned()],
-            ..room(id, title, location, IN, to)
-        }
-    }
-
     /// A room carrying a `meta` key. Disposition lives in `meta`, not
     /// `tags` -- a fixture that spells it as a tag tests a map that no
     /// longer exists, which is exactly how 2,559 removed rooms went on
@@ -824,11 +841,11 @@ mod tests {
             // The hideout: back to its street, and on to the others'.
             let mut to: Vec<u32> = vec![base];
             to.extend((1..=4u32).map(|o| o * 100 + 50).filter(|&h| h != base + 50));
-            rooms.push(tagged(
+            rooms.push(with_meta(
                 base + 50,
                 &format!("[{town} - Urchin Hideout]"),
                 Some(town),
-                VIRTUAL_ROOM_TAG,
+                VIRTUAL_ROOM_META,
                 &to,
             ));
         }
