@@ -406,18 +406,31 @@ pub fn pack_interior_shelf(
 
     // The town frame goes where it is: its cells are the outdoor sheet's
     // own, scaled, and moving it would break the one picture. Everything
-    // else shelves in rows below it.
-    let mut below = 0;
+    // else shelves in rows below it -- and below the streets themselves,
+    // which are there whether or not a building hangs off them. (Reading
+    // only the town frame put the rows at the origin, on top of the
+    // streets, in an area where no building opens onto a street.)
+    // `GROUP_PADDING` empty rows between: the last occupied row is
+    // inclusive.
+    let mut below = outdoor
+        .iter()
+        .flat_map(|&o| {
+            let g = &groups[o];
+            g.room_ids
+                .iter()
+                .map(move |&id| g.final_cell(id).y * TOWN_SCALE)
+        })
+        .max()
+        .map_or(0, |y| y + 1 + GROUP_PADDING);
     items.retain(|item| {
-        let Some((min, max)) = item.town else {
+        let Some((_, max)) = item.town else {
             return true;
         };
         for (idx, cell) in &item.local {
             groups[*idx].base_offset = Some(*cell);
             groups[*idx].packing = Some(PackMethod::InteriorShelf);
         }
-        below = below.max(max.y + GROUP_PADDING);
-        let _ = min;
+        below = below.max(max.y + 1 + GROUP_PADDING);
         false
     });
 
@@ -631,11 +644,11 @@ fn merge_cluster_members(
             groups[idx].positions[&room]
         }
     };
-    let width_of = |idx: usize| {
+    let min_x_of = |idx: usize| {
         if anchor_at(idx).is_some() {
-            1
+            0
         } else {
-            groups[idx].bounds().width()
+            groups[idx].bounds().min_x
         }
     };
     let free_for = |idx: usize, proposed: Cell, occupied: &HashSet<Cell>| {
@@ -677,22 +690,61 @@ fn merge_cluster_members(
             continue;
         };
 
-        let edge = *placed_edges
+        // The door with the nearest uids is the one this building is
+        // entered by (the reference's rule). Between doors the uids cannot
+        // tell apart -- no uids at all, most often -- the one whose landing
+        // stretches the building's other placed doors least; then room
+        // ids. Never list order: the lists come from a hash map, and a shop
+        // entered from two street rooms hung beside either one, run to run.
+        let nearest = placed_edges
             .iter()
-            .min_by_key(|e| e.uid_delta)
+            .map(|e| e.uid_delta)
+            .min()
             .unwrap_or_else(|| unreachable!("placed_edges is non-empty"));
-        let neighbor_room = room_at(edge.other_group, edge.other_room_id, local);
-        let internal = internal_of(idx, edge.room_id);
-        // Land the passage endpoints as close together as the frame
-        // allows.
-        let proposed = Cell {
-            x: neighbor_room.x - internal.x,
-            y: neighbor_room.y - internal.y,
+        let land = |edge: &Edge, occupied: &HashSet<Cell>| -> Cell {
+            let neighbor_room = room_at(edge.other_group, edge.other_room_id, local);
+            let internal = internal_of(idx, edge.room_id);
+            // Land the passage endpoints as close together as the frame
+            // allows.
+            let proposed = Cell {
+                x: neighbor_room.x - internal.x,
+                y: neighbor_room.y - internal.y,
+            };
+            // Nothing free near: past everything placed so far, at the
+            // passage's height -- stretched, but on cells of its own. (It
+            // was one width to the right, unchecked, and landed on street
+            // rooms in a dense grid.)
+            free_for(idx, proposed, occupied).unwrap_or_else(|| {
+                let max_x = occupied.iter().map(|c| c.x).max().unwrap_or(0);
+                Cell {
+                    x: max_x + 2 - min_x_of(idx),
+                    y: proposed.y,
+                }
+            })
         };
-        let off = free_for(idx, proposed, &occupied).unwrap_or(Cell {
-            x: proposed.x + width_of(edge.other_group) + 1,
-            y: proposed.y,
-        });
+        let stretch = |off: Cell| -> i32 {
+            placed_edges
+                .iter()
+                .map(|e| {
+                    let there = room_at(e.other_group, e.other_room_id, local);
+                    let here = internal_of(idx, e.room_id);
+                    (here.x + off.x - there.x)
+                        .abs()
+                        .max((here.y + off.y - there.y).abs())
+                })
+                .sum()
+        };
+        let mut tied: Vec<&Edge> = placed_edges
+            .iter()
+            .filter(|e| e.uid_delta == nearest)
+            .collect();
+        tied.sort_by_key(|e| (e.other_room_id, e.room_id));
+        tied.dedup_by_key(|e| (e.other_room_id, e.room_id));
+        let off = tied
+            .iter()
+            .map(|e| land(e, &occupied))
+            .min_by_key(|&off| stretch(off))
+            .unwrap_or_else(|| unreachable!("placed_edges is non-empty"));
         local.insert(idx, off);
         place(idx, off, &mut occupied);
     }
@@ -1118,6 +1170,110 @@ mod tests {
                 "hall room {} sits {} rows off the street",
                 500 + i,
                 (c.y - first.y).abs()
+            );
+        }
+    }
+
+    const OUT: &str = "Obvious paths: east, west";
+    const IN: &str = "Obvious exits: out";
+
+    /// Every room on a cell of its own, on the one sheet.
+    fn assert_one_room_per_cell(map: &Map) {
+        let layout = generate_layout(map);
+        let scene = crate::build_scene("Test", &layout, map);
+        let mut cells: Vec<Cell> = scene.sheet.rooms.iter().map(|r| r.cell).collect();
+        cells.sort_unstable_by_key(|c| (c.x, c.y));
+        let before = cells.len();
+        cells.dedup();
+        assert_eq!(cells.len(), before, "two rooms share a cell");
+    }
+
+    /// A building whose door leads out of the selection has no street to
+    /// hang beside, so it shelves in the rows below the town -- below the
+    /// streets, not at the origin on top of them. ("A Hide and Leather
+    /// Tent": its interior and a street room were both drawn at (0,0).)
+    #[test]
+    fn a_building_with_no_street_shelves_below_the_streets() {
+        let mut rooms = Vec::new();
+        for i in 0..5u32 {
+            let mut exits = Vec::new();
+            if i > 0 {
+                exits.push(exit(i - 1, "west"));
+            }
+            if i < 4 {
+                exits.push(exit(i + 1, "east"));
+            }
+            rooms.push(room(i, "[Street]", OUT, exits));
+        }
+        // Its only door is to room 999, which is not in the selection.
+        rooms.push(room(
+            100,
+            "[Tent]",
+            IN,
+            vec![door(999, "flap"), exit(101, "north")],
+        ));
+        rooms.push(room(
+            101,
+            "[Tent]",
+            IN,
+            vec![exit(100, "south"), exit(102, "north")],
+        ));
+        rooms.push(room(102, "[Tent]", IN, vec![exit(101, "south")]));
+        let map = Map::from_rooms(rooms).expect("no duplicate ids");
+        assert_one_room_per_cell(&map);
+
+        let layout = generate_layout(&map);
+        let street_bottom = (0..5u32)
+            .map(|i| {
+                let g = layout
+                    .groups
+                    .iter()
+                    .find(|g| g.room_ids.contains(&RoomId(i)));
+                g.expect("placed").final_cell(RoomId(i)).y * TOWN_SCALE
+            })
+            .max()
+            .expect("five streets");
+        for id in 100..=102u32 {
+            let g = layout
+                .groups
+                .iter()
+                .find(|g| g.room_ids.contains(&RoomId(id)));
+            let y = g.expect("placed").final_cell(RoomId(id)).y;
+            assert!(
+                y > street_bottom,
+                "tent room {id} at y={y} is not below the street"
+            );
+        }
+    }
+
+    /// A shop entered from two street rooms, with no uids to say which is
+    /// its front door, hangs beside the same one every time. Its door
+    /// edges came out of a hash map, and the first of a tie won: 105 of
+    /// 200 runs put it by one street room and 95 by the other.
+    #[test]
+    fn a_shop_with_two_street_doors_hangs_in_the_same_place_every_run() {
+        let mut rooms = Vec::new();
+        for i in 0..8u32 {
+            let mut exits = Vec::new();
+            if i > 0 {
+                exits.push(exit(i - 1, "west"));
+            }
+            if i < 7 {
+                exits.push(exit(i + 1, "east"));
+            }
+            if i == 1 || i == 6 {
+                exits.push(door(100, "shop"));
+            }
+            rooms.push(room(i, "[Street]", OUT, exits));
+        }
+        rooms.push(room(100, "[Shop]", IN, vec![door(999, "back")]));
+        let map = Map::from_rooms(rooms).expect("no duplicate ids");
+        let first = generate_layout(&map);
+        for _ in 0..50 {
+            assert_eq!(
+                generate_layout(&map),
+                first,
+                "the layout changed between runs"
             );
         }
     }
