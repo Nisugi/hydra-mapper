@@ -495,18 +495,26 @@ fn populate_edges(
             let inside = (unit_a == unit_b && unit_a != STREETS).then_some(unit_a);
             let (kind, label) = if room_group == target_group {
                 // A same-group edge: solid when its stated direction
-                // resolves, a stub when it stretches past
-                // LONG_EDGE_CELLS solver cells, nothing when direction
-                // analysis found none.
-                if dirs.get(room.id, target_id).is_none() {
-                    continue;
-                }
-                let kind = if len > LONG_EDGE_CELLS * scene.scale_of(room_group) {
-                    SceneEdgeKind::Stub
+                // resolves either way, a stub when it stretches past
+                // LONG_EDGE_CELLS solver cells. A walk with no bearing
+                // either way -- `go path`, `climb gully` -- is still a walk,
+                // and draws as a dashed connector: while rooms are being
+                // sorted into areas, a link you cannot see is a link you
+                // cannot judge. (It drew nothing: 9,644 pairs on `gs.map`.)
+                let bearing = dirs
+                    .get(room.id, target_id)
+                    .or_else(|| dirs.get(target_id, room.id));
+                if bearing.is_none() {
+                    let cmd = match &exit.crossing {
+                        cena_map::Crossing::Command(cmd) => cmd.as_str(),
+                        _ => "",
+                    };
+                    (SceneEdgeKind::Connector, connector_label(cmd))
+                } else if len > LONG_EDGE_CELLS * scene.scale_of(room_group) {
+                    (SceneEdgeKind::Stub, None)
                 } else {
-                    SceneEdgeKind::Directional
-                };
-                (kind, None)
+                    (SceneEdgeKind::Directional, None)
+                }
             } else {
                 // A cross-group edge. Between two buildings that are not
                 // one cluster, nothing draws: that is not a passage a
@@ -811,6 +819,46 @@ mod tests {
             edge(1, 3).is_none_or(|e| e.kind != SceneEdgeKind::Directional),
             "the un-welded edge still drew as a compass line"
         );
+    }
+
+    /// A walk with no bearing between two rooms of one group draws, as a
+    /// dashed connector with its command; a pair with a bearing either way
+    /// stays one solid line, whichever exit is met first.
+    #[test]
+    fn a_walk_with_no_bearing_draws_as_a_connector() {
+        let map = Map::from_rooms(vec![
+            room(1, 1, &[(2, "north"), (3, "go path")]),
+            room(2, 2, &[(1, "south")]),
+            room(3, 3, &[(1, "go path"), (4, "go arch")]),
+            room(4, 4, &[(3, "east")]),
+        ])
+        .expect("no duplicate ids");
+        let layout = crate::generate_layout(&map);
+        let scene = build_scene("Test", &layout, &map);
+        let edge = |x: u32, y: u32| {
+            let found: Vec<&SceneEdge> = scene
+                .sheet
+                .edges
+                .iter()
+                .filter(|e| {
+                    let pair = (e.a_room.0.min(e.b_room.0), e.a_room.0.max(e.b_room.0));
+                    pair == (x, y)
+                })
+                .collect();
+            assert_eq!(found.len(), 1, "pair {x}-{y} drew {} lines", found.len());
+            found[0].clone()
+        };
+
+        assert_eq!(
+            scene.room(RoomId(3)).map(|r| r.group),
+            scene.room(RoomId(1)).map(|r| r.group)
+        );
+        let path = edge(1, 3);
+        assert_eq!(path.kind, SceneEdgeKind::Connector);
+        assert_eq!(path.label.as_deref(), Some("path"));
+        assert_eq!(edge(1, 2).kind, SceneEdgeKind::Directional);
+        // `go arch` one way, `east` the other: one line, and a solid one.
+        assert_eq!(edge(3, 4).kind, SceneEdgeKind::Directional);
     }
 
     /// A removed room and an urchin hideout get no cell, whoever put them
