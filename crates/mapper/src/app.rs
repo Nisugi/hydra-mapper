@@ -1165,9 +1165,54 @@ impl MapperApp {
         }
     }
 
+    /// The inspector when there is a selection but no inspected room.
+    fn selection_only_panel(&mut self, ui: &mut egui::Ui, can_edit: bool) -> Option<EditAction> {
+        let (picked_groups, picked_rooms, picked_keys) = self.picked();
+        let mut edit = None;
+        let mut clear_selection = false;
+        let whole = self.map.as_ref().ok()?;
+        let store = &self.store;
+        let new_area = &mut self.new_area;
+        let new_plate = &mut self.new_plate;
+        let edit_out = &mut edit;
+        egui::Panel::right("inspector").show(ui, |ui| {
+            ui.heading("Selection");
+            if !can_edit {
+                ui.weak("Editing is off.");
+                return;
+            }
+            if let Some(action) = selection_panel(
+                ui,
+                store,
+                &Picked {
+                    groups: picked_groups,
+                    rooms: picked_rooms,
+                    keys: &picked_keys,
+                },
+                whole,
+                new_area,
+                new_plate,
+                &mut clear_selection,
+            ) {
+                *edit_out = Some(action);
+            }
+        });
+        if clear_selection || edit.is_some() {
+            self.selected_groups.clear();
+        }
+        edit
+    }
+
     /// The inspector panel, drawn before the central panel so egui gives
     /// the canvas whatever space is left.
     fn inspector_panel(&mut self, ui: &mut egui::Ui, can_edit: bool) -> Option<EditAction> {
+        // A selection with nothing inspected still needs somewhere to
+        // act. Picking ten groups and finding no panel -- because the
+        // last click was a Ctrl-click, which selects rather than
+        // inspects -- is the state this avoids.
+        if self.inspected.is_none() && !self.selected_groups.is_empty() {
+            return self.selection_only_panel(ui, can_edit);
+        }
         let (Some(shown), Some(id)) = (&self.shown, self.inspected) else {
             return None;
         };
@@ -1265,6 +1310,7 @@ impl MapperApp {
                     },
                     whole,
                     new_area,
+                    new_plate,
                     &mut clear_selection,
                 )
             {
@@ -1312,16 +1358,18 @@ impl MapperApp {
         // invites assigning the same hundred groups twice -- but only
         // one made FROM the selection. Unpinning a room or fixing an
         // edge is unrelated and must not throw the picking away.
-        let assigned_selection = matches!(
-            &edit,
-            Some(EditAction::AssignArea { keys, .. } | EditAction::AssignRegion { keys, .. })
-                if !picked_keys.is_empty() && *keys == picked_keys
-        ) || matches!(
-            &edit,
-            Some(EditAction::NewArea { keys, .. })
-                if !picked_keys.is_empty() && *keys == picked_keys
-        );
-        if clear_selection || assigned_selection {
+        let acted_on_selection = !picked_keys.is_empty()
+            && match &edit {
+                Some(
+                    EditAction::AssignArea { keys, .. }
+                    | EditAction::AssignRegion { keys, .. }
+                    | EditAction::NewArea { keys, .. }
+                    | EditAction::MoveRooms { keys, .. }
+                    | EditAction::NewPlate { keys, .. },
+                ) => *keys == picked_keys,
+                _ => false,
+            };
+        if clear_selection || acted_on_selection {
             self.selected_groups.clear();
         }
         edit
@@ -1778,6 +1826,7 @@ fn selection_panel(
     picked: &Picked<'_>,
     whole: &Map,
     new_area: &mut String,
+    new_plate: &mut String,
     clear: &mut bool,
 ) -> Option<EditAction> {
     let Picked {
@@ -1794,6 +1843,49 @@ fn selection_panel(
     ui.weak("Ctrl-click a room to add or remove its group");
     if ui.button("Clear selection").clicked() {
         *clear = true;
+    }
+
+    // Taking these OUT, before putting them anywhere. A group here is
+    // the solver's connected component -- for a town that is every
+    // outdoor room on the sheet -- so "- group" on one room means all of
+    // them, and "- room" means one. The whole reason to pick a selection
+    // is to name the ten in between, and it would be useless if it could
+    // only ever add.
+    let in_an_area = keys
+        .iter()
+        .filter(|k| store.area_moves.contains_key(k))
+        .count();
+    let on_a_plate = keys
+        .iter()
+        .filter(|k| store.membership_moves.contains_key(k))
+        .count();
+    if in_an_area > 0 || on_a_plate > 0 {
+        ui.horizontal(|ui| {
+            if ui
+                .add_enabled(in_an_area > 0, egui::Button::new("- from area"))
+                .on_hover_text(format!(
+                    "Take {in_an_area} selected room(s) out of their area"
+                ))
+                .clicked()
+            {
+                edit = Some(EditAction::AssignArea {
+                    keys: keys.to_vec(),
+                    to: None,
+                });
+            }
+            if ui
+                .add_enabled(on_a_plate > 0, egui::Button::new("- from plate"))
+                .on_hover_text(format!(
+                    "Take {on_a_plate} selected room(s) off their plate"
+                ))
+                .clicked()
+            {
+                edit = Some(EditAction::MoveRooms {
+                    keys: keys.to_vec(),
+                    to: None,
+                });
+            }
+        });
     }
 
     // Area first: putting these somewhere is what the selection is for.
@@ -1837,6 +1929,10 @@ fn selection_panel(
         }
     });
 
+    if let Some(action) = selection_plate(ui, store, rooms, keys, new_plate) {
+        edit = Some(action);
+    }
+
     // And the region, for the same reason: a hundred groups that share
     // an area usually share a region too.
     let mut chosen: Option<String> = None;
@@ -1858,6 +1954,67 @@ fn selection_panel(
             to: Some(name),
         });
     }
+    edit
+}
+
+/// Moving a picked set onto a plate, or onto a new one.
+///
+/// A plate is the other place a selection wants to go: carving a town's
+/// satellites off its sheet is the same act as assigning them, done
+/// with the same picking.
+fn selection_plate(
+    ui: &mut egui::Ui,
+    store: &MapOverrides,
+    rooms: usize,
+    keys: &[RoomKey],
+    new_plate: &mut String,
+) -> Option<EditAction> {
+    let mut edit = None;
+    if !store.custom_maps.is_empty() {
+        let mut chosen: Option<String> = None;
+        egui::ComboBox::from_id_salt("assign_selection_plate")
+            .selected_text("Move all onto a plate...")
+            .show_ui(ui, |ui| {
+                for plate in store.custom_maps.keys() {
+                    if ui
+                        .selectable_label(
+                            false,
+                            format!("{} ({rooms} rooms)", store.plate_name(plate)),
+                        )
+                        .clicked()
+                    {
+                        chosen = Some(plate.clone());
+                    }
+                }
+            });
+        if let Some(plate) = chosen {
+            edit = Some(EditAction::MoveRooms {
+                keys: keys.to_vec(),
+                to: Some(plate),
+            });
+        }
+    }
+    ui.horizontal(|ui| {
+        ui.add(
+            egui::TextEdit::singleline(new_plate)
+                .hint_text("new plate name")
+                .desired_width(120.0),
+        );
+        if ui
+            .add_enabled(!new_plate.trim().is_empty(), egui::Button::new("+ all"))
+            .on_hover_text(format!(
+                "Make this plate and move all {rooms} rooms onto it"
+            ))
+            .clicked()
+        {
+            edit = Some(EditAction::NewPlate {
+                name: new_plate.trim().to_owned(),
+                keys: keys.to_vec(),
+            });
+            new_plate.clear();
+        }
+    });
+
     edit
 }
 
