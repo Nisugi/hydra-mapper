@@ -114,6 +114,17 @@ fn tag_regions(plan: &mut Plan, rooms: &[Room], curation: &Curation) {
             region_of.insert(*uid, region.name.as_str());
         }
     }
+    // Rooms the mapdb holds with no `loc`, named by id because the
+    // evidence is which official area they are in. Seeded before the uid
+    // pass so a room that HAS a region keeps it: the check below refuses
+    // to write a second one, and this is the weaker claim of the two.
+    let mut by_id: BTreeMap<u32, &str> = BTreeMap::new();
+    for block in &curation.regions.unclassified {
+        for id in &block.ids {
+            by_id.insert(*id, block.region.as_str());
+        }
+    }
+
     for room in rooms {
         // A room the game numbers once belongs where that number says.
         // A room it numbers NINE times, once per town, is a plane the
@@ -126,7 +137,10 @@ fn tag_regions(plan: &mut Plan, rooms: &[Room], curation: &Curation) {
             }
         }
         let name = match found.len() {
-            0 => continue,
+            0 => match by_id.get(&room.id.0) {
+                Some(region) => (*region).to_owned(),
+                None => continue,
+            },
             1 => (*found.iter().next().unwrap_or(&"")).to_owned(),
             // Named for itself. It is one place in our map and nine in
             // theirs, so no town's name is more true than the others'.
@@ -140,6 +154,9 @@ fn tag_regions(plan: &mut Plan, rooms: &[Room], curation: &Curation) {
         if name.is_empty() {
             continue;
         }
+        // A region that is an area of another answers with the other's
+        // name. See `[[fold]]` in regions.toml for why each one is one.
+        let name = fold_of(curation, &name);
         let meta = format!("region:{name}");
         // A plane's region changed once the plane rule existed, so the
         // stale one has to go: `AddMeta` alone would leave a room
@@ -162,15 +179,238 @@ fn tag_regions(plan: &mut Plan, rooms: &[Room], curation: &Curation) {
     }
 }
 
+/// Whether an exit is a walk, and so whether it says the two rooms are
+/// on the same side of a region boundary.
+///
+/// Only a plain command or a list of steps. A routine is a travel puzzle
+/// whose destination shuffles, an urchin pass-through is a teleport, and
+/// an unported or unknown crossing cannot be walked at all -- none of
+/// them means the rooms are near each other. The premium halls are the
+/// worked example: every one has a pass-through to its town's urchin
+/// hideout, and following those would make nine towns adjacent.
+///
+/// Deliberately stricter than [`reach::walkable`], which asks a
+/// different question -- whether a person can get there by any means --
+/// and follows every exit that is not seasonal.
+fn is_passage(exit: &cena_map::Exit) -> bool {
+    matches!(
+        exit.crossing,
+        cena_map::Crossing::Command(_) | cena_map::Crossing::Steps(_)
+    )
+}
+
+/// Whether a room is somewhere, rather than a fake room the game uses
+/// to hold data. The sixteen urchin hideouts carry `map:virtual room`
+/// and their own descriptions say so: "This is a fake room used to hold
+/// wayto/timeto for urchin guide".
+fn is_a_place(room: &Room) -> bool {
+    !room.meta.iter().any(|m| m == "map:virtual room")
+}
+
+/// The region a `loc` value ends up as, following the `[[fold]]` chain:
+/// `The Rift` -> `Pinefar / Aenatumgana` -> `Icemule Trace`.
+fn fold_of(curation: &Curation, name: &str) -> String {
+    let mut current = name.to_owned();
+    // Bounded rather than trusting the file to be acyclic.
+    for _ in 0..8 {
+        // A fold names one value; a region's `members` names several.
+        // Both say "this `loc` value is not a region, that one is", so
+        // both resolve here and a chain may run through either -- `The
+        // Rift` folds into Pinefar, which folds into Icemule Trace.
+        if let Some(f) = curation
+            .decisions
+            .folds
+            .iter()
+            .find(|f| f.region == current)
+        {
+            current = f.into.clone();
+            continue;
+        }
+        if let Some(r) = curation
+            .decisions
+            .regions
+            .iter()
+            .find(|r| r.members.iter().any(|m| *m == current))
+        {
+            current = r.name.clone();
+            continue;
+        }
+        break;
+    }
+    current
+}
+
+/// Fill a room's region where every way out of it leads to one region.
+///
+/// **A region boundary has to be crossed somewhere.** Walk outward from
+/// an unregioned room through other unregioned rooms until you reach
+/// ground that has a region. If everything you can reach that way is one
+/// region, there is no path out of here that does not go through it, and
+/// the room is inside it. That is a fact about where the graph lets you
+/// walk, not an inference from a name, a location string or a title
+/// prefix, all of which have been wrong here before.
+///
+/// Simutronics fills `loc` in for towns, quests and transport routes and
+/// leaves wilderness out, so this fills a blank rather than overruling
+/// anybody: [`tag_regions`] runs first and a room it placed is never
+/// touched.
+///
+/// The unit is the **pocket**, not the room: the whole connected run of
+/// unregioned ground, judged by everything on its frontier at once.
+/// Deciding room by room would be weaker and order-dependent -- a room
+/// beside Wehnimer's would take it before the pocket behind it revealed
+/// a second way out into Shadow Valley, and the boundary would land
+/// wherever the two advancing sides happened to meet rather than where
+/// the map puts it.
+///
+/// Measured on `gs.map`, of 9,666 unregioned rooms:
+///
+/// - **7,161** are in a pocket with one region on its frontier, and fill.
+/// - **713** are in a pocket reaching several, and are left alone. These
+///   are real: 192 rooms of wilderness between Icemule, the Isle of
+///   Ornath, Solhaven and Wehnimer's; the Graveyard's 163 between
+///   Wehnimer's and Shadow Valley; 38 and 33 more against what is left
+///   of Talador. A boundary genuinely runs through them and nothing here
+///   can say where.
+/// - **1,792** reach no regioned room at all, so there is nothing to
+///   infer from.
+fn spread_regions(plan: &mut Plan, rooms: &[Room], curation: &Curation) {
+    // Start from what the map says plus what this run has already
+    // planned, so the mapdb's answer always wins over an inferred one.
+    let mut region: BTreeMap<u32, String> = BTreeMap::new();
+    for room in rooms {
+        if let Some(name) = room.meta.iter().find_map(|m| m.strip_prefix("region:")) {
+            region.insert(room.id.0, name.to_owned());
+        }
+    }
+    for change in &plan.changes {
+        match change {
+            Change::AddMeta { id, meta } => {
+                if let Some(name) = meta.strip_prefix("region:") {
+                    region.insert(*id, name.to_owned());
+                }
+            }
+            Change::DropMeta { id, meta } => {
+                if meta.starts_with("region:") {
+                    region.remove(id);
+                }
+            }
+            _ => {}
+        }
+    }
+    // **Resolve AFTER the planned changes, not before.** The map holds
+    // whatever the last run wrote, which for a folded value is its old
+    // name, and `tag_regions` only rewrites rooms whose uid the mapdb
+    // lists -- so a room it skipped keeps the stale name and spreads it.
+    // Resolving first did not help: the loop above then overwrote the
+    // corrected names with the planned ones, which are themselves
+    // resolved, except where a `DropMeta` later in file order removed
+    // the entry again. 101 rooms came out carrying `Cysaegir`,
+    // `Kraken's Fall` and `Old Ta'Faendryl` after those had folded.
+    for name in region.values_mut() {
+        *name = fold_of(curation, name);
+    }
+
+    // Walkable adjacency, both ways: a one-way door still says the two
+    // rooms are on the same side of a boundary.
+    let present: BTreeSet<u32> = rooms.iter().map(|r| r.id.0).collect();
+    let mut adj: BTreeMap<u32, BTreeSet<u32>> = BTreeMap::new();
+    for room in rooms {
+        for exit in room.exits.iter().filter(|e| is_passage(e)) {
+            let to = exit.to.0;
+            if to != room.id.0 && present.contains(&to) {
+                adj.entry(room.id.0).or_default().insert(to);
+                adj.entry(to).or_default().insert(room.id.0);
+            }
+        }
+    }
+
+    // A room that is not a place gets no region, however enclosed it is.
+    // The urchin hideouts are the case: sixteen fake rooms holding
+    // `wayto` entries for the guide, marked `map:virtual room`, each
+    // reached only by a pass-through. `derive_areas` drops them, but the
+    // Region list is built from `meta:region:` rather than from areas,
+    // so filling one here is what put a hideout in the tree.
+    let unreal: BTreeSet<u32> = rooms
+        .iter()
+        .filter(|r| !is_a_place(r))
+        .map(|r| r.id.0)
+        .collect();
+    for id in &unreal {
+        region.remove(id);
+    }
+    // And take back any a previous run wrote. `AddMeta` alone would
+    // leave the stale one in place, because this pass only ever adds.
+    for room in rooms.iter().filter(|r| unreal.contains(&r.id.0)) {
+        for stale in room
+            .meta
+            .iter()
+            .filter(|m| m.starts_with("region:") || *m == "map:region-inferred")
+        {
+            plan.changes.push(Change::DropMeta {
+                id: room.id.0,
+                meta: stale.clone(),
+            });
+        }
+    }
+    let blank: Vec<u32> = rooms
+        .iter()
+        .map(|r| r.id.0)
+        .filter(|id| !region.contains_key(id) && !unreal.contains(id))
+        .collect();
+    let blank_set: BTreeSet<u32> = blank.iter().copied().collect();
+
+    let mut seen: BTreeSet<u32> = BTreeSet::new();
+    for &start in &blank {
+        if !seen.insert(start) {
+            continue;
+        }
+        // The pocket, and every region on its frontier.
+        let mut stack = vec![start];
+        let mut members = vec![start];
+        let mut frontier: BTreeSet<&str> = BTreeSet::new();
+        while let Some(here) = stack.pop() {
+            let Some(neighbours) = adj.get(&here) else {
+                continue;
+            };
+            for n in neighbours {
+                if let Some(name) = region.get(n) {
+                    frontier.insert(name.as_str());
+                } else if blank_set.contains(n) && seen.insert(*n) {
+                    members.push(*n);
+                    stack.push(*n);
+                }
+            }
+        }
+        if frontier.len() != 1 {
+            continue;
+        }
+        let Some(name) = frontier.iter().next() else {
+            continue;
+        };
+        for id in members {
+            plan.changes.push(Change::AddMeta {
+                id,
+                meta: format!("region:{name}"),
+            });
+            // **Say that this one was inferred.** A region from the
+            // mapdb is Simutronics' answer; this one is the graph's. A
+            // separate namespace, not a `region:` value: anything
+            // reading `strip_prefix("region:")` would otherwise find a
+            // region named `from:spread`.
+            plan.changes.push(Change::AddMeta {
+                id,
+                meta: "map:region-inferred".to_owned(),
+            });
+        }
+    }
+}
+
 /// One change to one room.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Change {
     /// `location` replaced, because the recorded one is stale.
-    Location {
-        id: u32,
-        from: String,
-        to: String,
-    },
+    Location { id: u32, from: String, to: String },
     /// A `meta` entry added.
     AddMeta { id: u32, meta: String },
     /// A `tag` removed, because `meta` now carries the same fact.
@@ -178,11 +418,7 @@ pub enum Change {
     /// A `meta` entry removed, superseded by a consolidated one.
     DropMeta { id: u32, meta: String },
     /// A tag renamed to the canonical spelling of its family.
-    RenameTag {
-        id: u32,
-        from: String,
-        to: String,
-    },
+    RenameTag { id: u32, from: String, to: String },
     /// A bookkeeping stub removed.
     DeleteRoom { id: u32, title: String },
 }
@@ -392,6 +628,9 @@ pub fn plan(map: &Map, curation: &Curation) -> Plan {
     // Pass 2e: regions from the official mapdb.
     tag_regions(&mut plan, rooms, curation);
 
+    // Pass 2f: regions spread into the ground between them.
+    spread_regions(&mut plan, rooms, curation);
+
     // Pass 3: rooms the game no longer has.
     for id in removed_rooms(rooms, &reachable) {
         if let Some(room) = by_id.get(&id) {
@@ -458,9 +697,7 @@ fn convert_loose_tags(
     for conversion in curation.tags.conversions.values() {
         // A prefix rewrite moves a whole namespace and has nothing to do
         // with tags or with walkability.
-        if let (Some(from), Some(to)) =
-            (&conversion.from_meta_prefix, &conversion.to_meta_prefix)
-        {
+        if let (Some(from), Some(to)) = (&conversion.from_meta_prefix, &conversion.to_meta_prefix) {
             for room in rooms {
                 for meta in &room.meta {
                     if let Some(rest) = meta.strip_prefix(from.as_str()) {
@@ -578,9 +815,8 @@ fn removed_rooms(rooms: &[Room], reachable: &BTreeSet<u32>) -> BTreeSet<u32> {
 #[must_use]
 pub fn deletable_stubs(map: &Map) -> BTreeSet<u32> {
     const PREFIX: &str = "duplicate of ";
-    let is_stub = |r: &Room| {
-        r.title.iter().any(|t| t.starts_with(PREFIX)) && r.description.is_empty()
-    };
+    let is_stub =
+        |r: &Room| r.title.iter().any(|t| t.starts_with(PREFIX)) && r.description.is_empty();
 
     let stubs: BTreeSet<u32> = map
         .rooms()
@@ -622,8 +858,7 @@ pub fn deletable_stubs(map: &Map) -> BTreeSet<u32> {
 pub fn apply(rooms: &[Room], plan: &Plan) -> Vec<Room> {
     let mut rooms: Vec<Room> = rooms.to_vec();
     let mut deleted: BTreeSet<u32> = BTreeSet::new();
-    let index: BTreeMap<u32, usize> =
-        rooms.iter().enumerate().map(|(i, r)| (r.id.0, i)).collect();
+    let index: BTreeMap<u32, usize> = rooms.iter().enumerate().map(|(i, r)| (r.id.0, i)).collect();
 
     for change in &plan.changes {
         let Some(&i) = index.get(&change.id()) else {
@@ -798,10 +1033,12 @@ fn consolidate_lockers(plan: &mut Plan, rooms: &[Room], curation: &Curation) {
             _ => None,
         })
         .collect();
-    plan.changes.retain(|c| !matches!(
-        c,
-        Change::AddMeta { id, meta } if meta == "locker:public" && che_owned.contains(id)
-    ));
+    plan.changes.retain(|c| {
+        !matches!(
+            c,
+            Change::AddMeta { id, meta } if meta == "locker:public" && che_owned.contains(id)
+        )
+    });
 
     // Bare `meta:locker` on a room the consolidation has now described
     // properly is redundant. It is dropped here rather than in the public
@@ -814,7 +1051,6 @@ fn consolidate_lockers(plan: &mut Plan, rooms: &[Room], curation: &Curation) {
             });
         }
     }
-
 }
 
 /// The 19 tags spelling "this house's lockers" three different ways.

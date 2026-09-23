@@ -201,7 +201,9 @@ impl Areas {
             official,
             region: {
                 let mut rows = region_areas(map);
-                rows.extend(curated_areas(map, store));
+                let curated = curated_areas(map, store);
+                rows.extend(unareaed(map, store, &rows));
+                rows.extend(curated);
                 rows
             },
             location: location_areas(map, &claimed),
@@ -355,12 +357,83 @@ fn region_areas(map: &Map) -> Vec<Area> {
         .collect()
 }
 
+/// One row per region holding its rooms that are in no curated area.
+///
+/// The work queue, in other words, and the reason it is a row rather
+/// than a number in the region's label: "what is left in Icemule" is a
+/// thing to click on and look at, not a count to read.
+///
+/// A region with nothing left gets no row at all -- an empty queue is
+/// worth the absence of a line, not a line saying zero.
+fn unareaed(map: &Map, store: &MapOverrides, regions: &[Area]) -> Vec<Area> {
+    let mut left: BTreeMap<&str, Vec<RoomId>> = BTreeMap::new();
+    for room in map.rooms() {
+        if store.area_moves.contains_key(&RoomKey::of(room.id, map)) {
+            continue;
+        }
+        let name = room
+            .meta
+            .iter()
+            .find_map(|m| m.strip_prefix("region:"))
+            .unwrap_or(NO_REGION);
+        left.entry(name).or_default().push(room.id);
+    }
+    regions
+        .iter()
+        .filter_map(|region| {
+            let rooms = left.remove(region.name.as_str())?;
+            Some(Area {
+                name: format!("{UNAREAED} {}", region.name),
+                kind: AreaKind::Region,
+                parent: Some(region.name.clone()),
+                contested: None,
+                rooms,
+            })
+        })
+        .collect()
+}
+
+/// Prefix marking a region's leftover rooms.
+///
+/// The name carries its region -- `(not yet in an area) Icemule Trace`
+/// -- because a row's name is its identity: it is the correction key, and
+/// what `show_named` finds. The LIST does not print the region part,
+/// since the row already sits under it; see [`crate::app::area_label`].
+pub const UNAREAED: &str = "(not yet in an area)";
+
 /// The row for rooms the mapdb does not classify.
 ///
 /// A third of the map: the hunting grounds, caves and slopes Simutronics
 /// leaves out of `loc` on purpose. Named rather than hidden, because it
 /// is where most curation work will start.
 pub const NO_REGION: &str = "(no region)";
+
+/// Fill an empty area store from the official layout.
+///
+/// 117 areas covering 13,689 rooms, which is 40% of the map and a much
+/// better start than nothing. The seed is a STARTING POINT, not a
+/// binding: every room is movable afterwards and nothing marks a seeded
+/// area as different from a hand-made one.
+///
+/// Runs only when there are no curated areas at all. A seed that ran
+/// again later would overwrite the work it was meant to start, and the
+/// moment somebody has moved a room the official answer is no longer the
+/// better one.
+///
+/// Returns how many areas it made, for the note in the UI.
+pub fn seed_from_official(map: &Map, store: &mut MapOverrides) -> usize {
+    if !store.custom_areas.is_empty() {
+        return 0;
+    }
+    let official = official_areas(map);
+    for area in &official {
+        let key = store.create_area(&area.name);
+        for id in &area.rooms {
+            store.set_area(RoomKey::of(*id, map), Some(&key));
+        }
+    }
+    official.len()
+}
 
 /// The curated areas, each under the region its ROOMS carry.
 ///
@@ -551,7 +624,10 @@ mod tests {
         let map = Map::from_rooms(rooms).expect("no duplicate ids");
 
         let by_location = location_areas(&map, &std::iter::once(claimed).collect());
-        let listed: Vec<RoomId> = by_location.iter().flat_map(|a| a.rooms.iter().copied()).collect();
+        let listed: Vec<RoomId> = by_location
+            .iter()
+            .flat_map(|a| a.rooms.iter().copied())
+            .collect();
 
         assert!(
             !listed.contains(&claimed),
@@ -585,7 +661,10 @@ mod tests {
         let map = Map::from_rooms(vec![a, b]).expect("no duplicate ids");
 
         let regions = region_areas(&map);
-        let listed: Vec<RoomId> = regions.iter().flat_map(|r| r.rooms.iter().copied()).collect();
+        let listed: Vec<RoomId> = regions
+            .iter()
+            .flat_map(|r| r.rooms.iter().copied())
+            .collect();
         assert!(listed.contains(&RoomId(1)) && listed.contains(&RoomId(2)));
 
         // One location, two regions: the quest separates from the
@@ -673,8 +752,8 @@ mod tests {
     /// which is where a third of the map lives and where curation starts.
     #[test]
     fn an_unregioned_area_lands_in_its_own_branch() {
-        let map = Map::from_rooms(vec![room_in(RoomId(1), "Stone Valley")])
-            .expect("no duplicate ids");
+        let map =
+            Map::from_rooms(vec![room_in(RoomId(1), "Stone Valley")]).expect("no duplicate ids");
         let mut store = MapOverrides::default();
         let key = store.create_area("Stone Valley");
         store.set_area(RoomKey::of(RoomId(1), &map), Some(&key));
@@ -702,6 +781,57 @@ mod tests {
             rooms: vec![],
         };
         assert_ne!(region.store_key(), curated.store_key());
+    }
+
+    /// The seed makes one area per official area, and never runs twice.
+    #[test]
+    fn seeding_fills_an_empty_store_once() {
+        let map = Map::from_rooms(vec![room_in(RoomId(1), "somewhere")]).expect("no duplicate ids");
+        let mut store = MapOverrides::default();
+        // The bundled areas.tsv names rooms this tiny map does not have,
+        // so the count is whatever survives the join -- what matters is
+        // that a second run is a no-op.
+        let first = seed_from_official(&map, &mut store);
+        let before = store.custom_areas.len();
+        assert_eq!(first, before);
+        assert_eq!(seed_from_official(&map, &mut store), 0);
+        assert_eq!(store.custom_areas.len(), before);
+    }
+
+    /// A seed must not overwrite curation: with even one area present it
+    /// does nothing at all.
+    #[test]
+    fn seeding_leaves_a_curated_store_alone() {
+        let map = Map::from_rooms(vec![room_in(RoomId(1), "somewhere")]).expect("no duplicate ids");
+        let mut store = MapOverrides::default();
+        let key = store.create_area("Mine");
+        store.set_area(RoomKey::of(RoomId(1), &map), Some(&key));
+
+        assert_eq!(seed_from_official(&map, &mut store), 0);
+        assert_eq!(store.custom_areas.len(), 1);
+        assert_eq!(store.area_moves.len(), 1);
+    }
+
+    /// Every region keeps a row of what is left in it, and a region with
+    /// nothing left gets no row rather than one saying zero.
+    #[test]
+    fn a_region_lists_what_is_not_yet_in_an_area() {
+        let mut a = room_in(RoomId(1), "somewhere");
+        a.meta = vec!["region:Icemule Trace".to_owned()];
+        let mut b = room_in(RoomId(2), "somewhere");
+        b.meta = vec!["region:Icemule Trace".to_owned()];
+        let map = Map::from_rooms(vec![a, b]).expect("no duplicate ids");
+
+        let mut store = MapOverrides::default();
+        let regions = region_areas(&map);
+        assert_eq!(unareaed(&map, &store, &regions)[0].rooms.len(), 2);
+
+        let key = store.create_area("Town");
+        store.set_area(RoomKey::of(RoomId(1), &map), Some(&key));
+        assert_eq!(unareaed(&map, &store, &regions)[0].rooms, vec![RoomId(2)]);
+
+        store.set_area(RoomKey::of(RoomId(2), &map), Some(&key));
+        assert!(unareaed(&map, &store, &regions).is_empty());
     }
 
     /// A room with just enough filled in to carry an id and a location.

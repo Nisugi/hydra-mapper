@@ -34,7 +34,11 @@ fn main() -> ExitCode {
     }
 }
 
-fn run(map_path: &Path, curation_dir: &Path, write: bool) -> Result<ExitCode, Box<dyn std::error::Error>> {
+fn run(
+    map_path: &Path,
+    curation_dir: &Path,
+    write: bool,
+) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let curation = Curation::load(curation_dir)?;
     let bytes = std::fs::read(map_path)?;
     let map = binary::decode(&bytes)?;

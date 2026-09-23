@@ -264,6 +264,26 @@ pub struct MapOverrides {
     /// Area key -> the area.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub custom_areas: BTreeMap<String, CuratedArea>,
+    /// Room -> region name, said outright by a person.
+    ///
+    /// **Where this is going.** A room's region is currently derived:
+    /// joined from the official mapdb by uid, translated through the
+    /// `[[fold]]` table in `curation/regions.toml` because that field
+    /// mixes regions with areas inside them, then spread into unregioned
+    /// ground by inference. Three mechanisms, two of them ours, and a
+    /// quarter of the regioned rooms carry `map:region-inferred` to say
+    /// the answer is a guess.
+    ///
+    /// The destination is that every room says its region outright and
+    /// none of that machinery is needed. This map is how a person gets
+    /// there: an assignment here wins over the join, the folds and the
+    /// spread, so coverage can grow room by room and area by area while
+    /// the derivation keeps answering for everything not yet reached.
+    ///
+    /// Keyed by [`RoomKey`] like every other correction, so an
+    /// assignment survives a map rebuild renumbering the ids.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub region_moves: BTreeMap<RoomKey, String>,
 }
 
 /// A curated area: a named place, its rooms assigned by hand.
@@ -479,6 +499,25 @@ impl MapOverrides {
     }
 
     /// Put a room in a curated area, or (with `None`) take it out.
+    /// Say which region a room is in, or (with `None`) stop saying.
+    ///
+    /// Unlike an area, a region is not minted here: the thirteen are
+    /// decided in `curation/regions.toml` and this only assigns one of
+    /// them. A typo would otherwise create a region silently, and the
+    /// whole point of the file is that someone chose the list.
+    pub fn set_region(&mut self, key: RoomKey, region: Option<&str>) -> Option<String> {
+        match region {
+            Some(region) => self.region_moves.insert(key, region.to_owned()),
+            None => self.region_moves.remove(&key),
+        }
+    }
+
+    /// The region a person assigned this room, if any.
+    #[must_use]
+    pub fn region_of(&self, key: RoomKey) -> Option<&str> {
+        self.region_moves.get(&key).map(String::as_str)
+    }
+
     pub fn set_area(&mut self, key: RoomKey, area: Option<&str>) -> Option<String> {
         match area {
             Some(area) => self.area_moves.insert(key, area.to_owned()),

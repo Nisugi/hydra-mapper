@@ -1,0 +1,345 @@
+# What counts as a region, decided by someone who plays the game.
+#
+# `curation/generated/regions.toml` holds the mapdb's `loc` field, which
+# is where the region tier came from and is not one. Its 51 values are
+# three different kinds of thing in one column:
+#
+#   a region        Wehnimer's Landing (6,607), Icemule Trace (2,759)
+#   an area inside  Shadow Valley (136), Old Ta'Faendryl (357),
+#                   Turamzzyrian Empire (30) -- an EMPIRE, 30 rooms,
+#                   enclosed by Wehnimer's Landing
+#   not a place     QUEST:*, EVENT:*, *Transport, Elemental Confluence
+#
+# `loc` is an administrative field a GM filled in, so it groups by
+# whatever was useful at the time. This file says which of its values are
+# regions, and the rest fold or stay areas.
+#
+# # The test for an island
+#
+# Three transit networks reach these places and only one of them is in
+# the map as edges:
+#
+#   portmaster (OSA)   IS in the map, as Steps sending
+#                      `ask portmaster about travel N`. 12 piers.
+#   travel gem         IS in the map, as Routine edges from nine towns,
+#                      all landing in [Gardenia Commons].
+#   chronomage         is NOT in the map. The offices are there and so
+#                      are their waiting rooms, but the jump happens on
+#                      a 20-minute timer when a player raises an orb, so
+#                      there is no edge to record. 10 towns, listed
+#                      below because the graph cannot know them.
+#
+# So "no land route" is measurable: follow only ordinary commands, never
+# a portmaster ask, a Routine, an event transport or a wagon, and see
+# what a walk from Wehnimer's Landing reaches. The wagon matters more
+# than it looks -- an event transport records Remember("duskruin_origin")
+# and its wagon out carries Forget(...), so the wagon returns you to
+# WHERE YOU CAME FROM. Following the recorded destination invents a road
+# from the Landing to Kraken's Fall that nobody can walk, which is how an
+# earlier measurement had Teras 90% reachable on foot.
+#
+# Teras is the case that proves the point is not about OSA at all: it
+# came long before that system, and the only ways there were the
+# Glaesine Star and a chronomage.
+
+# ------------------------------------------------------------ regions
+# Thirteen: the nine `loc` values of a thousand rooms or more, which are the
+# settlements and their territory, plus four that group what is left by
+# WHY it has no place of its own: sea-only, seasonal, generated, or a
+# road between two regions.
+#
+# Two of the nine are islands with no land route -- Mist Harbor and
+# Teras -- and they are regions because of their SIZE, not their access.
+# Filing a 2,437-room island under a transit system would bury a place
+# bigger than most towns.
+#
+# The threshold is a thousand rooms and it is a real line here rather
+# than a round number: the tenth-largest `loc` value is `QUEST: Ebon
+# Gate Festival`, which is content, and the largest thing below it is
+# Kraken's Fall at 629. Nothing between 629 and 1,101 has to be judged.
+
+[[region]]
+name = "Wehnimer's Landing"
+note = "6,607 rooms."
+
+[[region]]
+name = "Ta'Illistim"
+note = "3,037 rooms."
+
+[[region]]
+name = "Solhaven / Vornavis"
+note = "2,854 rooms. The slash is town and barony; eight of our locations fan into this one name."
+
+[[region]]
+name = "Icemule Trace"
+note = "2,759 rooms."
+
+[[region]]
+name = "Mist Harbor / Four Winds Isle"
+note = """2,437 rooms, and an island: every way in is a Routine from one of nine towns, all landing in [Gardenia Commons]. No land route exists.
+
+A region rather than an OSA waypoint because it is the size of Ta'Vaalor. Filing it under a transit system would bury a place bigger than most towns, which is the same mistake as listing `Turamzzyrian Empire` (30 rooms) beside Wehnimer's Landing."""
+
+[[region]]
+name = "Ta'Vaalor"
+note = "2,141 rooms."
+
+[[region]]
+name = "River's Rest / Torre"
+note = "1,690 rooms. Town and county."
+
+[[region]]
+name = "Teras / Kharam Dzu"
+note = """1,555 rooms, and an island: the island is Teras, the town on it is Kharam-Dzu, which is why this slash runs the opposite way to `Solhaven / Vornavis`.
+
+Its only inbound edges are a portmaster ask from five ports, eighteen Routines from the Elemental Confluence, and the conditional Duskruin wagon. No land route.
+
+It predates Open Sea Adventures. Before the portmasters existed the ways there were the Glaesine Star and a chronomage, so a region defined by OSA would be wrong about it twice over."""
+
+[[region]]
+name = "Zul Logoth / Kharag 'doth Dzulthu"
+note = "1,101 rooms. One dwarven settlement under the Dragon Spine, named twice -- the common name and the dwarven one."
+
+[[region]]
+name = "Open Sea Adventures"
+members = [
+  "Kraken's Fall",
+  "Sailor's Grief",
+  "Glaeve",
+  "Ta'Nalfein",
+  "Brisker's Cove / Seareach",
+  "Tenebrous Cauldron",
+  "Isle of Ornath",
+]
+
+note = """The places whose only way in is a ship, and which are too small to be a region on their own. Kraken's Fall is the largest at 629 rooms; the rest are waypoints -- an arena, a floating market, a dock.
+
+Kraken's Fall is the judgement call in this list. It is a real town with a chronomage office and a portmaster pier, and at 629 rooms it could stand alone. It goes here because the OSA network is what it is for.
+
+Members: Kraken's Fall, Sailor's Grief, Glaeve, Ta'Nalfein, Brisker's Cove / Seareach, Tenebrous Cauldron (the Flotilla), Isle of Ornath, Sleeping Drake Harbor."""
+
+[[region]]
+name = "Events"
+members = [
+  "QUEST: Ebon Gate Festival",
+  "EVENT: Duskruin Arena/Bloodriven Village",
+  "QUEST: Summit Academy",
+  "QUEST: Delirium Manor",
+  "EVENT: Liabo",
+  "EVENT: Isle of Ornath",
+]
+
+note = """The paid seasonal events: roughly 1,960 rooms that exist a few weeks a year and are shut the rest.
+
+**Membership is `meta:event:<name>`, not the `loc` value**, because the labels have gone stale where the ground was reused. `QUEST: Summit Academy` is the clearest case: the Academy itself last ran in 2017 and its 58 rooms are already `map:status:gone`, but 394 rooms under that label are Rumor Woods, which runs every April on the same ground. The label names a dead event and the rooms are a live one.
+
+The tag also crosses the prefixes, which cannot be trusted either way: `QUEST: Ebon Gate Festival` is 100% event-tagged and `EVENT: Liabo` is not tagged at all.
+
+Known gap, and it is a `status.toml` problem rather than a region one: 52 rooms under this label read `live` with no event tag. They are the festival's SHOPS -- the Tourney Tents, the Gift Horse, `Horse Of A Different Fashion`, `Stick Your Nose In It` -- and every inbound edge comes from Rumor Woods itself (`[Rumor Woods, Anvil Strip]` -> `go tourney tent`).
+
+They were missed because the rules key on `location` and a tent's location string differs from the street outside it. Same shape as the 89 stranded festival shops `strand_orphans` exists to catch. 12 of the 52 have no uid, which fits a place open three weeks a year.
+
+They want the `closed` verdict and `meta:event:rumor-woods`."""
+
+[[region]]
+name = "Instanced"
+members = [
+  "Elemental Confluence",
+  "QUEST: Black Swan Castle",
+  "QUEST: Night At the Academy",
+  "QUEST: Reim Fortress Defense",
+  "QUEST: Troubled Waters",
+]
+
+note = """Content with no fixed place in the world: generated on demand, or staged rather than sited.
+
+  Elemental Confluence   53   nine instances, one per town, planes that shift
+  warcamps               16   negative uids, the game's own marker for generated
+  QUEST: Black Swan Castle 124
+  QUEST: Night At the Academy 115
+  QUEST: Reim Fortress Defense 61
+  QUEST: Troubled Waters  39
+
+Each of these broke a different assumption while the region work was being done, and for the same underlying reason. The Confluence broke the uid join, because nine instances mean nine region labels and `find_map` took whichever was first. The event wagons broke the reachability flood, because they return you to where you came from rather than to a fixed room. Quest stagings read 0% land-reachable because you do not walk in.
+
+The Confluence is here rather than a region of its own: a region is somewhere, and its whole difficulty is that it is nowhere in particular."""
+
+[[region]]
+name = "Transport routes"
+members = [
+  "Caravan Route Transport",
+  "Western Ta'Illistim Transport",
+  "Eastern Ta'Illistim Transport",
+  "Yuriqen Transport",
+  "Icemule Transport",
+  "Ta'Vaalor/Ta'Illistim Transport",
+  "Kharag 'doth Dzulthu Transport",
+  "River's Rest to Solhaven (Live Bait)",
+]
+
+note = """The caravan and pass routes: about 1,073 rooms that are sited -- they exist at fixed points and you walk them -- but belong to no single region.
+
+  Caravan Route Transport         297
+  Western Ta'Illistim Transport   259
+  Eastern Ta'Illistim Transport   234
+  Yuriqen Transport               113
+  Icemule Transport                81
+  Ta'Vaalor/Ta'Illistim Transport  79
+  Kharag 'doth Dzulthu Transport    6
+  River's Rest to Solhaven (Live Bait) 4
+
+Separate from `Instanced` because the distinction is real: a road between Solhaven and Ta'Illistim is a place you can stand in, it simply is not IN either town. Folding one into a region at either end would misfile the other half of it."""
+
+# -------------------------------------------------------------- folds
+# A mapdb `loc` value that is an AREA of a region, not a peer of it.
+# Each one touches exactly one region by walkable passage, which is the
+# structural test; where the reason is historical or geographic rather
+# than structural, it is stated.
+
+[[fold]]
+region = "Talador"
+into = "Wehnimer's Landing"
+note = """223 rooms, and every one of them is Castle Darkstone rather than the barony.
+
+The label is stale. `status.toml` establishes that Talador was destroyed in 5116 and marks the city, its mines and Doggoroth Keep `gone` -- but it scopes those rules by TITLE, because `location = "Talador"` also covers three live wildernesses. What is left carrying `region:Talador` is a different set again: rooms whose `location` is `Darkstone Castle`, filed by the mapdb under the barony that used to hold it.
+
+They are alive by every test that settled the others:
+
+  219 of 223 are reachable on foot from Wehnimer's Landing
+  223 of 223 have a uid -- against Talador's dead 438, of which NOT ONE
+      had a uid, the signal the curation calls "the game agreeing these
+      are not rooms any more"
+  218 of 223 are in `wehnimers-landing-darkstone-castle`, Simutronics'
+      own layout area, filed under Wehnimer's Landing
+
+Their titles say it too: [Castle Darkstone], [Torture Chamber], [Shrine of the Jackal]. It is a Landing dungeon.
+
+This fold says nothing about the barony. The barony is gone and its rooms were deleted or marked; this is about the label they left behind on a place that outlived them."""
+
+[[fold]]
+region = "Shadow Valley"
+into = "Wehnimer's Landing"
+note = """136 rooms with exactly four walkable edges to anywhere else, and they settle it.
+
+Two of them are [Shadow Plain] <-> [Shadow Valley, Shaman's Hut], and the mapdb files that hut -- the room with SHADOW VALLEY IN ITS TITLE -- under Wehnimer's Landing. Simutronics is already inconsistent about this boundary.
+
+The other two reach [Underground Chamber] and [Secluded Valley], both `location = "the Graveyard"`, both unregioned.
+
+It is a hunting ground south of the town, in the same official area as the Graveyard -- `wehnimers-landing-graveyard`, which holds 72 Shadow Valley rooms and 154 Graveyard ones.
+
+The fold also resolves those 154. While Shadow Valley was a region of its own, the Graveyard's pocket could reach two regions and `spread_regions` left it alone, correctly. With the fold there is one region on that frontier and 163 rooms fill on the existing rule, with no further judgement."""
+
+[[fold]]
+region = "Cysaegir"
+into = "Ta'Illistim"
+note = "241 rooms. A small Illistim-built town off Whistler's Pass, reached overland through the Eastern Ta'Illistim Transport route."
+
+[[fold]]
+region = "Old Ta'Faendryl"
+into = "Ta'Illistim"
+note = "357 rooms, touching only Ta'Illistim, through [Gyldemar Road, Sentinels]."
+
+[[fold]]
+region = "New Ta'Faendryl"
+into = "Ta'Illistim"
+note = "17 rooms, reached through the Faendryl Embassy in Ta'Illistim."
+
+[[fold]]
+region = "Sablecross"
+into = "Icemule Trace"
+note = "173 rooms, touching only Icemule Trace."
+
+[[fold]]
+region = "Broken Lands (Sheruvian Monastery)"
+into = "Wehnimer's Landing"
+note = "158 rooms, touching only Wehnimer's Landing. The official area is `wehnimers-landing-broken-lands`."
+
+[[fold]]
+region = "Turamzzyrian Empire"
+into = "Wehnimer's Landing"
+note = "30 rooms enclosed by Wehnimer's Landing. An empire is not 30 rooms inside a town; this is the clearest evidence that `loc` is an administrative field rather than a geographic tier."
+
+[[fold]]
+region = "Wedding Areas"
+into = "Solhaven / Vornavis"
+note = "28 rooms, entered from [Solhaven, Wedding Hall] through a flower-carved arch."
+
+[[fold]]
+region = "Settlement of Reim"
+into = "Icemule Trace"
+note = "17 rooms. The entry is beneath Icemule Trace on Thurfel's Island: [A Cavernous Approach] -> `go camp`."
+
+[[fold]]
+region = "Sea of Fire"
+into = "Solhaven / Vornavis"
+note = "75 rooms, the Sanctum of Scales. Reached by caravan from [Dazh's Caravans, Conductor] in Solhaven."
+
+[[fold]]
+region = "Pinefar / Aenatumgana"
+into = "Icemule Trace"
+note = "202 rooms. The trading post north of Icemule Trace."
+
+[[fold]]
+region = "Cold River / The Hinterwilds"
+into = "Icemule Trace"
+note = """250 rooms, and the one fold with a real argument on both sides.
+
+The Long Snow is a barrier between Icemule Trace and the Hinterwilds with no walking route across it. It is bypassed by the Temple of Hope caravan from [Abbey Stables, Caravan Master] in Icemule, and a SEPARATE caravan from Ta'Illistim up the trail from the postern gate. So it is reachable from two regions and belongs to neither by adjacency.
+
+Those caravans cannot travel between Icemule and Ta'Illistim, and each return journey only goes back to where it started, so they are not a route between the two towns -- each is a spur from its own end.
+
+Icemule by decision, not by measurement."""
+
+[[fold]]
+region = "The Rift"
+into = "Pinefar / Aenatumgana"
+note = "238 rooms, entered through [Breach, Cavern of Ages]. Folds transitively into Icemule Trace with Pinefar."
+
+# ------------------------------------------------------ not a place
+# `loc` values that name something other than somewhere. These are not
+# regions and they do not fold: a fold says "this is an area of that
+# region", and none of these is an area of anywhere.
+#
+# Answered from the wiki (`E:/Gemstone/data/wiki_clean`), because the map
+# cannot say what a name means.
+
+[[not_a_place]]
+region = "Within the Crystal (ALAE)"
+reason = "player-built"
+note = """12 rooms. ALAE is the Architectural and Landscaping Association of Elanthia -- the programme by which PLAYERS build their own rooms, buildings and dungeons. The mapdb grouped these by the programme that created them, not by where they are.
+
+It explains a measurement that looked like a boundary problem: this pocket touches both Mist Harbor and Ta'Vaalor, because a player area is attached wherever there was room for it."""
+
+[[not_a_place]]
+region = "Consultation Rooms and Cells"
+reason = "out of world"
+note = """11 rooms. A GameMaster holding area, per the wiki: characters are sent there when their data is corrupt, when they trip a policy violation, or when a GM needs to speak to them privately.
+
+Not part of the world, in the same sense as the urchin hideouts. Nobody walks there and it should not sit in a tree of places."""
+
+# ------------------------------------------- chronomage offices
+# Not derivable from the map: the offices and waiting rooms are there,
+# the teleport is not, because it fires on a timer rather than through an
+# exit. Recorded because it is real and a consumer asking "how do I get
+# there" needs it.
+#
+# The wiki groups these into "Zone 1", "Zone 2" and "Isolated". That is
+# DAY PASS PRICING -- which towns share unlimited travel for 5,000
+# silvers -- and not geography. River's Rest and Zul Logoth read
+# "Isolated" while having perfectly good roads. Another field whose name
+# suggests a place and encodes an administrative fact.
+
+[[chronomage]]
+towns = [
+  "Wehnimer's Landing",
+  "Solhaven",
+  "Icemule Trace",
+  "Cysaegir",
+  "Ta'Illistim",
+  "Ta'Vaalor",
+  "Kharam Dzu",
+  "River's Rest",
+  "Zul Logoth",
+  "Kraken's Fall",
+]
+note = "Source: wiki_clean/Chronomage Teleportation System.txt. 100,000 silvers a trip, departures at :00, :20 and :40."
