@@ -9,7 +9,7 @@
 use std::path::{Path, PathBuf};
 
 use cena_map::{Cost, Crossing, Exit, ExitKind, Map, Room, RoomId, binary};
-use cena_retag::{Curation, apply, deletable_stubs, plan, reach};
+use cena_retag::{Change, Curation, Plan, apply, deletable_stubs, plan, reach};
 
 fn map_path() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../gs.map")
@@ -36,7 +36,10 @@ fn an_untouched_map_re_encodes_byte_for_byte() {
     };
     let out = binary::encode(&map).expect("re-encode");
     assert_eq!(out.len(), bytes.len(), "size changed");
-    assert!(out == bytes, "re-encoding an unmodified map changed its bytes");
+    assert!(
+        out == bytes,
+        "re-encoding an unmodified map changed its bytes"
+    );
 }
 
 /// Applying twice must equal applying once. Without this, `apply` is not
@@ -208,7 +211,11 @@ fn stubs_pointing_at_each_other_are_still_deletable() {
 #[test]
 fn a_seasonal_edge_is_not_walkable() {
     let map = Map::from_rooms(vec![
-        room(1, "[Town Square Central]", vec![exit(2, "event transport duskruin")]),
+        room(
+            1,
+            "[Town Square Central]",
+            vec![exit(2, "event transport duskruin")],
+        ),
         room(2, "[Bloodriven Village, River Bank]", vec![]),
     ])
     .expect("no duplicate ids");
@@ -294,7 +301,10 @@ fn a_che_room_is_never_marked_a_public_locker() {
         })
         .map(|r| r.id.0)
         .collect();
-    assert!(both.is_empty(), "rooms marked public AND che-owned: {both:?}");
+    assert!(
+        both.is_empty(),
+        "rooms marked public AND che-owned: {both:?}"
+    );
 }
 
 /// Every `locker:*` key is one of the five shapes, with exactly one
@@ -323,8 +333,7 @@ fn every_locker_key_is_well_formed() {
             let segments: Vec<&str> = meta.split(':').collect();
             let ok = matches!(
                 segments.as_slice(),
-                ["locker", "public" | "che"]
-                    | ["locker", "che", "house" | "annex" | "entrance", _]
+                ["locker", "public" | "che"] | ["locker", "che", "house" | "annex" | "entrance", _]
             );
             if !ok {
                 bad.push(meta.clone());
@@ -379,6 +388,11 @@ fn a_region_is_only_written_where_a_uid_matched() {
         {
             continue;
         }
+        // A region the graph inferred says so on the room itself; this
+        // test is about the mapdb join, not that pass.
+        if room.meta.iter().any(|m| m == "map:region-inferred") {
+            continue;
+        }
         assert!(
             !room.uid.is_empty(),
             "room {} has a region but no uid",
@@ -387,12 +401,7 @@ fn a_region_is_only_written_where_a_uid_matched() {
         // A plane carries a name no uid gives it, because its uids give
         // NINE different ones -- see `[[plane]]` in regions.toml. The
         // check for those is that they are a plane at all.
-        if let Some(plane) = curation
-            .regions
-            .planes
-            .iter()
-            .find(|p| p.region == name)
-        {
+        if let Some(plane) = curation.regions.planes.iter().find(|p| p.region == name) {
             assert!(
                 room.title.iter().any(|t| t.contains(&plane.title)),
                 "room {} carries plane region {name:?} without its title",
@@ -420,7 +429,10 @@ fn a_region_is_only_written_where_a_uid_matched() {
             room.id.0, room.uid
         );
     }
-    assert!(tagged > 20_000, "expected the bulk of the map, got {tagged}");
+    assert!(
+        tagged > 20_000,
+        "expected the bulk of the map, got {tagged}"
+    );
 }
 
 /// A room whose uids land in several regions is not any of them.
@@ -476,7 +488,10 @@ fn a_room_in_nine_regions_is_named_for_itself() {
             regions.len()
         );
     }
-    assert!(planes > 0, "no multi-region room found; the case is untested");
+    assert!(
+        planes > 0,
+        "no multi-region room found; the case is untested"
+    );
 }
 
 /// A room the mapdb never listed keeps no region at all.
@@ -516,6 +531,9 @@ fn an_unjoined_room_gets_no_region() {
         // it and left `loc` empty, which is a blank to fill rather than
         // an answer to respect.
         if filled.contains(&room.id.0) {
+            continue;
+        }
+        if room.meta.iter().any(|m| m == "map:region-inferred") {
             continue;
         }
         assert!(
@@ -664,11 +682,7 @@ fn filling_a_blank_region_never_overwrites_one_the_mapdb_gave() {
             .iter()
             .filter(|m| m.starts_with("region:"))
             .collect();
-        assert!(
-            carried.len() < 2,
-            "room {} carries {carried:?}",
-            room.id.0
-        );
+        assert!(carried.len() < 2, "room {} carries {carried:?}", room.id.0);
         if !filled.contains(&room.id.0) {
             continue;
         }
@@ -681,4 +695,111 @@ fn filling_a_blank_region_never_overwrites_one_the_mapdb_gave() {
         );
     }
     assert!(seen > 1_000, "expected the filled set, saw {seen}");
+}
+
+/// A region boundary has to be crossed somewhere, so a room whose
+/// walkable neighbours all lie in one region is in that region.
+///
+/// The street's two ends are regioned and the three rooms between them
+/// are not; all five end up in one region. The shed hangs off nothing
+/// regioned at all and stays blank, because a room nothing reaches says
+/// nothing about where it is.
+#[test]
+fn a_room_its_neighbours_enclose_takes_their_region() {
+    let mut west = room(1, "[West End]", vec![exit(2, "east")]);
+    west.meta = vec!["region:Wehnimer's Landing".to_owned()];
+    let mut east = room(5, "[East End]", vec![exit(4, "west")]);
+    east.meta = vec!["region:Wehnimer's Landing".to_owned()];
+    let map = Map::from_rooms(vec![
+        west,
+        room(2, "[Street]", vec![exit(1, "west"), exit(3, "east")]),
+        room(3, "[Street]", vec![exit(2, "west"), exit(4, "east")]),
+        room(4, "[Street]", vec![exit(3, "west"), exit(5, "east")]),
+        east,
+        room(9, "[A Shed]", vec![]),
+    ])
+    .expect("no duplicate ids");
+
+    let plan = plan(&map, &Curation::default());
+    let filled: Vec<u32> = plan
+        .changes
+        .iter()
+        .filter_map(|c| match c {
+            Change::AddMeta { id, meta } if meta.starts_with("region:") => Some(*id),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(filled, vec![2, 3, 4], "the street between two ends fills");
+}
+
+/// Ground that can reach two regions is left for a person. The boundary
+/// genuinely runs through it and no rule here can say where.
+///
+/// This is the Graveyard, which is Wehnimer's Landing at one end and
+/// Shadow Valley at the other: 163 rooms on `gs.map` in exactly this
+/// shape. Judging room by room would fill it from both ends and put the
+/// boundary wherever the two sides met, which is a fact about the
+/// iteration and not about the map.
+#[test]
+fn ground_between_two_regions_is_left_for_a_person() {
+    let mut west = room(1, "[Landing Side]", vec![exit(2, "east")]);
+    west.meta = vec!["region:Wehnimer's Landing".to_owned()];
+    let mut east = room(4, "[Valley Side]", vec![exit(3, "west")]);
+    east.meta = vec!["region:Shadow Valley".to_owned()];
+    let map = Map::from_rooms(vec![
+        west,
+        room(2, "[Graves]", vec![exit(1, "west"), exit(3, "east")]),
+        room(3, "[Graves]", vec![exit(2, "west"), exit(4, "east")]),
+        east,
+    ])
+    .expect("no duplicate ids");
+
+    assert!(
+        region_fills(&plan(&map, &Curation::default())).is_empty(),
+        "a pocket reaching two regions must be left alone"
+    );
+}
+
+/// Judging a whole pocket at once should make the answer independent of
+/// the order the rooms are visited in, and this checks that it does.
+///
+/// It is worth pinning rather than assuming. An earlier version decided
+/// room by room, ignoring neighbours that had no region yet, and it
+/// happened to give the same answer forwards and backwards on this map
+/// -- while filling 649 rooms of contested boundary that the pocket rule
+/// leaves alone. Agreeing with itself is not the same as being right,
+/// so this test guards the property and not the implementation.
+#[test]
+fn spreading_regions_does_not_depend_on_room_order() {
+    let Some((_, map)) = real_map() else {
+        eprintln!("skipping: gs.map not present");
+        return;
+    };
+    let Ok(curation) = Curation::load(&curation_dir()) else {
+        eprintln!("skipping: curation/ not readable");
+        return;
+    };
+    let forward = region_fills(&plan(&map, &curation));
+
+    let mut reversed: Vec<cena_map::Room> = map.rooms().to_vec();
+    reversed.reverse();
+    let reversed = Map::from_rooms(reversed).expect("same rooms");
+    let backward = region_fills(&plan(&reversed, &curation));
+
+    assert_eq!(
+        forward, backward,
+        "the region each room was given depends on the order they were visited"
+    );
+}
+
+fn region_fills(plan: &Plan) -> std::collections::BTreeMap<u32, String> {
+    plan.changes
+        .iter()
+        .filter_map(|c| match c {
+            Change::AddMeta { id, meta } => meta
+                .strip_prefix("region:")
+                .map(|name| (*id, name.to_owned())),
+            _ => None,
+        })
+        .collect()
 }
