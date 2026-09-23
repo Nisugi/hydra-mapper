@@ -84,17 +84,24 @@ fn a_contradiction_through_an_alignment_is_found() {
 }
 
 /// Rooms aligned on both axes with nothing separating them must share a
-/// cell, which no layout can draw.
+/// cell, which no layout can draw. 9 is south of 1 and 2 north of 9, so 2
+/// shares 1's x; 5 is east of 1 and 2 west of 5, so 2 shares 1's y. No
+/// cycle anywhere -- only the overlap.
 #[test]
 fn rooms_forced_onto_one_cell_are_reported() {
     let found = check(vec![
-        room(1, vec![exit(2, "north"), exit(3, "north")]),
-        room(2, vec![exit(3, "north")]),
-        room(3, vec![exit(2, "north")]),
+        room(1, vec![exit(9, "south"), exit(5, "east")]),
+        room(9, vec![exit(2, "north")]),
+        room(5, vec![exit(2, "west")]),
+        room(2, vec![]),
     ]);
-    assert!(
-        !found.is_empty(),
-        "rooms pinned to one cell went unreported: {found:?}"
+    assert_eq!(
+        found,
+        vec![Problem::ForcedOverlap {
+            a: RoomId(1),
+            b: RoomId(2)
+        }],
+        "rooms pinned to one cell went unreported"
     );
 }
 
@@ -278,4 +285,103 @@ fn rooms_nothing_orders_sit_beside_their_neighbour_not_stacked_at_the_origin() {
             apart(at(id), at(2))
         );
     }
+}
+
+/// Every stated planar bearing among `placed` holds by its signs, and no
+/// two rooms share a cell.
+fn assert_drawable(
+    placed: &std::collections::HashMap<RoomId, crate::positioner::Cell>,
+    map: &Map,
+    dirs: &DirectionMap,
+) {
+    for room in map.rooms() {
+        for e in &room.exits {
+            let Some(d) = dirs.get(room.id, e.to) else {
+                continue;
+            };
+            if matches!(d, crate::direction::Dir::Up | crate::direction::Dir::Down) {
+                continue;
+            }
+            let (a, b) = (placed[&room.id], placed[&e.to]);
+            let (dx, dy) = d.offset();
+            assert!(
+                (b.x - a.x).signum() == dx.signum() && (b.y - a.y).signum() == dy.signum(),
+                "{} -> {} is {d:?} but sits at {a:?} -> {b:?}",
+                room.id.0,
+                e.to.0
+            );
+        }
+    }
+    let mut cells: Vec<_> = placed.values().copied().collect();
+    cells.sort_unstable_by_key(|c| (c.x, c.y));
+    let before = cells.len();
+    cells.dedup();
+    assert_eq!(cells.len(), before, "two rooms share a cell: {placed:?}");
+}
+
+fn place(rooms: Vec<Room>) {
+    let ids: Vec<RoomId> = rooms.iter().map(|r| r.id).collect();
+    let map = Map::from_rooms(rooms).expect("ok");
+    let dirs = DirectionMap::build(&map);
+    let placed = place_by_order(&ids, &map, &dirs).expect("satisfiable");
+    assert_drawable(&placed, &map, &dirs);
+}
+
+/// Two rooms both north of one room: both must share its x and sit above
+/// it, and nothing says which is higher -- so ranking put them on one
+/// cell, and the nudge, which only ever moved a room upward, could not
+/// part them. One must step further north.
+#[test]
+fn two_rooms_north_of_one_do_not_share_a_cell() {
+    place(vec![
+        room(1, vec![exit(2, "north"), exit(3, "north")]),
+        room(2, vec![]),
+        room(3, vec![]),
+    ]);
+}
+
+/// Two grids joined only by a bearingless doorway: Henty's Depot, whose
+/// halves were drawn on top of each other because nothing orders one
+/// against the other and both were ranked from the origin.
+#[test]
+fn two_grids_a_doorway_joins_are_drawn_apart() {
+    place(vec![
+        room(
+            1,
+            vec![exit(2, "east"), exit(3, "south"), exit(11, "go arch")],
+        ),
+        room(2, vec![exit(1, "west"), exit(4, "south")]),
+        room(3, vec![exit(1, "north"), exit(4, "east")]),
+        room(4, vec![exit(2, "north"), exit(3, "west")]),
+        room(
+            11,
+            vec![exit(12, "east"), exit(13, "south"), exit(1, "go arch")],
+        ),
+        room(12, vec![exit(11, "west"), exit(14, "south")]),
+        room(13, vec![exit(11, "north"), exit(14, "east")]),
+        room(14, vec![exit(12, "north"), exit(13, "west")]),
+    ]);
+}
+
+/// Two roads, each with a field one step east, where the ranking gave
+/// both fields the same coordinate on both axes although they are
+/// different classes on each: neither can be nudged alone, so one field's
+/// class is pushed, and whatever is east of it follows.
+#[test]
+fn classes_ranked_onto_one_cell_are_pushed_apart() {
+    place(vec![
+        // Road A runs north-south; its field is east of its top room.
+        room(1, vec![exit(2, "south"), exit(5, "east")]),
+        room(2, vec![exit(1, "north")]),
+        room(5, vec![exit(1, "west"), exit(6, "east")]),
+        room(6, vec![exit(5, "west")]),
+        // Road B, joined to A only by a bearingless path, the same shape.
+        room(
+            3,
+            vec![exit(4, "south"), exit(7, "east"), exit(1, "go path")],
+        ),
+        room(4, vec![exit(3, "north")]),
+        room(7, vec![exit(3, "west"), exit(8, "east")]),
+        room(8, vec![exit(7, "west")]),
+    ]);
 }

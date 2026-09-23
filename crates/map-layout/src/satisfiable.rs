@@ -54,7 +54,7 @@
 //! north/south offsets as a placement convenience and are not 2D geometry
 //! (`plan/26` §0).
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 
 use cena_map::{Map, RoomId};
 
@@ -363,7 +363,7 @@ impl Union {
 /// An arrangement satisfying every stated bearing's signs, or `None` when
 /// the rooms cannot be satisfied.
 ///
-/// **This cannot fail on satisfiable data**: each axis numbers its
+/// **Its signs cannot fail on satisfiable data**: each axis numbers its
 /// alignment classes in topological order, so every strict constraint
 /// `a < b` holds because `a`'s class was numbered first, and every
 /// equality holds because both rooms share a class. No search, no
@@ -401,13 +401,133 @@ pub fn place_by_order(
     // a component lands on one cell there: a tower reached by up and
     // down, a yard reached by "out", eight of them stacked at (0,0) in
     // Wehnimer's Landing. The map still says what they are next to, so
-    // they take a neighbour's coordinate on the free axis, and any two
-    // still sharing a cell are nudged apart along an axis that is free
-    // for one of them. Nothing constrained is moved.
+    // they take a neighbour's coordinate on the free axis. Then whatever
+    // still shares a cell is parted without breaking an order: a lone
+    // room nudged within its bounds, pieces no bearing links moved as
+    // blocks, and last, alignment classes pushed along with everything
+    // ordered after them.
     let neighbours = neighbours_within(rooms, map, &present);
     settle_free(&mut out, rooms, &neighbours, &x.free, &y.free);
     unstack(&mut out, rooms, &x, &y);
+    separate_pieces(&mut out, rooms, map, dirs, &present);
+    push_apart(&mut out, rooms, &x, &y);
     Some(out)
+}
+
+/// What is still stacked after the nudges: two rooms whose alignment
+/// classes the ranking happened to give the same coordinate on both axes
+/// -- two farm fields both one step east of different roads. Neither can
+/// be nudged alone (a class moves as one or parts from itself), so the
+/// later room's class is pushed one step along an axis where the two
+/// classes differ, and every class ordered after it is pushed on as far
+/// as it must be: the solver's own grid rip. Every order still holds,
+/// because a class only ever moves away from its predecessors and its
+/// successors follow it.
+///
+/// Bounded: a push may land on something else, which the next round
+/// pushes in turn, but never more rounds than there are rooms.
+fn push_apart(out: &mut HashMap<RoomId, Cell>, rooms: &[RoomId], x: &Ranked, y: &Ranked) {
+    let mut stuck: HashSet<(RoomId, RoomId)> = HashSet::new();
+    for _ in 0..rooms.len() {
+        let mut first: HashMap<Cell, RoomId> = HashMap::new();
+        let pair = rooms.iter().find_map(|&r| {
+            let a = *first.entry(out[&r]).or_insert(r);
+            (a != r && !stuck.contains(&(a, r))).then_some((a, r))
+        });
+        let Some((a, b)) = pair else {
+            return;
+        };
+        if x.class_of(a) != x.class_of(b) {
+            x.push(x.class_of(b), out, |c| &mut c.x);
+        } else if y.class_of(a) != y.class_of(b) {
+            y.push(y.class_of(b), out, |c| &mut c.y);
+        } else {
+            // One class on both axes: the bearings themselves put the two
+            // rooms on one cell (`Problem::ForcedOverlap`).
+            stuck.insert((a, b));
+        }
+    }
+}
+
+/// **Pieces no bearing links are laid out from the same origin**, so they
+/// land on top of each other: Henty's Depot is two small grids joined only
+/// by a bearingless doorway, and Icemule's Top of the World several, and
+/// both came out with rooms two and three deep on one cell. Nothing
+/// orders one piece against another, so each can be moved as a block
+/// without breaking a single bearing: the largest stays, and every other
+/// piece that collides takes the nearest offset where it does not.
+fn separate_pieces(
+    out: &mut HashMap<RoomId, Cell>,
+    rooms: &[RoomId],
+    map: &Map,
+    dirs: &DirectionMap,
+    present: &HashSet<RoomId>,
+) {
+    let mut seen: HashSet<Cell> = HashSet::new();
+    if out.values().all(|c| seen.insert(*c)) {
+        return;
+    }
+    let mut union = Union::new(rooms);
+    for axis in [Axis::EastWest, Axis::NorthSouth] {
+        for e in axis_edges(rooms, map, dirs, present, axis) {
+            union.join(e.from, e.to);
+        }
+    }
+    let mut pieces: BTreeMap<RoomId, Vec<RoomId>> = BTreeMap::new();
+    for &r in rooms {
+        pieces.entry(union.find(r)).or_default().push(r);
+    }
+    let mut pieces: Vec<Vec<RoomId>> = pieces.into_values().collect();
+    // Largest first, then by lowest room id: the main body stays where it
+    // is and the fragments move.
+    pieces.sort_by_key(|p| (std::cmp::Reverse(p.len()), p.iter().min().copied()));
+
+    let mut occupied: HashSet<Cell> = HashSet::new();
+    for piece in &pieces {
+        let cells: Vec<Cell> = piece.iter().map(|r| out[r]).collect();
+        let fits = |dx: i32, dy: i32, occupied: &HashSet<Cell>| {
+            cells.iter().all(|c| {
+                !occupied.contains(&Cell {
+                    x: c.x + dx,
+                    y: c.y + dy,
+                })
+            })
+        };
+        let (dx, dy) = if fits(0, 0, &occupied) {
+            (0, 0)
+        } else {
+            // Past the occupied extent plus the piece's own, every offset
+            // fits, so the search always ends.
+            let limit = i32::try_from(occupied.len() + cells.len()).unwrap_or(i32::MAX / 4);
+            (1..=limit)
+                .flat_map(|r| ring(Cell { x: 0, y: 0 }, r))
+                .map(|c| (c.x, c.y))
+                .find(|&(dx, dy)| fits(dx, dy, &occupied))
+                .unwrap_or((0, 0))
+        };
+        for (&r, c) in piece.iter().zip(&cells) {
+            let moved = Cell {
+                x: c.x + dx,
+                y: c.y + dy,
+            };
+            occupied.insert(moved);
+            out.insert(r, moved);
+        }
+    }
+}
+
+/// The cells at Chebyshev distance exactly `r` from `center`, in a fixed
+/// order: straight out along a row or column first, diagonals last.
+fn ring(center: Cell, r: i32) -> impl Iterator<Item = Cell> {
+    let top_bottom = (-r..=r).flat_map(move |dx| [(dx, -r), (dx, r)]);
+    let sides = (1 - r..r).flat_map(move |dy| [(-r, dy), (r, dy)]);
+    let mut offsets: Vec<(i32, i32)> = top_bottom.chain(sides).collect();
+    offsets.sort_by_key(|&(dx, dy)| (dx.abs().min(dy.abs()), dy, dx));
+    offsets.dedup();
+    offsets.into_iter().map(move |(dx, dy)| Cell {
+        x: center.x + dx,
+        y: center.y + dy,
+    })
 }
 
 /// Each room's neighbours by any exit, within the component, both ways.
@@ -479,45 +599,41 @@ fn settle_free(
     }
 }
 
-/// Two rooms on one cell: the later one steps to the nearest free cell
-/// within what its constraints allow on each axis -- anywhere, on an
-/// axis nothing constrains; between its nearest predecessor and
-/// successor otherwise. A room with no room to move stays put.
+/// Two rooms on one cell: the first of them met in `rooms` steps to the
+/// nearest free cell within what its constraints allow on each axis --
+/// anywhere, on an axis nothing constrains; strictly between where its
+/// predecessors and successors sit *now* otherwise. A room with no room
+/// to move stays put.
+///
+/// Searched ring by ring outward, stopping at the first ring with a free
+/// cell, or once the ring has passed the room's allowed range on both
+/// axes. (It scanned the whole `(2n+1)^2` square for every stacked room:
+/// 18 seconds on a 6,000-room street.)
 fn unstack(out: &mut HashMap<RoomId, Cell>, rooms: &[RoomId], x: &Ranked, y: &Ranked) {
     let mut count: HashMap<Cell, usize> = HashMap::new();
     for c in out.values() {
         *count.entry(*c).or_default() += 1;
     }
-    let reach = i32::try_from(rooms.len()).unwrap_or(i32::MAX);
+    let reach = i32::try_from(rooms.len()).unwrap_or(i32::MAX / 4);
     for &room in rooms {
         let here = out[&room];
         if count.get(&here).copied().unwrap_or(0) < 2 {
             continue;
         }
-        let (xlo, xhi) = x.range(room, here.x);
-        let (ylo, yhi) = y.range(room, here.y);
-        let mut best: Option<(i32, Cell)> = None;
-        for dx in -reach..=reach {
-            let cx = here.x.saturating_add(dx);
-            if cx < xlo || cx > xhi {
-                continue;
+        let (xlo, xhi) = x.range(room, here.x, out, |c| c.x);
+        let (ylo, yhi) = y.range(room, here.y, out, |c| c.y);
+        let allowed = |c: &Cell| (xlo..=xhi).contains(&c.x) && (ylo..=yhi).contains(&c.y);
+        let mut found = None;
+        for r in 1..=reach {
+            if here.x - r < xlo && here.x + r > xhi && here.y - r < ylo && here.y + r > yhi {
+                break;
             }
-            for dy in -reach..=reach {
-                let cy = here.y.saturating_add(dy);
-                if cy < ylo || cy > yhi {
-                    continue;
-                }
-                let cell = Cell { x: cx, y: cy };
-                let cost = dx.abs().max(dy.abs());
-                if best.is_some_and(|(c, _)| c <= cost) {
-                    continue;
-                }
-                if !count.contains_key(&cell) {
-                    best = Some((cost, cell));
-                }
+            found = ring(here, r).find(|c| allowed(c) && count.get(c).copied().unwrap_or(0) == 0);
+            if found.is_some() {
+                break;
             }
         }
-        if let Some((_, cell)) = best {
+        if let Some(cell) = found {
             *count.entry(here).or_default() -= 1;
             *count.entry(cell).or_default() += 1;
             out.insert(room, cell);
@@ -526,15 +642,14 @@ fn unstack(out: &mut HashMap<RoomId, Cell>, rooms: &[RoomId], x: &Ranked, y: &Ra
 }
 
 /// Which rooms nothing constrains on this axis, and, for the rest that
-/// stand alone in their class, the ranks they must sit strictly between.
-#[allow(clippy::type_complexity)]
+/// stand alone in their class, the rooms they must sit strictly after and
+/// strictly before.
 fn freedom(
     rooms: &[RoomId],
     graph: &BTreeMap<RoomId, Vec<RoomId>>,
-    rank: &HashMap<RoomId, i32>,
     has_pred: &HashSet<RoomId>,
     union: &mut Union,
-) -> (HashSet<RoomId>, HashMap<RoomId, (Option<i32>, Option<i32>)>) {
+) -> (HashSet<RoomId>, HashMap<RoomId, Order>) {
     let mut class_size: HashMap<RoomId, usize> = HashMap::new();
     for &r in rooms {
         *class_size.entry(union.find(r)).or_default() += 1;
@@ -549,32 +664,38 @@ fn freedom(
                 && class_size.get(&class) == Some(&1)
         })
         .collect();
-    // Bounds, for singleton classes only: the nearest predecessor's and
-    // successor's ranks.
-    let mut nearest_pred: HashMap<RoomId, i32> = HashMap::new();
+    // Orders, for singleton classes only. A class is named by one of its
+    // rooms, and every member of it shares that room's coordinate.
+    let mut preds: HashMap<RoomId, Vec<RoomId>> = HashMap::new();
     for (&from, targets) in graph {
         for &to in targets {
-            let r = rank.get(&from).copied().unwrap_or(0);
-            let slot = nearest_pred.entry(to).or_insert(r);
-            *slot = (*slot).max(r);
+            preds.entry(to).or_default().push(from);
         }
     }
-    let bounds: HashMap<RoomId, (Option<i32>, Option<i32>)> = rooms
+    let order: HashMap<RoomId, Order> = rooms
         .iter()
         .filter_map(|&r| {
             let class = union.find(r);
             if class_size.get(&class) != Some(&1) {
                 return None;
             }
-            let lo = nearest_pred.get(&class).copied();
-            let hi = graph
-                .get(&class)
-                .and_then(|t| t.iter().filter_map(|s| rank.get(s)).min())
-                .copied();
-            Some((r, (lo, hi)))
+            Some((
+                r,
+                Order {
+                    after: preds.remove(&class).unwrap_or_default(),
+                    before: graph.get(&class).cloned().unwrap_or_default(),
+                },
+            ))
         })
         .collect();
-    (free, bounds)
+    (free, order)
+}
+
+/// The rooms one room must sit strictly after, and strictly before, on
+/// one axis.
+struct Order {
+    after: Vec<RoomId>,
+    before: Vec<RoomId>,
 }
 
 /// One axis, ranked.
@@ -582,26 +703,86 @@ struct Ranked {
     at: HashMap<RoomId, i32>,
     /// Rooms no constraint touches on this axis.
     free: HashSet<RoomId>,
-    /// Per singleton room: the nearest predecessor's and successor's
-    /// ranks, the coordinates it must sit strictly between.
-    bounds: HashMap<RoomId, (Option<i32>, Option<i32>)>,
+    /// Per singleton room: what it must sit strictly between.
+    order: HashMap<RoomId, Order>,
+    /// Each room's alignment class, named by one of its rooms.
+    class: HashMap<RoomId, RoomId>,
+    /// Each class's rooms.
+    members: HashMap<RoomId, Vec<RoomId>>,
+    /// Each class's successors: the classes that must sit strictly after
+    /// it on this axis.
+    succ: BTreeMap<RoomId, Vec<RoomId>>,
 }
 
 impl Ranked {
-    /// Where a room may sit on this axis without breaking an order,
-    /// given where it is now (an equality class keeps its coordinate:
-    /// moving one member alone would part it from the rest).
-    fn range(&self, room: RoomId, now: i32) -> (i32, i32) {
+    fn class_of(&self, room: RoomId) -> RoomId {
+        self.class.get(&room).copied().unwrap_or(room)
+    }
+
+    /// Move `class` one step on along this axis, and every class ordered
+    /// after it on as far as it must go to stay after.
+    fn push(
+        &self,
+        class: RoomId,
+        out: &mut HashMap<RoomId, Cell>,
+        coord: fn(&mut Cell) -> &mut i32,
+    ) {
+        let at = |c: RoomId, out: &mut HashMap<RoomId, Cell>| {
+            out.get_mut(&c).map_or(0, |cell| *coord(cell))
+        };
+        let set = |c: RoomId, v: i32, out: &mut HashMap<RoomId, Cell>| {
+            for m in self.members.get(&c).map_or(&[c][..], Vec::as_slice) {
+                if let Some(cell) = out.get_mut(m) {
+                    *coord(cell) = v;
+                }
+            }
+        };
+        let start = at(class, out) + 1;
+        set(class, start, out);
+        let mut queue: VecDeque<RoomId> = VecDeque::from([class]);
+        while let Some(c) = queue.pop_front() {
+            let floor = at(c, out) + 1;
+            for &s in self.succ.get(&c).map_or(&[] as &[_], Vec::as_slice) {
+                if at(s, out) < floor {
+                    set(s, floor, out);
+                    queue.push_back(s);
+                }
+            }
+        }
+    }
+
+    /// Where a room may sit on this axis without breaking an order, read
+    /// off where its predecessors and successors sit *now* -- a neighbour
+    /// may already have been nudged, so its rank would not be safe. An
+    /// equality class keeps its coordinate: moving one member alone would
+    /// part it from the rest.
+    fn range(
+        &self,
+        room: RoomId,
+        now: i32,
+        out: &HashMap<RoomId, Cell>,
+        coord: fn(Cell) -> i32,
+    ) -> (i32, i32) {
         if self.free.contains(&room) {
             return (i32::MIN / 2, i32::MAX / 2);
         }
-        // Never below where it is: a predecessor may itself have been
-        // nudged up, and only a move upward is safe against every
-        // successor, which stays at or above its rank.
-        match self.bounds.get(&room) {
-            Some(&(_, hi)) => (now, hi.map_or(i32::MAX / 2, |h| h - 1)),
-            None => (now, now),
-        }
+        let Some(order) = self.order.get(&room) else {
+            return (now, now);
+        };
+        let at = |r: &RoomId| out.get(r).copied().map(coord);
+        let lo = order
+            .after
+            .iter()
+            .filter_map(at)
+            .max()
+            .map_or(i32::MIN / 2, |p| p + 1);
+        let hi = order
+            .before
+            .iter()
+            .filter_map(at)
+            .min()
+            .map_or(i32::MAX / 2, |s| s - 1);
+        (lo, hi)
     }
 }
 
@@ -680,16 +861,21 @@ fn ranks(
             rank.insert(class, nearest - 1);
         }
     }
-    let (free, bounds) = freedom(rooms, &graph, &rank, &has_pred, &mut union);
+    let (free, order) = freedom(rooms, &graph, &has_pred, &mut union);
+    let class: HashMap<RoomId, RoomId> = rooms.iter().map(|&r| (r, union.find(r))).collect();
+    let mut members: HashMap<RoomId, Vec<RoomId>> = HashMap::new();
+    for &r in rooms {
+        members.entry(class[&r]).or_default().push(r);
+    }
     Some(Ranked {
         at: rooms
             .iter()
-            .map(|&r| {
-                let class = union.find(r);
-                (r, rank.get(&class).copied().unwrap_or(0))
-            })
+            .map(|&r| (r, rank.get(&class[&r]).copied().unwrap_or(0)))
             .collect(),
         free,
-        bounds,
+        order,
+        class,
+        members,
+        succ: graph,
     })
 }
