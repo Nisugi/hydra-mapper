@@ -1614,7 +1614,16 @@ fn inspector(
             }
         }
         if !facts.tags.is_empty() {
-            ui.label(format!("Tags: {}", facts.tags.join(", ")));
+            // Forage names make a room's tag list run to a hundred entries,
+            // which pushed its exits and layout off the panel. Always
+            // foldable; shut to start with once it is long.
+            let count = facts.tags.len();
+            egui::CollapsingHeader::new(format!("Tags ({count})"))
+                .id_salt("tags_collapsed")
+                .default_open(count <= TAGS_BEFORE_COLLAPSING)
+                .show(ui, |ui| {
+                    ui.label(facts.tags.join(", "));
+                });
         }
         if facts.entrance {
             ui.colored_label(ENTRANCE_COLOR, "Hosts a doorway into an interior");
@@ -1702,6 +1711,10 @@ fn inspector(
 /// read at a glance. Nothing is hidden: the header says how many there
 /// are and opens to the same list.
 const EXITS_BEFORE_COLLAPSING: usize = 12;
+
+/// Tags past this many start folded: a room's forage names alone can run
+/// to a hundred.
+const TAGS_BEFORE_COLLAPSING: usize = 8;
 
 /// The exit list, with rooms outside this area as links to follow.
 fn exit_list(ui: &mut egui::Ui, facts: &RoomFacts, follow: &mut Option<RoomId>) {
