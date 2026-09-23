@@ -2987,10 +2987,23 @@ fn load_map(path: Option<&Path>) -> Result<Map, LoadProblem> {
         return Err(LoadProblem::NoPath);
     };
     let path_str = path.display().to_string();
-    let bytes = std::fs::read(path).map_err(|error| LoadProblem::CouldNotRead {
-        path: path_str.clone(),
-        error,
-    })?;
+    // A bundled build's default path names no file unless someone put a
+    // map there; the embedded one stands in. Only for that path, so a
+    // mistyped one still says it could not be read.
+    let bytes = match std::fs::read(path) {
+        Ok(bytes) => std::borrow::Cow::Owned(bytes),
+        Err(error) => match crate::bundle::MAP {
+            Some(bytes) if crate::bundle::default_path().as_deref() == Some(path) => {
+                std::borrow::Cow::Borrowed(bytes)
+            }
+            _ => {
+                return Err(LoadProblem::CouldNotRead {
+                    path: path_str,
+                    error,
+                });
+            }
+        },
+    };
     cena_map::binary::decode(&bytes).map_err(|error| LoadProblem::NotAMap {
         path: path_str,
         error,

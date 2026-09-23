@@ -11,6 +11,7 @@
 
 mod app;
 mod areas;
+mod bundle;
 mod camera;
 mod draw;
 mod export;
@@ -42,7 +43,8 @@ fn main() -> eframe::Result {
         let path = std::env::args()
             .nth(2)
             .map(PathBuf::from)
-            .or_else(|| std::env::var_os(MAP_ENV).map(PathBuf::from));
+            .or_else(|| std::env::var_os(MAP_ENV).map(PathBuf::from))
+            .or_else(bundle::default_path);
         let result = match flag {
             "--export-areas" => app::export_areas_headless(path.as_deref()),
             "--export-curation" => app::export_curation_headless(path.as_deref()),
@@ -74,4 +76,6 @@ fn map_path() -> Option<PathBuf> {
         .nth(1)
         .map(PathBuf::from)
         .or_else(|| std::env::var_os(MAP_ENV).map(PathBuf::from))
+        // A bundled build with neither uses its embedded map (see `bundle`).
+        .or_else(bundle::default_path)
 }

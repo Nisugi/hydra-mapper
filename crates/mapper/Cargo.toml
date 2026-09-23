@@ -18,5 +18,10 @@ cena-map-layout = { path = "../map-layout" }
 egui.workspace = true
 eframe.workspace = true
 
+[features]
+# Embed the repository's gs.map in the binary: one file to hand out. See
+# src/bundle.rs.
+bundled-map = []
+
 [lints]
 workspace = true
