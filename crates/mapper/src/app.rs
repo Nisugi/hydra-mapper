@@ -842,6 +842,21 @@ impl MapperApp {
         self.rebuild_shown(Fit::Keep);
     }
 
+    /// A knob moved last frame: re-solve what is shown, keeping focus and
+    /// selection, and frame the new sheet.
+    fn apply_knobs(&mut self) {
+        if self
+            .shown
+            .as_ref()
+            .is_some_and(|s| s.layout.town_scale != self.params.town_scale.max(1))
+        {
+            self.rebuild_shown(Fit::Keep);
+            if let Some(shown) = &mut self.shown {
+                shown.needs_fit = true;
+            }
+        }
+    }
+
     fn rebuild_shown(&mut self, fit: Fit) {
         let Ok(map) = &self.map else {
             return;
@@ -2578,18 +2593,7 @@ impl eframe::App for MapperApp {
             });
             return;
         }
-        // A knob moved last frame: re-solve what is shown, keeping focus
-        // and selection, and frame the new sheet.
-        if self
-            .shown
-            .as_ref()
-            .is_some_and(|s| s.layout.town_scale != self.params.town_scale.max(1))
-        {
-            self.rebuild_shown(Fit::Keep);
-            if let Some(shown) = &mut self.shown {
-                shown.needs_fit = true;
-            }
-        }
+        self.apply_knobs();
 
         let mut edit: Option<EditAction> = None;
         let edit_out = &mut edit;
@@ -2767,15 +2771,7 @@ fn canvas_header(
                 });
         }
         ui.separator();
-        if ui.button("Fit").clicked() {
-            shown.needs_fit = true;
-        }
-        ui.toggle_value(&mut view.labels, "Labels")
-            .on_hover_text("Draw room titles (hover still shows them)");
-        ui.toggle_value(&mut view.interiors, "Interiors")
-            .on_hover_text("Draw every interior room as a dot, not only each building's door");
-        ui.separator();
-        ui.add(egui::Slider::new(&mut params.town_scale, 1..=12).text("Town scale"));
+        view_controls(ui, shown, view, params);
         ui.separator();
         // Editing is refused outright while the store would not
         // load: the file holds hand curation, and saving over it
@@ -3162,6 +3158,25 @@ fn load_map(path: Option<&Path>) -> Result<Map, LoadProblem> {
         path: path_str,
         error,
     })
+}
+
+/// Fit, the drawing toggles, and the layout's knobs. A knob re-solves
+/// the shown area when it moves.
+fn view_controls(
+    ui: &mut egui::Ui,
+    shown: &mut Shown,
+    view: &mut draw::View,
+    params: &mut LayoutParams,
+) {
+    if ui.button("Fit").clicked() {
+        shown.needs_fit = true;
+    }
+    ui.toggle_value(&mut view.labels, "Labels")
+        .on_hover_text("Draw room titles (hover still shows them)");
+    ui.toggle_value(&mut view.interiors, "Interiors")
+        .on_hover_text("Draw every interior room as a dot, not only each building's door");
+    ui.separator();
+    ui.add(egui::Slider::new(&mut params.town_scale, 1..=12).text("Town scale"));
 }
 
 #[cfg(test)]

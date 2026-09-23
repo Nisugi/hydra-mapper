@@ -510,7 +510,16 @@ fn populate_edges(
                         cena_map::Crossing::Command(cmd) => cmd.as_str(),
                         _ => "",
                     };
-                    (SceneEdgeKind::Connector, connector_label(cmd))
+                    // Stretched, it is a stub like a stretched compass
+                    // edge: the link stays visible at both ends without a
+                    // line across the whole sheet (Mist Harbor had one of
+                    // 212 cells, the Landing one of 1,496).
+                    let kind = if len > LONG_EDGE_CELLS * scene.scale_of(room_group) {
+                        SceneEdgeKind::Stub
+                    } else {
+                        SceneEdgeKind::Connector
+                    };
+                    (kind, connector_label(cmd))
                 } else if len > LONG_EDGE_CELLS * scene.scale_of(room_group) {
                     (SceneEdgeKind::Stub, None)
                 } else {
@@ -945,8 +954,7 @@ mod tests {
             }
             rooms.push(room(street, i64::from(street), &exits));
         }
-        let map = Map::from_rooms(rooms).expect("no duplicate ids");
-        map
+        Map::from_rooms(rooms).expect("no duplicate ids")
     }
 
     /// The town scale is a knob: at any scale the streets sit at
