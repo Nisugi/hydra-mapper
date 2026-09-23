@@ -152,6 +152,19 @@ pub struct SceneEdge {
     /// where a building's inside is drawn only when the building is.
     #[serde(default)]
     pub unit: Option<usize>,
+    /// Bends between `a` and `b`, in sheet cells, for a line routed around
+    /// a room it would otherwise cross. Empty for a straight line, which
+    /// is most of them. See [`crate::routing`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub via: Vec<Point>,
+}
+
+/// A point on the sheet, in cells, that need not be a cell's centre: a
+/// bend in a routed line sits between rooms.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Point {
+    pub x: f32,
+    pub y: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -309,6 +322,7 @@ pub fn build_scene(location: &str, layout: &Layout, map: &Map) -> MapScene {
     let unit_of_group = populate_units(&mut scene, layout, map);
     populate_rooms(&mut scene, layout, map, &unit_of_group);
     populate_edges(&mut scene, layout, map, &dirs, &unit_of_group);
+    crate::routing::route_edges(&mut scene.sheet);
     populate_labels(&mut scene, layout, &unit_of_group);
     compute_sheet_bounds(&mut scene);
 
@@ -554,6 +568,7 @@ fn populate_edges(
                 kind,
                 label,
                 unit: inside,
+                via: Vec::new(),
             });
         }
     }

@@ -350,12 +350,20 @@ fn draw_edges(
         // Scaled so lines thin out as the view pulls back, but never to
         // nothing.
         let width = (camera.scale * 1.5).max(0.5);
+        // A routed line bends around the rooms it would have crossed.
+        let mut path = vec![a];
+        path.extend(
+            edge.via
+                .iter()
+                .map(|p| camera.point_to_screen(p.x, p.y, canvas)),
+        );
+        path.push(b);
         match edge.kind {
             SceneEdgeKind::Directional => {
-                painter.line_segment([a, b], Stroke::new(width, DIRECTIONAL_LINE));
+                painter.line(path, Stroke::new(width, DIRECTIONAL_LINE));
             }
             SceneEdgeKind::Connector => {
-                painter.line_segment([a, b], Stroke::new(width * 0.7, CONNECTOR_LINE));
+                painter.line(path, Stroke::new(width * 0.7, CONNECTOR_LINE));
             }
             // Stretched too far to draw whole: a short tick out of each
             // end toward the other, labelled with the room it leads to, so

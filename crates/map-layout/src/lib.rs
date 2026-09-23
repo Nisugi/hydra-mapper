@@ -43,6 +43,7 @@ pub mod packer;
 pub mod pipeline;
 pub mod positioner;
 pub mod regions;
+pub mod routing;
 pub mod satisfiable;
 #[cfg(test)]
 mod satisfiable_tests;
