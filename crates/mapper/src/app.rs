@@ -1171,9 +1171,18 @@ impl MapperApp {
                     }
                     if ui
                         .add(
-                            egui::Button::selectable(selected, row_text(area, self.tab, &label))
-                                .truncate()
-                                .min_size(egui::vec2(ui.available_width(), 0.0)),
+                            egui::Button::selectable(
+                                selected,
+                                // A spacer that eats the leftover width,
+                                // which pushes the label to the left
+                                // edge. The button centres its content
+                                // otherwise, and a centred name hides its
+                                // own indentation -- the only thing
+                                // saying an area sits under a region.
+                                (row_text(area, self.tab, &label), egui::Atom::grow()),
+                            )
+                            .truncate()
+                            .min_size(egui::vec2(ui.available_width(), 0.0)),
                         )
                         .on_hover_text(&label)
                         .clicked()
