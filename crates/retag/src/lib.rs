@@ -205,15 +205,29 @@ fn fold_of(curation: &Curation, name: &str) -> String {
     let mut current = name.to_owned();
     // Bounded rather than trusting the file to be acyclic.
     for _ in 0..8 {
-        match curation
+        // A fold names one value; a region's `members` names several.
+        // Both say "this `loc` value is not a region, that one is", so
+        // both resolve here and a chain may run through either -- `The
+        // Rift` folds into Pinefar, which folds into Icemule Trace.
+        if let Some(f) = curation
             .decisions
             .folds
             .iter()
             .find(|f| f.region == current)
         {
-            Some(f) => current = f.into.clone(),
-            None => break,
+            current = f.into.clone();
+            continue;
         }
+        if let Some(r) = curation
+            .decisions
+            .regions
+            .iter()
+            .find(|r| r.members.iter().any(|m| *m == current))
+        {
+            current = r.name.clone();
+            continue;
+        }
+        break;
     }
     current
 }
@@ -261,13 +275,6 @@ fn spread_regions(plan: &mut Plan, rooms: &[Room], curation: &Curation) {
             region.insert(room.id.0, name.to_owned());
         }
     }
-    // The map still holds whatever the last run wrote, which for a folded
-    // region is its old name. Resolve those before spreading, or a room
-    // filled from a `Pinefar / Aenatumgana` neighbour is given a region
-    // that this curation says is an area of Icemule Trace.
-    for name in region.values_mut() {
-        *name = fold_of(curation, name);
-    }
     for change in &plan.changes {
         match change {
             Change::AddMeta { id, meta } => {
@@ -282,6 +289,18 @@ fn spread_regions(plan: &mut Plan, rooms: &[Room], curation: &Curation) {
             }
             _ => {}
         }
+    }
+    // **Resolve AFTER the planned changes, not before.** The map holds
+    // whatever the last run wrote, which for a folded value is its old
+    // name, and `tag_regions` only rewrites rooms whose uid the mapdb
+    // lists -- so a room it skipped keeps the stale name and spreads it.
+    // Resolving first did not help: the loop above then overwrote the
+    // corrected names with the planned ones, which are themselves
+    // resolved, except where a `DropMeta` later in file order removed
+    // the entry again. 101 rooms came out carrying `Cysaegir`,
+    // `Kraken's Fall` and `Old Ta'Faendryl` after those had folded.
+    for name in region.values_mut() {
+        *name = fold_of(curation, name);
     }
 
     // Walkable adjacency, both ways: a one-way door still says the two

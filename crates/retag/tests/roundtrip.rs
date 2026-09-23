@@ -427,14 +427,15 @@ fn every_region_written_is_one_the_curation_names() {
     }
     unknown.sort();
     unknown.dedup();
-    // 263 rooms still carry the name of a region that folds into
-    // another -- `Old Ta'Faendryl`, `Settlement of Reim`, `The Rift`,
-    // `Cysaegir`. They are rooms whose uid the mapdb never listed, so
-    // `tag_regions` does not rewrite them and the fold never reaches
-    // them; they keep whatever a previous run wrote. Worth fixing, and
-    // pinned here so it cannot grow while nobody is looking.
+    // 223 Talador rooms, and they are a finding rather than a tolerance.
+    // Talador was destroyed in 5116 and `status.toml` carries some forty
+    // rules for it, but these rooms come out `live`: the rules name the
+    // city by title and location, and the mapdb's `loc` groups a wider
+    // set under the same name. They are left out of the region decisions
+    // deliberately -- nobody should have to choose a region for a
+    // destroyed barony -- but they should be `gone`, and are not.
     assert!(
-        unknown.len() <= 263,
+        unknown.len() <= 223,
         "{} rooms carry a region no curation names, e.g. {:?}",
         unknown.len(),
         &unknown[..unknown.len().min(8)]
