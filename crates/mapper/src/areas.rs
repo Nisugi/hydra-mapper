@@ -393,9 +393,12 @@ fn unareaed(map: &Map, store: &MapOverrides, regions: &[Area]) -> Vec<Area> {
         .collect()
 }
 
-/// Prefix marking a region's leftover rooms. Sorts before a letter, so
-/// the queue sits at the top of its region rather than lost among the
-/// areas.
+/// Prefix marking a region's leftover rooms.
+///
+/// The name carries its region -- `(not yet in an area) Icemule Trace`
+/// -- because a row's name is its identity: it is the correction key, and
+/// what `show_named` finds. The LIST does not print the region part,
+/// since the row already sits under it; see [`crate::app::area_label`].
 pub const UNAREAED: &str = "(not yet in an area)";
 
 /// The row for rooms the mapdb does not classify.

@@ -1171,7 +1171,7 @@ impl MapperApp {
                     }
                     if ui
                         .add(
-                            egui::Button::selectable(selected, &label)
+                            egui::Button::selectable(selected, row_text(area, self.tab, &label))
                                 .truncate()
                                 .min_size(egui::vec2(ui.available_width(), 0.0)),
                         )
@@ -2117,6 +2117,12 @@ fn area_label(
     // sits under the majority: the split is worth seeing, not worth
     // refusing to draw, and it is usually the sign of an area that wants
     // dividing rather than a mistake.
+    // The queue already sits under its region, so printing the region
+    // again in its label just pushes the count off the edge of a narrow
+    // panel. The full name is still what the row IS -- see UNAREAED.
+    if area.name.starts_with(crate::areas::UNAREAED) {
+        return format!("{}  ({})", crate::areas::UNAREAED, area.rooms.len());
+    }
     if let Some((top, total)) = area.contested {
         return format!(
             "{}  ({}, {top} of {total} in this region)",
@@ -2207,6 +2213,35 @@ fn group_keys(shown: &Shown, id: RoomId, whole: &Map) -> Option<Vec<RoomKey>> {
     )
 }
 
+/// A row's text, styled by what it is.
+///
+/// In the Region tree a region, its work queue and its areas are three
+/// different kinds of row that were drawing identically, which made a
+/// 215-row list unreadable. They are told apart by weight rather than by
+/// a symbol, because the symbols this wanted turned out not to exist in
+/// egui's font:
+///
+/// - a **region** is strong, so the eye can find the headings
+/// - the **leftover queue** is weak, because it is a residue rather than
+///   a place, and a region with a big one should not look busy
+/// - an **area** is plain
+///
+/// Every other tab is a flat list of one kind of thing and keeps the
+/// plain text it had.
+fn row_text(area: &crate::areas::Area, tab: AreaKind, label: &str) -> egui::RichText {
+    let text = egui::RichText::new(label);
+    if tab != AreaKind::Region {
+        return text;
+    }
+    if area.parent.is_none() {
+        return text.strong();
+    }
+    if area.name.starts_with(crate::areas::UNAREAED) {
+        return text.weak();
+    }
+    text
+}
+
 /// The expander in front of a Region row, and the indent in front of a
 /// curated area. Returns true when the region was clicked to fold.
 ///
@@ -2235,7 +2270,16 @@ fn tree_handle(
         return false;
     }
     let shut = collapsed.contains(&area.name);
-    ui.small_button(if shut { "\u{25b8}" } else { "\u{25be}" })
+    // ASCII, not the triangles this obviously wants. egui ships a font
+    // with no glyph for U+25B8 or U+25BE, so they drew as empty boxes,
+    // and a caret that renders as a missing-glyph square is worse than a
+    // plain one that always works.
+    ui.small_button(if shut { "+" } else { "-" })
+        .on_hover_text(if shut {
+            "Show this region's areas"
+        } else {
+            "Fold this region's areas away"
+        })
         .clicked()
 }
 
