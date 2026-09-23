@@ -3687,9 +3687,14 @@ uids = [
 # Wehnimer's Landing, sitting below the town square with 477 scripted
 # exits fanning out to every other town.
 
+# The name carries no article, because no region in this vocabulary does.
+# Simutronics writes `Wehnimer's Landing`, `Icemule Trace`, `Shadow
+# Valley`, `Sea of Fire`; the only capitalised `The` is in `The Rift` and
+# `The Eastern Seaboard`, where it belongs to the name. Our `location`
+# field says "the Elemental Confluence" and this is not that field.
 [[plane]]
 title = "Elemental Confluence"
-region = "the Elemental Confluence"
+region = "Elemental Confluence"
 note = """Reached by a wandering portal, not from anywhere. The wiki is explicit: "There is no way to map the Elemental Confluence because the elemental planes are constantly shifting against each other."
 
 Every one of its 3,234 exits is scripted; not one is a plain command. It is a hub wearing a place's clothes, and naming it after itself at least stops it claiming to be a town.
