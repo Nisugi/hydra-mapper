@@ -1295,4 +1295,60 @@ mod tests {
             );
         }
     }
+
+    /// A hall too big for any pocket of a dense street grid: every cell
+    /// between two street rooms is a road, which leaves 3x3 holes, and a
+    /// 5x5 hall fits none within the search radius. It was placed one
+    /// width along anyway, onto street rooms.
+    #[test]
+    fn a_building_that_fits_nowhere_near_still_gets_cells_of_its_own() {
+        const N: u32 = 24;
+        let id = |x: u32, y: u32| y * N + x;
+        let hall = |x: u32, y: u32| 10_000 + y * 5 + x;
+        let mut rooms = Vec::new();
+        for y in 0..N {
+            for x in 0..N {
+                let mut exits = Vec::new();
+                if x > 0 {
+                    exits.push(exit(id(x - 1, y), "west"));
+                }
+                if x + 1 < N {
+                    exits.push(exit(id(x + 1, y), "east"));
+                }
+                if y > 0 {
+                    exits.push(exit(id(x, y - 1), "north"));
+                }
+                if y + 1 < N {
+                    exits.push(exit(id(x, y + 1), "south"));
+                }
+                if (x, y) == (N / 2, N / 2) {
+                    exits.push(door(hall(0, 0), "hall"));
+                }
+                rooms.push(room(id(x, y), "[Grid]", "Obvious paths: north", exits));
+            }
+        }
+        for y in 0..5 {
+            for x in 0..5 {
+                let mut exits = Vec::new();
+                if x > 0 {
+                    exits.push(exit(hall(x - 1, y), "west"));
+                }
+                if x + 1 < 5 {
+                    exits.push(exit(hall(x + 1, y), "east"));
+                }
+                if y > 0 {
+                    exits.push(exit(hall(x, y - 1), "north"));
+                }
+                if y + 1 < 5 {
+                    exits.push(exit(hall(x, y + 1), "south"));
+                }
+                if (x, y) == (0, 0) {
+                    exits.push(exit(id(N / 2, N / 2), "out"));
+                }
+                rooms.push(room(hall(x, y), "[Hall]", IN, exits));
+            }
+        }
+        let map = Map::from_rooms(rooms).expect("no duplicate ids");
+        assert_one_room_per_cell(&map);
+    }
 }
