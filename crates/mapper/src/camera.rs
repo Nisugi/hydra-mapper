@@ -19,10 +19,26 @@ use egui::{Pos2, Rect, Vec2};
 /// then scales.
 pub const CELL_PX: f32 = 28.0;
 
-/// How far in and out the wheel may go. The lower bound keeps a large
-/// location readable rather than a smear of dots; the upper stops a single
-/// room filling the window.
-const MIN_SCALE: f32 = 0.1;
+/// How far in and out the wheel may go.
+///
+/// The old lower bound of 0.1 was set to keep a large location readable
+/// rather than a smear of dots. It was also short of what the map needs:
+/// the open-air world lays out as one group 1,363 by 945 cells, and
+/// fitting that across a canvas takes
+///
+///     1080p   scale 0.050
+///     1440p   scale 0.067
+///     4K      scale 0.101
+///
+/// so below a 4K screen it could not be seen whole at all, and `fit`
+/// clamps too -- pressing Fit did not fit. 0.02 leaves room to go wider
+/// still, which matters because the grid grows as rooms are added and a
+/// bound that is exactly today's requirement is one that breaks again.
+///
+/// Readability is not what a bound should enforce. A person zooming out
+/// past legibility is looking at the SHAPE of a place, and taking that
+/// away does not make anything readable -- it just refuses.
+const MIN_SCALE: f32 = 0.02;
 const MAX_SCALE: f32 = 4.0;
 
 /// Fitting a sheet leaves this much of the canvas as margin, so rooms at
@@ -188,6 +204,28 @@ mod tests {
 
     /// Zoom stays inside its bounds no matter how hard the wheel is spun.
     #[test]
+    /// The whole map fits on an ordinary screen.
+    ///
+    /// Not a style preference: the open-air world is one group of 1,363
+    /// by 945 cells, and with the old bound of 0.1 it could not be seen
+    /// whole below a 4K display -- `fit` clamps to the same constant, so
+    /// pressing Fit did not fit. This pins the bound against the thing it
+    /// exists for, with room to spare as the grid grows.
+    #[test]
+    fn the_whole_map_fits_on_a_1080p_canvas() {
+        let mut camera = Camera::default();
+        let canvas = Rect::from_min_size(Pos2::ZERO, Vec2::new(1920.0, 1080.0));
+        camera.fit(Cell { x: 0, y: 0 }, Cell { x: 1362, y: 944 }, canvas);
+        let wide = 1363.0 * camera.cell_px();
+        assert!(
+            wide <= canvas.width(),
+            "1,363 cells span {wide}px on a {}px canvas at scale {}",
+            canvas.width(),
+            camera.scale
+        );
+        assert!(camera.scale > MIN_SCALE, "fit is pinned at the bound");
+    }
+
     fn zoom_is_clamped_both_ways() {
         let mut camera = Camera::default();
         let anchor = canvas().center();
