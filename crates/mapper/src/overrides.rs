@@ -250,6 +250,34 @@ pub struct MapOverrides {
     /// still belonging to it.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub custom_maps: BTreeMap<String, Plate>,
+    /// Room -> curated area key.
+    ///
+    /// Separate from [`Self::membership_moves`] because an area and a
+    /// plate are different things that happen to share a mechanism. A
+    /// plate is a SHEET: a drawing surface carved off an area to keep its
+    /// satellites off the main map. An area is a PLACE. A room belongs to
+    /// one place and may be drawn on any number of sheets, so folding
+    /// them into one map would make "which area is this room in" depend
+    /// on where someone chose to draw it.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub area_moves: BTreeMap<RoomKey, String>,
+    /// Area key -> the area.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub custom_areas: BTreeMap<String, CuratedArea>,
+}
+
+/// A curated area: a named place, its rooms assigned by hand.
+///
+/// It records no parent. An area's region is read from its ROOMS --
+/// whichever `meta:region:` they carry -- so assigning a room is the only
+/// act needed and the tree cannot disagree with the map. An area whose
+/// rooms span regions is a fact worth seeing rather than a conflict to
+/// resolve at creation time, and [`MapOverrides::area_region`] reports
+/// the split.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CuratedArea {
+    /// What the picker shows.
+    pub name: String,
 }
 
 impl MapOverrides {
@@ -435,6 +463,41 @@ impl MapOverrides {
             .values()
             .find(|plate| plate.name == plate_name)
             .and_then(|plate| plate.area.as_deref())
+    }
+
+    /// Mint a curated area. Returns its key, derived from the name so
+    /// the same name always names the same area.
+    pub fn create_area(&mut self, name: &str) -> String {
+        let key = plate_key(name);
+        self.custom_areas.insert(
+            key.clone(),
+            CuratedArea {
+                name: name.trim().to_owned(),
+            },
+        );
+        key
+    }
+
+    /// Put a room in a curated area, or (with `None`) take it out.
+    pub fn set_area(&mut self, key: RoomKey, area: Option<&str>) -> Option<String> {
+        match area {
+            Some(area) => self.area_moves.insert(key, area.to_owned()),
+            None => self.area_moves.remove(&key),
+        }
+    }
+
+    /// Delete a curated area, releasing its rooms.
+    pub fn delete_area(&mut self, area: &str) {
+        self.custom_areas.remove(area);
+        self.area_moves.retain(|_, to| to != area);
+    }
+
+    /// A curated area's display name, falling back to its key.
+    #[must_use]
+    pub fn area_name<'a>(&'a self, key: &'a str) -> &'a str {
+        self.custom_areas
+            .get(key)
+            .map_or(key, |area| area.name.as_str())
     }
 
     /// A plate's display name, falling back to its key for one that
