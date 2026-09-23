@@ -235,6 +235,15 @@ impl MapperApp {
             },
             None => (MapOverrides::default(), None),
         };
+        let mut store = store;
+        // Seed the area tree from the official layout the first time a
+        // map is opened with no areas in it. Never when the store failed
+        // to parse: editing is off in that case precisely so nothing
+        // overwrites hand-curated work, and a seed is an edit.
+        let seeded = match (&map, store_problem.is_none()) {
+            (Ok(map), true) => areas::seed_from_official(map, &mut store),
+            _ => 0,
+        };
         let areas = match &map {
             Ok(map) => Areas::build(map, &store),
             Err(_) => Areas {
@@ -245,6 +254,12 @@ impl MapperApp {
                 plates: Vec::new(),
             },
         };
+        if seeded > 0
+            && let Some(path) = store_path.as_deref()
+            && let Err(error) = store.save(path)
+        {
+            eprintln!("could not save the seeded areas: {error}");
+        }
         MapperApp {
             map,
             areas,
@@ -2247,11 +2262,23 @@ fn row_order(rows: &[crate::areas::Area], tab: AreaKind, collapsed: &BTreeSet<St
         if collapsed.contains(&region.name) {
             continue;
         }
-        for (j, area) in rows.iter().enumerate() {
-            if area.parent.as_deref() == Some(region.name.as_str()) {
-                out.push(j);
-            }
-        }
+        // The leftover queue first, then the areas. "What is still
+        // unsorted here" is the row someone opens a region to find.
+        let mine = || {
+            rows.iter()
+                .enumerate()
+                .filter(|(_, a)| a.parent.as_deref() == Some(region.name.as_str()))
+        };
+        out.extend(
+            mine()
+                .filter(|(_, a)| a.name.starts_with(crate::areas::UNAREAED))
+                .map(|(j, _)| j),
+        );
+        out.extend(
+            mine()
+                .filter(|(_, a)| !a.name.starts_with(crate::areas::UNAREAED))
+                .map(|(j, _)| j),
+        );
     }
     out
 }
