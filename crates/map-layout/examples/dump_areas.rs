@@ -131,11 +131,7 @@ fn main() {
         fields[name_at] = name.clone();
         fields[source_at] = "official layout".to_owned();
         fields[rooms_at] = ids.len().to_string();
-        fields[ids_at] = ids
-            .iter()
-            .map(u32::to_string)
-            .collect::<Vec<_>>()
-            .join(" ");
+        fields[ids_at] = ids.iter().map(u32::to_string).collect::<Vec<_>>().join(" ");
         let _ = writeln!(out, "{}", fields.join("\t"));
     }
     std::fs::write(TSV, &out).expect("write areas.tsv");
@@ -144,5 +140,8 @@ fn main() {
         "{} layouts, {positioned} positioned rooms, {joined} joined to gs.map",
         layouts.layouts.len()
     );
-    println!("{} official rows written, {kept} other rows kept", rows.len());
+    println!(
+        "{} official rows written, {kept} other rows kept",
+        rows.len()
+    );
 }

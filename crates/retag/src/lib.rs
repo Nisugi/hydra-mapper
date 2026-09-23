@@ -154,6 +154,9 @@ fn tag_regions(plan: &mut Plan, rooms: &[Room], curation: &Curation) {
         if name.is_empty() {
             continue;
         }
+        // A region that is an area of another answers with the other's
+        // name. See `[[fold]]` in regions.toml for why each one is one.
+        let name = fold_of(curation, &name);
         let meta = format!("region:{name}");
         // A plane's region changed once the plane rule existed, so the
         // stale one has to go: `AddMeta` alone would leave a room
@@ -196,6 +199,25 @@ fn is_passage(exit: &cena_map::Exit) -> bool {
     )
 }
 
+/// The region a `loc` value ends up as, following the `[[fold]]` chain:
+/// `The Rift` -> `Pinefar / Aenatumgana` -> `Icemule Trace`.
+fn fold_of(curation: &Curation, name: &str) -> String {
+    let mut current = name.to_owned();
+    // Bounded rather than trusting the file to be acyclic.
+    for _ in 0..8 {
+        match curation
+            .decisions
+            .folds
+            .iter()
+            .find(|f| f.region == current)
+        {
+            Some(f) => current = f.into.clone(),
+            None => break,
+        }
+    }
+    current
+}
+
 /// Fill a room's region where every way out of it leads to one region.
 ///
 /// **A region boundary has to be crossed somewhere.** Walk outward from
@@ -230,7 +252,7 @@ fn is_passage(exit: &cena_map::Exit) -> bool {
 ///   can say where.
 /// - **1,792** reach no regioned room at all, so there is nothing to
 ///   infer from.
-fn spread_regions(plan: &mut Plan, rooms: &[Room]) {
+fn spread_regions(plan: &mut Plan, rooms: &[Room], curation: &Curation) {
     // Start from what the map says plus what this run has already
     // planned, so the mapdb's answer always wins over an inferred one.
     let mut region: BTreeMap<u32, String> = BTreeMap::new();
@@ -238,6 +260,13 @@ fn spread_regions(plan: &mut Plan, rooms: &[Room]) {
         if let Some(name) = room.meta.iter().find_map(|m| m.strip_prefix("region:")) {
             region.insert(room.id.0, name.to_owned());
         }
+    }
+    // The map still holds whatever the last run wrote, which for a folded
+    // region is its old name. Resolve those before spreading, or a room
+    // filled from a `Pinefar / Aenatumgana` neighbour is given a region
+    // that this curation says is an area of Icemule Trace.
+    for name in region.values_mut() {
+        *name = fold_of(curation, name);
     }
     for change in &plan.changes {
         match change {
@@ -545,7 +574,7 @@ pub fn plan(map: &Map, curation: &Curation) -> Plan {
     tag_regions(&mut plan, rooms, curation);
 
     // Pass 2f: regions spread into the ground between them.
-    spread_regions(&mut plan, rooms);
+    spread_regions(&mut plan, rooms, curation);
 
     // Pass 3: rooms the game no longer has.
     for id in removed_rooms(rooms, &reachable) {

@@ -199,17 +199,22 @@ fn main() {
     let mut by: BTreeMap<&str, (usize, usize)> = BTreeMap::new();
     for (n, l) in &rows {
         let v = l.split('\t').next().unwrap_or("");
-        let e = by.entry(match v {
-            "absent" => "absent",
-            "newer" => "newer",
-            "present" => "present",
-            _ => "partial",
-        })
-        .or_default();
+        let e = by
+            .entry(match v {
+                "absent" => "absent",
+                "newer" => "newer",
+                "present" => "present",
+                _ => "partial",
+            })
+            .or_default();
         e.0 += 1;
         e.1 += n;
     }
-    println!("\n{} groups, {} rooms", rows.len(), rows.iter().map(|(n, _)| n).sum::<usize>());
+    println!(
+        "\n{} groups, {} rooms",
+        rows.len(),
+        rows.iter().map(|(n, _)| n).sum::<usize>()
+    );
     for (k, (c, r)) in &by {
         println!("  {k:8}  {c:4} groups  {r:6} rooms");
     }

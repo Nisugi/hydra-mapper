@@ -40,7 +40,13 @@ fn main() {
     for r in map.rooms() {
         let Some(loc) = &r.location else { continue };
         match r.meta.iter().find_map(|m| m.strip_prefix("region:")) {
-            Some(reg) => *votes.entry(loc.clone()).or_default().entry(reg.to_owned()).or_default() += 1,
+            Some(reg) => {
+                *votes
+                    .entry(loc.clone())
+                    .or_default()
+                    .entry(reg.to_owned())
+                    .or_default() += 1
+            }
             None => *unfilled.entry(loc.clone()).or_default() += 1,
         }
     }
@@ -51,8 +57,11 @@ fn main() {
 
     for (loc, need) in &unfilled {
         match votes.get(loc) {
-            None => { noevidence += 1; fill_n += need;
-                rows.push((*need, format!("NONE\t{need}\t{loc}\t"))); }
+            None => {
+                noevidence += 1;
+                fill_n += need;
+                rows.push((*need, format!("NONE\t{need}\t{loc}\t")));
+            }
             Some(v) => {
                 let total: usize = v.values().sum();
                 let mut best: Vec<_> = v.iter().collect();
@@ -60,26 +69,41 @@ fn main() {
                 let (top, n) = (best[0].0, *best[0].1);
                 let share = 100 * n / total;
                 if v.len() == 1 || share >= 90 {
-                    unanimous += 1; fill_u += need;
-                    rows.push((*need, format!("CLEAR\t{need}\t{loc}\t{top} ({share}% of {total})")));
+                    unanimous += 1;
+                    fill_u += need;
+                    rows.push((
+                        *need,
+                        format!("CLEAR\t{need}\t{loc}\t{top} ({share}% of {total})"),
+                    ));
                 } else {
-                    split += 1; fill_s += need;
-                    let alts: Vec<String> = best.iter().take(3)
-                        .map(|(r, c)| format!("{r} ({c})")).collect();
+                    split += 1;
+                    fill_s += need;
+                    let alts: Vec<String> = best
+                        .iter()
+                        .take(3)
+                        .map(|(r, c)| format!("{r} ({c})"))
+                        .collect();
                     rows.push((*need, format!("SPLIT\t{need}\t{loc}\t{}", alts.join("; "))));
                 }
             }
         }
     }
     println!("locations with rooms lacking a region: {}", unfilled.len());
-    println!("  CLEAR  (one region, or >=90%) : {unanimous:4} locations, would fill {fill_u} rooms");
+    println!(
+        "  CLEAR  (one region, or >=90%) : {unanimous:4} locations, would fill {fill_u} rooms"
+    );
     println!("  SPLIT  (genuinely mixed)      : {split:4} locations, {fill_s} rooms");
     println!("  NONE   (no joined room at all): {noevidence:4} locations, {fill_n} rooms");
 
     rows.sort_by_key(|(n, _)| std::cmp::Reverse(*n));
     let mut out = String::from("verdict\trooms\tlocation\tevidence\n");
-    for (_, l) in &rows { out.push_str(l); out.push('\n'); }
+    for (_, l) in &rows {
+        out.push_str(l);
+        out.push('\n');
+    }
     std::fs::write("analysis/location-to-region.tsv", &out).expect("write");
     println!("\ntop 30:");
-    for (_, l) in rows.iter().take(30) { println!("  {l}"); }
+    for (_, l) in rows.iter().take(30) {
+        println!("  {l}");
+    }
 }

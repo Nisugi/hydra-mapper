@@ -104,7 +104,10 @@ pub const REMOVED_ROOM_META: &str = "map:status:gone";
 /// clothes, and not something the game no longer has.
 #[must_use]
 pub fn is_real_room(room: &Room) -> bool {
-    !room.meta.iter().any(|m| m == VIRTUAL_ROOM_META || m == REMOVED_ROOM_META)
+    !room
+        .meta
+        .iter()
+        .any(|m| m == VIRTUAL_ROOM_META || m == REMOVED_ROOM_META)
 }
 
 /// Whether anything at all connects a room to the rest of the map: an
@@ -266,10 +269,8 @@ pub fn derive_areas(map: &Map) -> Vec<DerivedArea> {
         members[u].push(i);
     }
     let unit_sense: Vec<Sense> = members.iter().map(|m| majority(m, &sense)).collect();
-    let unit_region: Vec<Option<String>> = members
-        .iter()
-        .map(|m| region_name(&rooms[m[0]]))
-        .collect();
+    let unit_region: Vec<Option<String>> =
+        members.iter().map(|m| region_name(&rooms[m[0]])).collect();
 
     let mut parent: Vec<usize> = (0..unit_count).collect();
     // Adjacent units of one region are one place, indoors or out: the
@@ -886,7 +887,13 @@ mod tests {
             with_meta(4, "[Tower]", Some("Wehn"), REMOVED_ROOM_META, &[]),
         ];
         // A shut shop is still a place: it opens off the street.
-        rooms.push(with_meta(5, "[Abbey]", Some("Wehn"), "map:status:closed", &[2]));
+        rooms.push(with_meta(
+            5,
+            "[Abbey]",
+            Some("Wehn"),
+            "map:status:closed",
+            &[2],
+        ));
         rooms[1].exits.push(Exit {
             to: RoomId(5),
             kind: ExitKind::Cardinal,

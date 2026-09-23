@@ -264,7 +264,10 @@ pub fn position_rooms(map: &Map, dirs: &DirectionMap) -> Vec<Group> {
 /// unless they are a building's front door (see [`is_building_entrance`]),
 /// in which case they are dropped entirely -- the room behind them starts
 /// a separate group the interior shelf will place.
-#[allow(clippy::too_many_arguments, reason = "one BFS's working state,     split out only to keep `position_rooms` readable; bundling it into a     struct would hide that these are all one loop's locals")]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "one BFS's working state,     split out only to keep `position_rooms` readable; bundling it into a     struct would hide that these are all one loop's locals"
+)]
 fn directional_bfs(
     map: &Map,
     dirs: &DirectionMap,
@@ -276,7 +279,7 @@ fn directional_bfs(
     room_order: &mut Vec<RoomId>,
     unpositioned: &mut HashSet<RoomId>,
 ) {
-        // BFS. The queue holds ids only: grid rips move already-placed
+    // BFS. The queue holds ids only: grid rips move already-placed
     // rooms, so the parent position is re-read at processing time.
     while let Some(room_id) = queue.pop_front() {
         let Some(room) = map.room(room_id) else {
@@ -340,7 +343,6 @@ fn directional_bfs(
             }
         }
     }
-
 }
 
 /// Place the rooms joined only by a bearingless doorway.
@@ -350,7 +352,10 @@ fn directional_bfs(
 /// Each round may open the way for the next -- a doorway into a wing
 /// places that wing's first room, whose own compass exits then place the
 /// rest -- so it repeats until a pass places nothing.
-#[allow(clippy::too_many_arguments, reason = "one BFS's working state,     split out only to keep `position_rooms` readable; bundling it into a     struct would hide that these are all one loop's locals")]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "one BFS's working state,     split out only to keep `position_rooms` readable; bundling it into a     struct would hide that these are all one loop's locals"
+)]
 fn drain_connectors(
     map: &Map,
     dirs: &DirectionMap,
@@ -362,72 +367,71 @@ fn drain_connectors(
     unpositioned: &mut HashSet<RoomId>,
 ) {
     // Drain the connectors. Each round places what it can and may
-        // open the way for the next, so it repeats until a pass places
-        // nothing. A room already placed by a bearing is left alone.
-        loop {
-            let mut placed_any = false;
-            let mut still_pending: Vec<(RoomId, RoomId)> = Vec::new();
-            for &(from_id, target_id) in &*pending {
-                if !unpositioned.contains(&target_id) || !positions.contains_key(&from_id) {
-                    continue;
-                }
-                let Some(spot) = free_cell_near((*positions)[&from_id], occupied) else {
-                    still_pending.push((from_id, target_id));
-                    continue;
-                };
-                positions.insert(target_id, spot);
-                occupied.insert(spot);
-                room_order.push(target_id);
-                unpositioned.remove(&target_id);
-                placed_any = true;
+    // open the way for the next, so it repeats until a pass places
+    // nothing. A room already placed by a bearing is left alone.
+    loop {
+        let mut placed_any = false;
+        let mut still_pending: Vec<(RoomId, RoomId)> = Vec::new();
+        for &(from_id, target_id) in &*pending {
+            if !unpositioned.contains(&target_id) || !positions.contains_key(&from_id) {
+                continue;
+            }
+            let Some(spot) = free_cell_near((*positions)[&from_id], occupied) else {
+                still_pending.push((from_id, target_id));
+                continue;
+            };
+            positions.insert(target_id, spot);
+            occupied.insert(spot);
+            room_order.push(target_id);
+            unpositioned.remove(&target_id);
+            placed_any = true;
 
-                // Its own exits rejoin the directional BFS, so a doorway
-                // into a wing places that whole wing by its bearings.
-                let mut wave: VecDeque<RoomId> = VecDeque::from([target_id]);
-                while let Some(id) = wave.pop_front() {
-                    let Some(room) = map.room(id) else { continue };
-                    for exit in &room.exits {
-                        let next = exit.to;
-                        if map.room(next).is_none() || !unpositioned.contains(&next) {
-                            continue;
+            // Its own exits rejoin the directional BFS, so a doorway
+            // into a wing places that whole wing by its bearings.
+            let mut wave: VecDeque<RoomId> = VecDeque::from([target_id]);
+            while let Some(id) = wave.pop_front() {
+                let Some(room) = map.room(id) else { continue };
+                for exit in &room.exits {
+                    let next = exit.to;
+                    if map.room(next).is_none() || !unpositioned.contains(&next) {
+                        continue;
+                    }
+                    let Some(direction) = dirs.get(id, next) else {
+                        if !is_building_entrance(map, air, id, next) {
+                            still_pending.push((id, next));
                         }
-                        let Some(direction) = dirs.get(id, next) else {
-                            if !is_building_entrance(map, air, id, next) {
-                                still_pending.push((id, next));
-                            }
-                            continue;
+                        continue;
+                    };
+                    let (dx, dy) = direction.offset();
+                    let pos = (*positions)[&id];
+                    let mut cell = Cell {
+                        x: pos.x + dx,
+                        y: pos.y + dy,
+                    };
+                    if occupied.contains(&cell) {
+                        rip_grid(positions, pos, (dx, dy));
+                        *occupied = positions.values().copied().collect();
+                        let fresh = (*positions)[&id];
+                        cell = Cell {
+                            x: fresh.x + dx,
+                            y: fresh.y + dy,
                         };
-                        let (dx, dy) = direction.offset();
-                        let pos = (*positions)[&id];
-                        let mut cell = Cell {
-                            x: pos.x + dx,
-                            y: pos.y + dy,
-                        };
-                        if occupied.contains(&cell) {
-                            rip_grid(positions, pos, (dx, dy));
-                            *occupied = positions.values().copied().collect();
-                            let fresh = (*positions)[&id];
-                            cell = Cell {
-                                x: fresh.x + dx,
-                                y: fresh.y + dy,
-                            };
-                        }
-                        if !occupied.contains(&cell) {
-                            positions.insert(next, cell);
-                            occupied.insert(cell);
-                            room_order.push(next);
-                            unpositioned.remove(&next);
-                            wave.push_back(next);
-                        }
+                    }
+                    if !occupied.contains(&cell) {
+                        positions.insert(next, cell);
+                        occupied.insert(cell);
+                        room_order.push(next);
+                        unpositioned.remove(&next);
+                        wave.push_back(next);
                     }
                 }
             }
-            *pending = still_pending;
-            if !placed_any {
-                break;
-            }
         }
-
+        *pending = still_pending;
+        if !placed_any {
+            break;
+        }
+    }
 }
 
 /// The outdoor rooms that are the open air: the big outdoor networks a

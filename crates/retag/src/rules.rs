@@ -303,6 +303,8 @@ pub struct Curation {
     pub spellings: SpellingFile,
     pub lockers: LockerFile,
     pub regions: RegionFile,
+    /// What counts as a region, and what folds into one.
+    pub decisions: RegionDecisions,
 }
 
 /// `generated/regions.toml`: the official mapdb's `loc` field, keyed by
@@ -323,6 +325,89 @@ pub struct RegionFile {
     /// Rooms the mapdb holds with `loc` empty, given a region by hand.
     #[serde(default, rename = "unclassified")]
     pub unclassified: Vec<Unclassified>,
+}
+
+/// `regions.toml`: what counts as a region, decided by a person.
+///
+/// Separate from the generated file on purpose. That one is 345KB of
+/// uids extracted from the mapdb and is regenerated wholesale; a
+/// judgement written into it would be lost the next time someone ran
+/// `dump_regions`. This is the half a reviewer needs to read.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct RegionDecisions {
+    /// The `loc` values that are regions. Everything else folds into one,
+    /// is not a place, or is left where the mapdb put it.
+    #[serde(default, rename = "region")]
+    pub regions: Vec<NamedRegion>,
+    /// One of the mapdb's `loc` values absorbed into a region.
+    #[serde(default, rename = "fold")]
+    pub folds: Vec<Fold>,
+    /// A `loc` value that names something other than somewhere.
+    #[serde(default, rename = "not_a_place")]
+    pub not_a_place: Vec<NotAPlace>,
+    /// Towns with a chronomage office, which the map cannot know: the
+    /// offices are in it, the teleport is not, because it fires on a
+    /// timer rather than through an exit.
+    #[serde(default, rename = "chronomage")]
+    pub chronomage: Vec<Chronomage>,
+}
+
+/// A `loc` value someone decided is a region.
+#[derive(Debug, Clone, Deserialize)]
+pub struct NamedRegion {
+    pub name: String,
+    /// The mapdb `loc` values this region is made of, where it is not
+    /// simply the one of the same name. The nine settlements need none:
+    /// `Wehnimer's Landing` IS a `loc` value. The four that group things
+    /// -- sea-only, seasonal, generated, routes -- exist only here and
+    /// have to say what is in them.
+    #[serde(default)]
+    pub members: Vec<String>,
+    #[serde(default)]
+    pub note: Option<String>,
+}
+
+/// A `loc` value that names something other than a place: player-built
+/// rooms, a GameMaster holding area. Not a region, and not an area of
+/// one either, so it does not fold.
+#[derive(Debug, Clone, Deserialize)]
+pub struct NotAPlace {
+    pub region: String,
+    pub reason: String,
+    #[serde(default)]
+    pub note: Option<String>,
+}
+
+/// Towns reachable by the chronomage network.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Chronomage {
+    pub towns: Vec<String>,
+    #[serde(default)]
+    pub note: Option<String>,
+}
+
+/// A mapdb region that is an AREA of another, not a peer of it.
+///
+/// **This is the one kind of region rule that overrules Simutronics
+/// rather than filling a blank**, so it is a separate shape and every
+/// one of them carries its reasoning. `loc` is an administrative field
+/// and nothing says its 72 values are all the same size: Shadow Valley
+/// is 138 rooms enclosed by Wehnimer's Landing, and the mapdb itself
+/// files the room titled `[Shadow Valley, Shaman's Hut]` under
+/// Wehnimer's rather than Shadow Valley.
+///
+/// The test a fold has to pass is that the absorbed region **paths
+/// nowhere else**: every walkable edge leaving it lands either in the
+/// absorbing region or in unregioned ground. A region that touches two
+/// others is a place between them and folding it into either would be a
+/// choice rather than a reading.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Fold {
+    /// The mapdb region being absorbed.
+    pub region: String,
+    /// The region it becomes.
+    pub into: String,
+    pub note: String,
 }
 
 /// Rooms the mapdb left unclassified, named by id.
@@ -386,6 +471,7 @@ impl Curation {
         // in its own directory: a reviewer should not have to wonder which
         // of 345KB of uids someone decided by hand.
         let regions: RegionFile = read_toml(&dir.join("generated/regions.toml"))?;
+        let decisions: RegionDecisions = read_toml(&dir.join("regions.toml"))?;
 
         for (i, rule) in status.rules.iter().enumerate() {
             if rule.location.is_none() && rule.title.is_none() && rule.ids.is_none() {
@@ -409,6 +495,7 @@ impl Curation {
             spellings,
             lockers,
             regions,
+            decisions,
         })
     }
 
@@ -477,7 +564,10 @@ impl std::fmt::Display for LoadError {
             LoadError::Unreadable(p, e) => write!(f, "{p}: {e}"),
             LoadError::Malformed(p, e) => write!(f, "{p}: {e}"),
             LoadError::RuleSelectsEverything(n) => {
-                write!(f, "status.toml rule {n} has no selector: it would match every room")
+                write!(
+                    f,
+                    "status.toml rule {n} has no selector: it would match every room"
+                )
             }
             LoadError::FixSelectsNothing(n) => {
                 write!(f, "locations.toml fix {n} names neither uids nor ids")

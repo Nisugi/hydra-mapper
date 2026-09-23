@@ -254,6 +254,19 @@ impl MapperApp {
                 plates: Vec::new(),
             },
         };
+        // **Regions start shut.** 52 of them with their areas open is 222
+        // rows, and whichever one someone is looking for is off the
+        // bottom of the screen. A region is a heading; the list of them
+        // is what the tab is for, and opening one is the act of choosing
+        // it. `collapsed` records what is shut rather than what is open,
+        // so seeding it with every region is the whole default.
+        let collapsed: BTreeSet<String> = areas
+            .list(AreaKind::Region)
+            .iter()
+            .filter(|a| a.parent.is_none())
+            .map(|a| a.name.clone())
+            .collect();
+
         if seeded > 0
             && let Some(path) = store_path.as_deref()
             && let Err(error) = store.save(path)
@@ -280,7 +293,7 @@ impl MapperApp {
             drag: None,
             new_plate: String::new(),
             new_area: String::new(),
-            collapsed: BTreeSet::new(),
+            collapsed,
             pending_inspect: None,
             trail: Vec::new(),
             export_note: None,
@@ -1057,8 +1070,8 @@ impl MapperApp {
             {
                 *edit_out = Some(action);
             }
-            if let Some(action) =
-                whole.and_then(|w| area_membership(ui, store, w, id, group_keys(shown, id, w), new_area))
+            if let Some(action) = whole
+                .and_then(|w| area_membership(ui, store, w, id, group_keys(shown, id, w), new_area))
             {
                 *edit_out = Some(action);
             }
@@ -2180,7 +2193,11 @@ fn delete_area_button(
 /// Region is not searched. It spans the whole map, so it would answer
 /// every query with a region name and shadow the more specific list that
 /// actually tells someone where to look.
-fn room_search(ui: &mut egui::Ui, areas: &Areas, found: RoomId) -> Option<(AreaKind, usize, RoomId)> {
+fn room_search(
+    ui: &mut egui::Ui,
+    areas: &Areas,
+    found: RoomId,
+) -> Option<(AreaKind, usize, RoomId)> {
     let held_by = |kind: AreaKind| {
         areas
             .list(kind)
@@ -2302,7 +2319,11 @@ fn tree_handle(
 /// A collapsed region still appears; only its areas are folded away. A
 /// region with no areas yet is exactly the one someone needs to click on
 /// to start curating it.
-fn row_order(rows: &[crate::areas::Area], tab: AreaKind, collapsed: &BTreeSet<String>) -> Vec<usize> {
+fn row_order(
+    rows: &[crate::areas::Area],
+    tab: AreaKind,
+    collapsed: &BTreeSet<String>,
+) -> Vec<usize> {
     if tab != AreaKind::Region {
         return (0..rows.len()).collect();
     }

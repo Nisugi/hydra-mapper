@@ -33,8 +33,11 @@ fn main() {
     let dirs = cena_map_layout::DirectionMap::build(&map);
     let groups = cena_map_layout::positioner::position_rooms(&map, &dirs);
 
-    let indoor =
-        |r: &cena_map::Room| r.paths.iter().any(|p| p.to_lowercase().contains("obvious exits"));
+    let indoor = |r: &cena_map::Room| {
+        r.paths
+            .iter()
+            .any(|p| p.to_lowercase().contains("obvious exits"))
+    };
     let prefix = |r: &cena_map::Room| {
         let t = r.title.first().cloned().unwrap_or_default();
         t.strip_prefix('[')

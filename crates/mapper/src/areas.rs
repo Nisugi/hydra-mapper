@@ -624,7 +624,10 @@ mod tests {
         let map = Map::from_rooms(rooms).expect("no duplicate ids");
 
         let by_location = location_areas(&map, &std::iter::once(claimed).collect());
-        let listed: Vec<RoomId> = by_location.iter().flat_map(|a| a.rooms.iter().copied()).collect();
+        let listed: Vec<RoomId> = by_location
+            .iter()
+            .flat_map(|a| a.rooms.iter().copied())
+            .collect();
 
         assert!(
             !listed.contains(&claimed),
@@ -658,7 +661,10 @@ mod tests {
         let map = Map::from_rooms(vec![a, b]).expect("no duplicate ids");
 
         let regions = region_areas(&map);
-        let listed: Vec<RoomId> = regions.iter().flat_map(|r| r.rooms.iter().copied()).collect();
+        let listed: Vec<RoomId> = regions
+            .iter()
+            .flat_map(|r| r.rooms.iter().copied())
+            .collect();
         assert!(listed.contains(&RoomId(1)) && listed.contains(&RoomId(2)));
 
         // One location, two regions: the quest separates from the
@@ -746,8 +752,8 @@ mod tests {
     /// which is where a third of the map lives and where curation starts.
     #[test]
     fn an_unregioned_area_lands_in_its_own_branch() {
-        let map = Map::from_rooms(vec![room_in(RoomId(1), "Stone Valley")])
-            .expect("no duplicate ids");
+        let map =
+            Map::from_rooms(vec![room_in(RoomId(1), "Stone Valley")]).expect("no duplicate ids");
         let mut store = MapOverrides::default();
         let key = store.create_area("Stone Valley");
         store.set_area(RoomKey::of(RoomId(1), &map), Some(&key));
@@ -780,8 +786,7 @@ mod tests {
     /// The seed makes one area per official area, and never runs twice.
     #[test]
     fn seeding_fills_an_empty_store_once() {
-        let map = Map::from_rooms(vec![room_in(RoomId(1), "somewhere")])
-            .expect("no duplicate ids");
+        let map = Map::from_rooms(vec![room_in(RoomId(1), "somewhere")]).expect("no duplicate ids");
         let mut store = MapOverrides::default();
         // The bundled areas.tsv names rooms this tiny map does not have,
         // so the count is whatever survives the join -- what matters is
@@ -797,8 +802,7 @@ mod tests {
     /// does nothing at all.
     #[test]
     fn seeding_leaves_a_curated_store_alone() {
-        let map = Map::from_rooms(vec![room_in(RoomId(1), "somewhere")])
-            .expect("no duplicate ids");
+        let map = Map::from_rooms(vec![room_in(RoomId(1), "somewhere")]).expect("no duplicate ids");
         let mut store = MapOverrides::default();
         let key = store.create_area("Mine");
         store.set_area(RoomKey::of(RoomId(1), &map), Some(&key));
