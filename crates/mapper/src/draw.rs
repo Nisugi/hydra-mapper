@@ -43,6 +43,9 @@ const SELECTED_STROKE: Color32 = Color32::from_rgb(250, 250, 250);
 /// because a hundred of them are on screen at once and the sheet still
 /// has to be readable underneath.
 const PICKED_FILL: Color32 = Color32::from_rgb(40, 66, 96);
+/// A room flagged for attention -- one whose region is not its area's.
+/// Loud on purpose: the point is to find them at any zoom.
+const FLAGGED_FILL: Color32 = Color32::from_rgb(255, 40, 40);
 /// The Ctrl-drag selection box, translucent so the rooms show through.
 const BOX_FILL: Color32 = Color32::from_rgba_premultiplied(30, 45, 65, 60);
 const HOVER_STROKE: Color32 = Color32::from_rgb(200, 220, 250);
@@ -75,6 +78,7 @@ pub struct Hit {
 
 /// How the canvas behaves and what it draws, beyond the sheet itself.
 #[derive(Clone, Copy, Debug)]
+#[allow(clippy::struct_excessive_bools)] // independent toggles, not a state machine
 pub struct View {
     /// Dragging moves rooms instead of panning.
     pub edit_mode: bool,
@@ -83,6 +87,8 @@ pub struct View {
     /// Every interior room out of focus is drawn as a dot, not only the
     /// door you enter its building by.
     pub interiors: bool,
+    /// The rooms whose region is not their area's are painted red.
+    pub off_region: bool,
 }
 
 /// What is in focus: the rooms drawn as squares. Everything else on the
@@ -97,9 +103,16 @@ pub struct Focus<'a> {
     /// rooms hosting a doorway: drawn as larger dots when out of focus,
     /// so the ways in are visible.
     pub doors: &'a HashSet<RoomId>,
+    /// Rooms painted red, drawn wherever they are so none hides inside a
+    /// building out of focus.
+    pub flagged: Option<&'a HashSet<RoomId>>,
 }
 
 impl Focus<'_> {
+    fn flagged(&self, id: RoomId) -> bool {
+        self.flagged.is_some_and(|f| f.contains(&id))
+    }
+
     fn has(&self, id: RoomId) -> bool {
         self.rooms.contains(&id)
     }
@@ -109,7 +122,11 @@ impl Focus<'_> {
     /// is one dot where you enter it, not its floor plan sprinkled beside
     /// the street.
     fn shows(&self, id: RoomId, interiors: bool) -> bool {
-        interiors || self.has(id) || self.streets.contains(&id) || self.doors.contains(&id)
+        interiors
+            || self.has(id)
+            || self.streets.contains(&id)
+            || self.doors.contains(&id)
+            || self.flagged(id)
     }
 }
 
@@ -135,6 +152,7 @@ pub fn scene(
         edit_mode,
         labels,
         interiors,
+        off_region: _,
     } = view;
     let sheet = &scene.sheet;
     if sheet.rooms.is_empty() {
@@ -427,13 +445,18 @@ fn draw_rooms(
         if picked.contains(&room.id) {
             painter.rect_filled(rect.expand(side * 0.35), 2.0, PICKED_FILL);
         }
+        let flagged = focus.flagged(room.id);
         if !focus.has(room.id) {
             let r = if focus.doors.contains(&room.id) {
                 (side * 0.3).max(2.5)
             } else {
                 (side * 0.18).max(1.5)
             };
-            painter.circle_filled(centre, r, ECHO_DOT);
+            if flagged {
+                painter.circle_filled(centre, r.max(side * 0.3).max(3.0), FLAGGED_FILL);
+            } else {
+                painter.circle_filled(centre, r, ECHO_DOT);
+            }
             if is_selected || hovered == Some(room.id) {
                 let color = if is_selected {
                     SELECTED_STROKE
@@ -456,7 +479,7 @@ fn draw_rooms(
         painter.rect(
             rect,
             2.0 * camera.scale,
-            ROOM_FILL,
+            if flagged { FLAGGED_FILL } else { ROOM_FILL },
             Stroke::new(width, stroke_color),
             StrokeKind::Outside,
         );

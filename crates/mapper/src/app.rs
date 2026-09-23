@@ -67,9 +67,26 @@ struct Shown {
     /// records -- the scene carries only what it needs to draw.
     subset: Map,
     scene: MapScene,
+    /// A curated area whose rooms disagree about their region: the region
+    /// most of them carry, and the drawn rooms that carry another (or
+    /// none). Empty when they all agree.
+    majority: String,
+    off_region: HashSet<RoomId>,
     /// Set when the area has just changed, so the next frame -- the first
     /// one that knows how big the canvas is -- fits the camera to it.
     needs_fit: bool,
+}
+
+impl Shown {
+    /// What the canvas draws as squares, as dots, and in red.
+    fn draw_focus(&self, flag_off_region: bool) -> draw::Focus<'_> {
+        draw::Focus {
+            rooms: self.focus.rooms(),
+            streets: self.focus.streets(),
+            doors: self.focus.doors(),
+            flagged: flag_off_region.then_some(&self.off_region),
+        }
+    }
 }
 
 /// Panel colors. The canvas keeps its own in [`crate::draw`]; these are
@@ -326,6 +343,7 @@ impl MapperApp {
                 edit_mode: false,
                 labels: false,
                 interiors: false,
+                off_region: false,
             },
             drag: None,
             new_plate: String::new(),
@@ -923,6 +941,21 @@ impl MapperApp {
         };
         let name = area.name.clone();
         let store_key = area.store_key();
+        let majority = area.parent.clone().unwrap_or_default();
+        let off_region: HashSet<RoomId> = if area.contested.is_some() {
+            area.rooms
+                .iter()
+                .copied()
+                .filter(|&id| {
+                    self.store
+                        .region_in(RoomKey::of(id, map), &self.areas.baseline)
+                        .unwrap_or(areas::NO_REGION)
+                        != majority
+                })
+                .collect()
+        } else {
+            HashSet::new()
+        };
         let location = self.store.location(&store_key);
         // Edge corrections go IN to the solve: they change what the solver
         // does, so the rooms are placed by the corrected geometry. Moves
@@ -967,6 +1000,10 @@ impl MapperApp {
         // The picked rooms survive a re-solve of the same area -- ids do
         // not move -- but not onto a sheet that does not draw them.
         self.picked_rooms.retain(|&id| scene.room(id).is_some());
+        let off_region = off_region
+            .into_iter()
+            .filter(|&id| scene.room(id).is_some())
+            .collect();
         self.shown = Some(Shown {
             name,
             focus,
@@ -974,6 +1011,8 @@ impl MapperApp {
             layout,
             subset,
             scene,
+            majority,
+            off_region,
             needs_fit: needs_fit_for(fit),
         });
     }
@@ -2536,11 +2575,7 @@ impl eframe::App for MapperApp {
                     },
                 )
             });
-            let focus = draw::Focus {
-                rooms: shown.focus.rooms(),
-                streets: shown.focus.streets(),
-                doors: shown.focus.doors(),
-            };
+            let focus = shown.draw_focus(self.view.off_region);
             let picked: HashSet<RoomId> = self.picked_rooms.iter().copied().collect();
             let hit = draw::scene(
                 ui,
@@ -2564,6 +2599,24 @@ impl eframe::App for MapperApp {
             self.commit(edit);
         }
     }
+}
+
+/// "Wrong region (N)", on an area split across regions: paints red the
+/// rooms not in the region most of it carries, so they can be picked and
+/// moved.
+fn wrong_region_toggle(ui: &mut egui::Ui, shown: &Shown, view: &mut draw::View) {
+    if shown.off_region.is_empty() {
+        return;
+    }
+    ui.toggle_value(
+        &mut view.off_region,
+        egui::RichText::new(format!("Wrong region ({})", shown.off_region.len()))
+            .color(egui::Color32::from_rgb(255, 90, 90)),
+    )
+    .on_hover_text(format!(
+        "Paint red the rooms not in {}, the region most of this area is in",
+        shown.majority
+    ));
 }
 
 /// The bar above the canvas: the area name, the sheet toggles, Fit, and
@@ -2632,6 +2685,7 @@ fn canvas_header(
                     }
                 });
         }
+        wrong_region_toggle(ui, shown, view);
         ui.separator();
         view_controls(ui, shown, view, params);
         ui.separator();
