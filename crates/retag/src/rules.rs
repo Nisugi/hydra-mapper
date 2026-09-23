@@ -368,7 +368,7 @@ pub struct NamedRegion {
 }
 
 /// A `loc` value that names something other than a place: player-built
-/// rooms, a GameMaster holding area. Not a region, and not an area of
+/// rooms, a `GameMaster` holding area. Not a region, and not an area of
 /// one either, so it does not fold.
 #[derive(Debug, Clone, Deserialize)]
 pub struct NotAPlace {

@@ -198,6 +198,19 @@ pub struct MapperApp {
     new_area: String,
     /// Regions whose areas are folded away in the Region tree.
     collapsed: BTreeSet<String>,
+    /// Groups picked out with Ctrl-click, to be assigned together.
+    ///
+    /// **Why groups rather than rooms.** Assigning is nearly always done
+    /// a group at a time -- a building, a run of street -- and a map has
+    /// over a hundred two- and three-room groups that each want putting
+    /// somewhere. Ctrl-clicking one room of each and assigning once is
+    /// the difference between a minute and an afternoon.
+    ///
+    /// Held as group indices of the shown area, and cleared when the
+    /// shown area changes: an index means nothing against another
+    /// layout, and a selection that survived would assign the wrong
+    /// rooms silently.
+    selected_groups: BTreeSet<usize>,
     /// A room to inspect once its area is on screen, from a room-number
     /// search. Applied after `show_selected`, which clears the selection.
     pending_inspect: Option<RoomId>,
@@ -307,6 +320,7 @@ impl MapperApp {
             new_plate: String::new(),
             new_area: String::new(),
             collapsed,
+            selected_groups: BTreeSet::new(),
             pending_inspect: None,
             trail: Vec::new(),
             export_note: None,
@@ -363,13 +377,15 @@ impl MapperApp {
     }
 
     /// The bar above everything: the export button, and whatever the
-    /// corrections as a whole have to say. Returns whether to export.
-    fn corrections_bar(&mut self, ui: &mut egui::Ui, can_edit: bool) -> bool {
+    /// corrections as a whole have to say. Returns which export was
+    /// asked for: the combiner submission, or the region assignments.
+    fn corrections_bar(&mut self, ui: &mut egui::Ui, can_edit: bool) -> (bool, bool) {
         // A store that will not load or save is said once, at the top,
         // because it means corrections are not being kept. The export
         // note shares the bar: both are about the corrections as a whole,
         // not about whatever area is on screen.
         let mut export_now = false;
+        let mut export_regions_now = false;
         if self.store_problem.is_some() || self.export_note.is_some() || can_edit {
             egui::Panel::top("corrections").show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
@@ -380,6 +396,18 @@ impl MapperApp {
                         .button("Export for combiner")
                         .on_hover_text(
                             "Write the corrections as a dirto patch the combiner                                  can merge into the map",
+                        )
+                        .clicked();
+                    // Separate button because it is a separate artefact
+                    // for a separate reader: the combiner takes layout
+                    // corrections, `retag` takes facts about places.
+                    export_regions_now = ui
+                        .add_enabled(
+                            !self.store.region_moves.is_empty(),
+                            egui::Button::new("Export regions"),
+                        )
+                        .on_hover_text(
+                            "Write the region assignments as [[assign]] blocks                              to paste into curation/regions.toml",
                         )
                         .clicked();
                 });
@@ -411,7 +439,7 @@ impl MapperApp {
             });
         });
         }
-        export_now
+        (export_now, export_regions_now)
     }
 
     /// Draw every ticked area, and every plate hanging off one, as SVG
@@ -892,6 +920,10 @@ impl MapperApp {
             // the case the trail exists for.
             self.inspected = self.trail.pop();
         }
+        // A selection is group indices of the layout being replaced, and
+        // an index means nothing against the next one. Keeping it would
+        // assign whichever rooms happened to land on those numbers.
+        self.selected_groups.clear();
         self.shown = Some(Shown {
             name,
             focus,
@@ -920,6 +952,60 @@ impl MapperApp {
             return;
         }
         self.inspected = (self.inspected != Some(id)).then_some(id);
+    }
+
+    /// The selection as the panel needs it: how many groups, how many
+    /// rooms, and every key to assign.
+    fn picked(&self) -> (usize, usize, Vec<RoomKey>) {
+        let keys = self
+            .map
+            .as_ref()
+            .ok()
+            .map(|w| self.selected_keys(w))
+            .unwrap_or_default();
+        (self.selected_groups.len(), self.selected_rooms(), keys)
+    }
+
+    /// Ctrl-click: put this room's group in the selection, or take it
+    /// out if it is already there.
+    ///
+    /// Toggling rather than adding, because the mistake a person makes
+    /// while picking a hundred groups is clicking one twice, and having
+    /// to start again would be worse than the tedium it replaces.
+    fn toggle_selected(&mut self, id: RoomId) {
+        let Some(shown) = &self.shown else { return };
+        let Some(group) = shown.scene.room(id).map(|room| room.group) else {
+            return;
+        };
+        if !self.selected_groups.remove(&group) {
+            self.selected_groups.insert(group);
+        }
+    }
+
+    /// Every room key in the selected groups, for an assignment.
+    fn selected_keys(&self, whole: &Map) -> Vec<RoomKey> {
+        let Some(shown) = &self.shown else {
+            return Vec::new();
+        };
+        let mut keys: Vec<RoomKey> = self
+            .selected_groups
+            .iter()
+            .filter_map(|&g| shown.layout.groups.get(g))
+            .flat_map(|g| g.room_ids.iter().map(|&id| RoomKey::of(id, whole)))
+            .collect();
+        keys.sort_unstable();
+        keys.dedup();
+        keys
+    }
+
+    /// How many rooms the selection covers, for the label.
+    fn selected_rooms(&self) -> usize {
+        let Some(shown) = &self.shown else { return 0 };
+        self.selected_groups
+            .iter()
+            .filter_map(|&g| shown.layout.groups.get(g))
+            .map(|g| g.room_ids.len())
+            .sum()
     }
 
     /// Track a drag across frames and turn a finished one into an edit.
@@ -1085,6 +1171,12 @@ impl MapperApp {
         let (Some(shown), Some(id)) = (&self.shown, self.inspected) else {
             return None;
         };
+        // Gathered before the mutable borrows below: the panel closure
+        // holds `&mut self.new_area`, so nothing can call a `&self`
+        // method after that point.
+        let (picked_groups, picked_rooms, picked_keys) = self.picked();
+        let mut clear_selection = false;
+
         let mut edit = None;
         let edit_out = &mut edit;
         let mut open = true;
@@ -1160,6 +1252,24 @@ impl MapperApp {
             if !edit_mode {
                 return;
             }
+            // The selection acts on many groups at once, so it comes
+            // before the controls for the one room being inspected.
+            if let Some(whole) = whole
+                && let Some(action) = selection_panel(
+                    ui,
+                    store,
+                    &Picked {
+                        groups: picked_groups,
+                        rooms: picked_rooms,
+                        keys: &picked_keys,
+                    },
+                    whole,
+                    new_area,
+                    &mut clear_selection,
+                )
+            {
+                *edit_out = Some(action);
+            }
             // Editing controls live below the facts, so the panel
             // reads the same whether or not Edit is on.
             ui.separator();
@@ -1197,6 +1307,22 @@ impl MapperApp {
             self.walk_to(next);
         } else if back {
             self.inspected = self.trail.pop();
+        }
+        // An assignment consumes the selection -- leaving it picked
+        // invites assigning the same hundred groups twice -- but only
+        // one made FROM the selection. Unpinning a room or fixing an
+        // edge is unrelated and must not throw the picking away.
+        let assigned_selection = matches!(
+            &edit,
+            Some(EditAction::AssignArea { keys, .. } | EditAction::AssignRegion { keys, .. })
+                if !picked_keys.is_empty() && *keys == picked_keys
+        ) || matches!(
+            &edit,
+            Some(EditAction::NewArea { keys, .. })
+                if !picked_keys.is_empty() && *keys == picked_keys
+        );
+        if clear_selection || assigned_selection {
+            self.selected_groups.clear();
         }
         edit
     }
@@ -1625,6 +1751,113 @@ fn visiting_membership(
             new_plate.clear();
         }
     });
+    edit
+}
+
+/// What the Ctrl-click selection covers.
+#[derive(Clone, Copy)]
+struct Picked<'a> {
+    groups: usize,
+    rooms: usize,
+    keys: &'a [RoomKey],
+}
+
+/// The multi-group selection: what is picked, and what to do with it.
+///
+/// **Why this exists.** Assigning went from a room at a time to a group
+/// at a time, which was the right unit -- a building, a run of street --
+/// and still far too slow. A map has well over a hundred two- and
+/// three-room groups that each need putting on some map, and doing them
+/// one at a time is an afternoon. Ctrl-click each, assign once.
+///
+/// Shown only when something is picked, so the ordinary inspector is
+/// unchanged for anyone not doing a bulk pass.
+fn selection_panel(
+    ui: &mut egui::Ui,
+    store: &MapOverrides,
+    picked: &Picked<'_>,
+    whole: &Map,
+    new_area: &mut String,
+    clear: &mut bool,
+) -> Option<EditAction> {
+    let Picked {
+        groups,
+        rooms,
+        keys,
+    } = *picked;
+    if groups == 0 {
+        return None;
+    }
+    let mut edit = None;
+    ui.separator();
+    ui.strong(format!("Selected: {groups} group(s), {rooms} room(s)"));
+    ui.weak("Ctrl-click a room to add or remove its group");
+    if ui.button("Clear selection").clicked() {
+        *clear = true;
+    }
+
+    // Area first: putting these somewhere is what the selection is for.
+    if !store.custom_areas.is_empty() {
+        let mut chosen: Option<String> = None;
+        egui::ComboBox::from_id_salt("assign_selection_area")
+            .selected_text("Put all in an area...")
+            .show_ui(ui, |ui| {
+                for (area, curated) in &store.custom_areas {
+                    if ui
+                        .selectable_label(false, format!("{} ({rooms} rooms)", curated.name))
+                        .clicked()
+                    {
+                        chosen = Some(area.clone());
+                    }
+                }
+            });
+        if let Some(area) = chosen {
+            edit = Some(EditAction::AssignArea {
+                keys: keys.to_vec(),
+                to: Some(area),
+            });
+        }
+    }
+    ui.horizontal(|ui| {
+        ui.add(
+            egui::TextEdit::singleline(new_area)
+                .hint_text("new area name")
+                .desired_width(120.0),
+        );
+        if ui
+            .add_enabled(!new_area.trim().is_empty(), egui::Button::new("+ all"))
+            .on_hover_text(format!("Make this area and put all {rooms} rooms in it"))
+            .clicked()
+        {
+            edit = Some(EditAction::NewArea {
+                name: new_area.trim().to_owned(),
+                keys: keys.to_vec(),
+            });
+            new_area.clear();
+        }
+    });
+
+    // And the region, for the same reason: a hundred groups that share
+    // an area usually share a region too.
+    let mut chosen: Option<String> = None;
+    egui::ComboBox::from_id_salt("assign_selection_region")
+        .selected_text("Say the region for all...")
+        .show_ui(ui, |ui| {
+            for name in known_regions(whole) {
+                if ui
+                    .selectable_label(false, format!("{name} ({rooms} rooms)"))
+                    .clicked()
+                {
+                    chosen = Some(name);
+                }
+            }
+        });
+    if let Some(name) = chosen {
+        edit = Some(EditAction::AssignRegion {
+            keys: keys.to_vec(),
+            to: Some(name),
+        });
+    }
     edit
 }
 
@@ -2127,8 +2360,10 @@ impl eframe::App for MapperApp {
         let go_to_plate = &mut jump;
         let can_edit = self.store_path.is_some() && self.store_problem.is_none();
 
-        if self.corrections_bar(ui, can_edit) {
-            self.export_corrections();
+        match self.corrections_bar(ui, can_edit) {
+            (true, _) => self.export_corrections(),
+            (_, true) => self.export_regions(),
+            _ => {}
         }
 
         let mut changed = false;
@@ -2198,17 +2433,28 @@ impl eframe::App for MapperApp {
                 streets: shown.focus.streets(),
                 doors: shown.focus.doors(),
             };
+            let picked: HashSet<RoomId> = self
+                .selected_groups
+                .iter()
+                .filter_map(|&g| shown.layout.groups.get(g))
+                .flat_map(|g| g.room_ids.iter().copied())
+                .collect();
             let hit = draw::scene(
                 ui,
                 &shown.scene,
                 &focus,
                 &mut self.camera,
                 self.inspected,
+                &picked,
                 self.view,
                 ghost,
             );
             if let Some(id) = hit.clicked {
-                self.clicked(id);
+                if hit.add_to_selection {
+                    self.toggle_selected(id);
+                } else {
+                    self.clicked(id);
+                }
             }
             if edit_out.is_none() {
                 *edit_out = self.handle_drag(&hit);

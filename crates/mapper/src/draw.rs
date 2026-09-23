@@ -39,6 +39,10 @@ pub(crate) const CONNECTOR_LINE: Color32 = Color32::from_rgb(150, 120, 90);
 pub(crate) const LABEL_COLOR: Color32 = Color32::from_rgb(220, 220, 200);
 pub(crate) const CANVAS_BG: Color32 = Color32::from_rgb(24, 26, 30);
 const SELECTED_STROKE: Color32 = Color32::from_rgb(250, 250, 250);
+/// The wash behind a room whose group is picked for assignment. Faint,
+/// because a hundred of them are on screen at once and the sheet still
+/// has to be readable underneath.
+const PICKED_FILL: Color32 = Color32::from_rgb(40, 66, 96);
 const HOVER_STROKE: Color32 = Color32::from_rgb(200, 220, 250);
 const GHOST_STROKE: Color32 = Color32::from_rgb(250, 220, 120);
 
@@ -52,6 +56,9 @@ pub struct Hit {
     /// The room just clicked. `None` on a drag, so panning never changes
     /// the selection.
     pub clicked: Option<RoomId>,
+    /// Whether Ctrl was held on that click: add this room's group to the
+    /// selection rather than inspecting it.
+    pub add_to_selection: bool,
     /// In edit mode: the room a drag just started on, and whether Alt was
     /// held (move one room rather than its whole group).
     pub drag_started: Option<(RoomId, bool)>,
@@ -114,6 +121,7 @@ pub fn scene(
     focus: &Focus<'_>,
     camera: &mut Camera,
     selected: Option<RoomId>,
+    picked: &HashSet<RoomId>,
     view: View,
     ghost: Option<(usize, Option<RoomId>, Cell)>,
 ) -> Hit {
@@ -142,6 +150,7 @@ pub fn scene(
     // select whichever one the release happened over.
     let mut hit = Hit {
         clicked: response.clicked().then_some(hovered).flatten(),
+        add_to_selection: ui.input(|i| i.modifiers.command),
         ..Hit::default()
     };
     if edit_mode {
@@ -158,7 +167,7 @@ pub fn scene(
     let painter = painter.with_clip_rect(canvas);
     draw_edges(&painter, sheet, focus, *camera, canvas);
     draw_rooms(
-        &painter, sheet, focus, interiors, *camera, canvas, selected, hovered,
+        &painter, sheet, focus, interiors, *camera, canvas, selected, picked, hovered,
     );
     if labels && camera.scale >= LABEL_MIN_SCALE {
         draw_labels(&painter, scene, focus, *camera, canvas);
@@ -312,6 +321,7 @@ fn draw_rooms(
     camera: Camera,
     canvas: Rect,
     selected: Option<RoomId>,
+    picked: &HashSet<RoomId>,
     hovered: Option<RoomId>,
 ) {
     let side = (ROOM_PX * camera.scale).max(2.0);
@@ -325,6 +335,12 @@ fn draw_rooms(
             continue;
         }
         let is_selected = selected == Some(room.id);
+        // A room in the multi-group selection, waiting to be assigned.
+        // Drawn under everything else so the inspected room's own
+        // highlight still reads on top of it.
+        if picked.contains(&room.id) {
+            painter.rect_filled(rect.expand(side * 0.35), 2.0, PICKED_FILL);
+        }
         if !focus.has(room.id) {
             let r = if focus.doors.contains(&room.id) {
                 (side * 0.3).max(2.5)
