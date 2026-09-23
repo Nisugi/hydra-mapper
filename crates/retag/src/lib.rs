@@ -114,6 +114,17 @@ fn tag_regions(plan: &mut Plan, rooms: &[Room], curation: &Curation) {
             region_of.insert(*uid, region.name.as_str());
         }
     }
+    // Rooms the mapdb holds with no `loc`, named by id because the
+    // evidence is which official area they are in. Seeded before the uid
+    // pass so a room that HAS a region keeps it: the check below refuses
+    // to write a second one, and this is the weaker claim of the two.
+    let mut by_id: BTreeMap<u32, &str> = BTreeMap::new();
+    for block in &curation.regions.unclassified {
+        for id in &block.ids {
+            by_id.insert(*id, block.region.as_str());
+        }
+    }
+
     for room in rooms {
         // A room the game numbers once belongs where that number says.
         // A room it numbers NINE times, once per town, is a plane the
@@ -126,7 +137,10 @@ fn tag_regions(plan: &mut Plan, rooms: &[Room], curation: &Curation) {
             }
         }
         let name = match found.len() {
-            0 => continue,
+            0 => match by_id.get(&room.id.0) {
+                Some(region) => (*region).to_owned(),
+                None => continue,
+            },
             1 => (*found.iter().next().unwrap_or(&"")).to_owned(),
             // Named for itself. It is one place in our map and nine in
             // theirs, so no town's name is more true than the others'.

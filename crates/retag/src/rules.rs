@@ -320,6 +320,27 @@ pub struct RegionFile {
     /// Places that exist once in our map and many times in theirs.
     #[serde(default, rename = "plane")]
     pub planes: Vec<Plane>,
+    /// Rooms the mapdb holds with `loc` empty, given a region by hand.
+    #[serde(default, rename = "unclassified")]
+    pub unclassified: Vec<Unclassified>,
+}
+
+/// Rooms the mapdb left unclassified, named by id.
+///
+/// Filling a blank rather than overruling a value. The mapdb populates
+/// `loc` on 37,372 of its 47,956 rooms and leaves wilderness out, so the
+/// Graveyard, Glatoph and the catacombs have no region and every official
+/// area made of them falls outside the region tree.
+///
+/// By **id**, not by rule, because the evidence is the official area a
+/// room belongs to and that is a list rather than a pattern. A title or
+/// location rule would reach rooms nothing says anything about.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Unclassified {
+    pub region: String,
+    pub ids: Vec<u32>,
+    #[serde(default)]
+    pub note: Option<String>,
 }
 
 /// A place the game instances per town, which we hold one copy of.

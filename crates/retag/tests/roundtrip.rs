@@ -367,6 +367,18 @@ fn a_region_is_only_written_where_a_uid_matched() {
         };
         tagged += 1;
         let name = meta.strip_prefix("region:").unwrap_or_default();
+        // A room named in an `[[unclassified]]` block was given its
+        // region by id, because the mapdb holds it with `loc` empty.
+        // `filling_a_blank_region_never_overwrites_one_the_mapdb_gave`
+        // is what checks those.
+        if curation
+            .regions
+            .unclassified
+            .iter()
+            .any(|b| b.ids.contains(&room.id.0))
+        {
+            continue;
+        }
         assert!(
             !room.uid.is_empty(),
             "room {} has a region but no uid",
@@ -489,9 +501,21 @@ fn an_unjoined_room_gets_no_region() {
         .flat_map(|r| r.uids.iter().copied())
         .collect();
 
+    let filled: std::collections::BTreeSet<u32> = curation
+        .regions
+        .unclassified
+        .iter()
+        .flat_map(|b| b.ids.iter().copied())
+        .collect();
     let rooms = apply(map.rooms(), &plan(&map, &curation));
     for room in &rooms {
         if room.uid.iter().any(|u| known.contains(&u.0)) {
+            continue;
+        }
+        // Except where curation named the room outright: the mapdb holds
+        // it and left `loc` empty, which is a blank to fill rather than
+        // an answer to respect.
+        if filled.contains(&room.id.0) {
             continue;
         }
         assert!(
@@ -602,4 +626,59 @@ fn deletion_leaves_no_dangling_exit_and_takes_nothing_live() {
             );
         }
     }
+}
+
+/// The unclassified fill is the weakest claim and never beats a uid.
+///
+/// It exists because the mapdb leaves wilderness out of `loc`, so filling
+/// a blank is all it may do. A room whose uid the mapdb DOES place keeps
+/// that answer, and no room ends up carrying two regions.
+#[test]
+fn filling_a_blank_region_never_overwrites_one_the_mapdb_gave() {
+    let Some((_, map)) = real_map() else {
+        eprintln!("skipping: gs.map not present");
+        return;
+    };
+    let Ok(curation) = Curation::load(&curation_dir()) else {
+        eprintln!("skipping: curation/ not readable");
+        return;
+    };
+    let mut region_of: std::collections::BTreeMap<i64, &str> = std::collections::BTreeMap::new();
+    for region in &curation.regions.regions {
+        for uid in &region.uids {
+            region_of.insert(*uid, region.name.as_str());
+        }
+    }
+    let filled: std::collections::BTreeSet<u32> = curation
+        .regions
+        .unclassified
+        .iter()
+        .flat_map(|b| b.ids.iter().copied())
+        .collect();
+
+    let rooms = apply(map.rooms(), &plan(&map, &curation));
+    let mut seen = 0usize;
+    for room in &rooms {
+        let carried: Vec<&String> = room
+            .meta
+            .iter()
+            .filter(|m| m.starts_with("region:"))
+            .collect();
+        assert!(
+            carried.len() < 2,
+            "room {} carries {carried:?}",
+            room.id.0
+        );
+        if !filled.contains(&room.id.0) {
+            continue;
+        }
+        seen += 1;
+        // Every filled room must be one the mapdb placed nowhere.
+        assert!(
+            !room.uid.iter().any(|u| region_of.contains_key(&u.0)),
+            "room {} was filled although its uid has a region",
+            room.id.0
+        );
+    }
+    assert!(seen > 1_000, "expected the filled set, saw {seen}");
 }
