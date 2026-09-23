@@ -39,6 +39,27 @@ fn main() -> eframe::Result {
     // beside the store and exit, no window. `--export-curation [map]`:
     // write curation/assignments.toml for retag, likewise.
     let flag = std::env::args().nth(1);
+    // `cena-mapper --import <changes.json> [map]`: merge a contributor's
+    // changes into the store beside the map.
+    if flag.as_deref() == Some("--import") {
+        let Some(changes) = std::env::args().nth(2).map(PathBuf::from) else {
+            eprintln!("usage: cena-mapper --import <changes.json> [map]");
+            std::process::exit(2);
+        };
+        let path = std::env::args()
+            .nth(3)
+            .map(PathBuf::from)
+            .or_else(|| std::env::var_os(MAP_ENV).map(PathBuf::from))
+            .or_else(bundle::default_path);
+        match app::import_changes_headless(&changes, path.as_deref()) {
+            Ok(note) => println!("{note}"),
+            Err(problem) => {
+                eprintln!("{problem}");
+                std::process::exit(1);
+            }
+        }
+        return Ok(());
+    }
     if let Some(flag) = flag.as_deref().filter(|f| f.starts_with("--export-")) {
         let path = std::env::args()
             .nth(2)

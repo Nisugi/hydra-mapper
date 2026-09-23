@@ -424,6 +424,19 @@ impl MapperApp {
                     .add_enabled(self.map.is_ok(), egui::Button::new("Export areas"))
                     .on_hover_text("Write every room's area and region as a TSV beside the store")
                     .clicked();
+                if ui
+                    .add_enabled(
+                        self.store != MapOverrides::default(),
+                        egui::Button::new("Export my changes"),
+                    )
+                    .on_hover_text(
+                        "Write every edit made here to my-map-changes.json, to send back; \
+                         drop a changes file on this window to take one in",
+                    )
+                    .clicked()
+                {
+                    self.export_changes();
+                }
                 // Picking which areas to draw is a question asked while
                 // browsing the list, so its toggle lives here rather than
                 // with the canvas: the canvas header only exists once an
@@ -679,6 +692,57 @@ impl MapperApp {
             return;
         };
         self.export_note = Some(write_areas(map, &self.store, store_path));
+    }
+
+    /// A copy of the store -- every edit made in this mapper, and nothing
+    /// the map already says -- as `my-map-changes.json` beside it, to send
+    /// back. The store's own format, so importing it is a merge of two
+    /// stores.
+    fn export_changes(&mut self) {
+        let Some(store_path) = self.store_path.as_deref() else {
+            self.export_note = Some("Nothing to export: no map is loaded.".to_owned());
+            return;
+        };
+        let path = store_path.with_file_name("my-map-changes.json");
+        self.export_note = Some(match self.store.save(&path) {
+            Ok(()) => format!("Wrote your changes to {} -- send that file", path.display()),
+            Err(error) => format!("Could not write {}: {error}", path.display()),
+        });
+    }
+
+    /// Changes files dropped on the window, merged into this store.
+    fn take_dropped(&mut self, ui: &egui::Ui) {
+        let dropped: Vec<std::path::PathBuf> = ui.ctx().input(|i| {
+            i.raw
+                .dropped_files
+                .iter()
+                .filter_map(|f| f.path.clone())
+                .collect()
+        });
+        if dropped.is_empty() {
+            return;
+        }
+        if self.store_problem.is_some() || self.store_path.is_none() {
+            self.export_note =
+                Some("Cannot take in changes: this store is not being saved.".to_owned());
+            return;
+        }
+        let mut notes = Vec::new();
+        for path in dropped {
+            match MapOverrides::load(&path) {
+                Ok(theirs) => {
+                    let report = self.store.merge(&theirs);
+                    notes.push(format!("{}: {report}", path.display()));
+                }
+                Err(error) => {
+                    notes.push(format!("{}: not a changes file ({error})", path.display()));
+                }
+            }
+        }
+        self.save_store();
+        self.rebuild_areas();
+        self.refresh_shown();
+        self.export_note = Some(format!("Took in {}", notes.join("; ")));
     }
 
     fn export_corrections(&mut self) {
@@ -2388,6 +2452,7 @@ impl eframe::App for MapperApp {
             return;
         }
         self.apply_knobs();
+        self.take_dropped(ui);
 
         let mut edit: Option<EditAction> = None;
         let edit_out = &mut edit;
@@ -2965,6 +3030,32 @@ pub fn export_curation_headless(path: Option<&Path>) -> Result<String, String> {
         store.area_moves.len(),
         store.region_moves.len(),
         target.display()
+    ))
+}
+
+/// `--import <changes> [map]`: merge a contributor's changes file into the
+/// store beside the map, keeping the store as it was in `.json.bak`.
+///
+/// # Errors
+///
+/// When either file will not load, or the store cannot be written.
+pub fn import_changes_headless(changes: &Path, path: Option<&Path>) -> Result<String, String> {
+    let store_path = overrides::store_path(path.ok_or("no map path")?);
+    let mut store =
+        MapOverrides::load(&store_path).map_err(|e| format!("{} {e}", store_path.display()))?;
+    let theirs = MapOverrides::load(changes).map_err(|e| format!("{} {e}", changes.display()))?;
+    if store_path.exists() {
+        std::fs::copy(&store_path, store_path.with_extension("json.bak"))
+            .map_err(|e| format!("Could not back up {}: {e}", store_path.display()))?;
+    }
+    let report = store.merge(&theirs);
+    store
+        .save(&store_path)
+        .map_err(|e| format!("Could not write {}: {e}", store_path.display()))?;
+    Ok(format!(
+        "Took in {report} from {} into {}",
+        changes.display(),
+        store_path.display()
     ))
 }
 

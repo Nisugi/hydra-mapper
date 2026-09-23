@@ -294,6 +294,33 @@ pub struct MapOverrides {
 /// rooms span regions is a fact worth seeing rather than a conflict to
 /// resolve at creation time, and [`MapOverrides::area_region`] reports
 /// the split.
+/// What [`MapOverrides::merge`] took in.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct MergeReport {
+    pub area_moves: usize,
+    pub region_moves: usize,
+    pub new_areas: usize,
+    pub plate_moves: usize,
+    pub new_plates: usize,
+    pub layout: usize,
+}
+
+impl std::fmt::Display for MergeReport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} area and {} region assignment(s), {} new area(s), {} plate move(s), \
+             {} new plate(s), {} layout correction(s)",
+            self.area_moves,
+            self.region_moves,
+            self.new_areas,
+            self.plate_moves,
+            self.new_plates,
+            self.layout
+        )
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CuratedArea {
     /// What the picker shows.
@@ -516,6 +543,52 @@ impl MapOverrides {
     #[must_use]
     pub fn region_of(&self, key: RoomKey) -> Option<&str> {
         self.region_moves.get(&key).map(String::as_str)
+    }
+
+    /// Take in another store's edits -- a contributor's "my changes" file.
+    ///
+    /// Theirs win where both say something about the same room, group,
+    /// pin or edge: they are the newer word, and a person reviews the
+    /// result before exporting it to curation. An area or plate they made
+    /// is added; one this store already has keeps its name. Returns what
+    /// was taken, for the note.
+    pub fn merge(&mut self, other: &MapOverrides) -> MergeReport {
+        let mut report = MergeReport::default();
+        for (key, theirs) in &other.locations {
+            let ours = self.locations.entry(key.clone()).or_default();
+            report.layout +=
+                theirs.group_offsets.len() + theirs.room_pins.len() + theirs.edges.len();
+            ours.group_offsets
+                .extend(theirs.group_offsets.iter().map(|(k, v)| (*k, *v)));
+            ours.room_pins
+                .extend(theirs.room_pins.iter().map(|(k, v)| (*k, *v)));
+            for edge in &theirs.edges {
+                ours.edges.retain(|e| (e.a, e.b) != (edge.a, edge.b));
+                ours.edges.push(*edge);
+            }
+        }
+        for (key, plate) in &other.custom_maps {
+            if !self.custom_maps.contains_key(key) {
+                self.custom_maps.insert(key.clone(), plate.clone());
+                report.new_plates += 1;
+            }
+        }
+        report.plate_moves = other.membership_moves.len();
+        self.membership_moves
+            .extend(other.membership_moves.iter().map(|(k, v)| (*k, v.clone())));
+        for (key, area) in &other.custom_areas {
+            if !self.custom_areas.contains_key(key) {
+                self.custom_areas.insert(key.clone(), area.clone());
+                report.new_areas += 1;
+            }
+        }
+        report.area_moves = other.area_moves.len();
+        self.area_moves
+            .extend(other.area_moves.iter().map(|(k, v)| (*k, v.clone())));
+        report.region_moves = other.region_moves.len();
+        self.region_moves
+            .extend(other.region_moves.iter().map(|(k, v)| (*k, v.clone())));
+        report
     }
 
     /// Put a room in a curated area, or (with `None`) take it out.
@@ -789,6 +862,42 @@ pub fn store_path(map_path: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A contributor's changes, taken in: their word wins for the rooms
+    /// they touched, a room they took out stays out, an area they made
+    /// arrives, and an area both sides have keeps this side's name.
+    #[test]
+    fn a_changes_file_merges_into_a_store() {
+        let mut mine = MapOverrides::default();
+        let town = mine.create_area("landing-town");
+        mine.set_area(RoomKey::Uid(1), Some(&town));
+        mine.set_area(RoomKey::Uid(2), Some(&town));
+        mine.set_region(RoomKey::Uid(3), Some("Icemule Trace"));
+
+        let mut theirs = MapOverrides::default();
+        theirs.custom_areas.insert(
+            town.clone(),
+            CuratedArea {
+                name: "renamed by them".to_owned(),
+            },
+        );
+        let well = theirs.create_area("landing-well");
+        theirs.set_area(RoomKey::Uid(1), None);
+        theirs.set_area(RoomKey::Uid(4), Some(&well));
+        theirs.set_region(RoomKey::Uid(3), Some("Wehnimer's Landing"));
+
+        let report = mine.merge(&theirs);
+        assert_eq!(report.new_areas, 1);
+        assert_eq!(
+            mine.area_moves[&RoomKey::Uid(1)],
+            "",
+            "their removal was lost"
+        );
+        assert_eq!(mine.area_moves[&RoomKey::Uid(2)], town);
+        assert_eq!(mine.area_moves[&RoomKey::Uid(4)], well);
+        assert_eq!(mine.region_moves[&RoomKey::Uid(3)], "Wehnimer's Landing");
+        assert_eq!(mine.custom_areas[&town].name, "landing-town");
+    }
 
     #[test]
     fn plate_keys_are_dotted_and_stable() {
