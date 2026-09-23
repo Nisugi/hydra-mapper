@@ -221,7 +221,8 @@ impl MapperApp {
             Ok(map) => Areas::build(map, &store),
             Err(_) => Areas {
                 official: Vec::new(),
-                mapdb: Vec::new(),
+                region: Vec::new(),
+                location: Vec::new(),
                 derived: Vec::new(),
                 plates: Vec::new(),
             },
@@ -229,7 +230,7 @@ impl MapperApp {
         MapperApp {
             map,
             areas,
-            tab: AreaKind::Mapdb,
+            tab: AreaKind::Location,
             filter: String::new(),
             selected: None,
             camera: Camera::default(),
@@ -265,7 +266,17 @@ impl MapperApp {
     /// drags are skipped rather than solved for nothing.
     fn placements_across_areas(&self, map: &Map) -> Vec<placement::Resolved> {
         let mut out = Vec::new();
-        for kind in [AreaKind::Official, AreaKind::Mapdb, AreaKind::Plates] {
+        // Region is here because a person can drag one like any other
+        // area and expects the correction to survive. It is NOT in the
+        // "which area holds this room" lookups below: a region covers the
+        // whole map, official rooms included, so it would shadow every
+        // more specific name it contains.
+        for kind in [
+            AreaKind::Official,
+            AreaKind::Region,
+            AreaKind::Location,
+            AreaKind::Plates,
+        ] {
             for area in self.areas.list(kind) {
                 let Some(location) = self.store.location(&area.store_key()) else {
                     continue;
@@ -461,7 +472,7 @@ impl MapperApp {
             }
         };
         for room in shown.subset.rooms() {
-            for kind in [AreaKind::Official, AreaKind::Mapdb] {
+            for kind in [AreaKind::Official, AreaKind::Location] {
                 if let Some(area) = self
                     .areas
                     .list(kind)
@@ -476,7 +487,7 @@ impl MapperApp {
             // and that somewhere is an official area which, by excluding
             // its interiors, does not contain the plated room at all.
             for exit in &room.exits {
-                for kind in [AreaKind::Official, AreaKind::Mapdb] {
+                for kind in [AreaKind::Official, AreaKind::Location] {
                     if let Some(area) = self
                         .areas
                         .list(kind)
@@ -508,8 +519,9 @@ impl MapperApp {
         for kind in [
             AreaKind::Plates,
             AreaKind::Official,
-            AreaKind::Mapdb,
+            AreaKind::Location,
             AreaKind::Derived,
+            AreaKind::Region,
         ] {
             if let Some(index) = self.areas.list(kind).iter().position(|a| a.name == name) {
                 self.tab = kind;
@@ -540,7 +552,7 @@ impl MapperApp {
         // Which area each room belongs to, so a plated room's place
         // travels alongside the grid it is drawn on.
         let area_of = |id: RoomId| -> Option<String> {
-            for kind in [AreaKind::Official, AreaKind::Mapdb] {
+            for kind in [AreaKind::Official, AreaKind::Location] {
                 if let Some(area) = self.areas.list(kind).iter().find(|a| a.rooms.contains(&id)) {
                     return Some(area.name.clone());
                 }
@@ -1034,7 +1046,7 @@ impl MapperApp {
             };
             match held_by(AreaKind::Plates)
                 .or_else(|| held_by(AreaKind::Official))
-                .or_else(|| held_by(AreaKind::Mapdb))
+                .or_else(|| held_by(AreaKind::Location))
             {
                 Some((kind, index)) => {
                     let area = &self.areas.list(kind)[index];
