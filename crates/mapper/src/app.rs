@@ -3113,6 +3113,52 @@ pub fn import_changes_headless(changes: &Path, path: Option<&Path>) -> Result<St
     ))
 }
 
+/// `--plan-areas [map]` and `--fill-areas [map]`: put every room with a
+/// region and no area into one, from its title, location and walls (see
+/// [`crate::area_fill`]). Both write a review table beside the store,
+/// `<store>.fill.tsv`; only `--fill-areas` writes the store, keeping it as
+/// it was in `.json.bak`.
+///
+/// **Close the mapper first.** An open mapper holds the store in memory
+/// and would save over the fill with its next edit.
+///
+/// # Errors
+///
+/// When the map or store will not load, or a file cannot be written.
+pub fn fill_areas_headless(path: Option<&Path>, write: bool) -> Result<String, String> {
+    let map = load_map(path).map_err(|p| p.to_string())?;
+    let store_path = overrides::store_path(path.ok_or("no map path")?);
+    let mut store =
+        MapOverrides::load(&store_path).map_err(|e| format!("{} {e}", store_path.display()))?;
+    let baseline = Baseline::of(&map);
+    let fill = crate::area_fill::propose(&map, &store, &baseline);
+    let table = store_path.with_extension("fill.tsv");
+    std::fs::write(
+        &table,
+        crate::area_fill::review_tsv(&fill, &map, &store, &baseline),
+    )
+    .map_err(|e| format!("Could not write {}: {e}", table.display()))?;
+    if !write {
+        return Ok(format!(
+            "{fill}. Nothing written; review {}",
+            table.display()
+        ));
+    }
+    if store_path.exists() {
+        std::fs::copy(&store_path, store_path.with_extension("json.bak"))
+            .map_err(|e| format!("Could not back up {}: {e}", store_path.display()))?;
+    }
+    crate::area_fill::apply(&fill, &map, &mut store);
+    store
+        .save(&store_path)
+        .map_err(|e| format!("Could not write {}: {e}", store_path.display()))?;
+    Ok(format!(
+        "{fill}. Written to {}; each room is listed in {}",
+        store_path.display(),
+        table.display()
+    ))
+}
+
 /// `--export-areas`: the same export, with no window.
 ///
 /// # Errors

@@ -10,6 +10,7 @@
 //! panel can depend on that crate directly and never need this one.
 
 mod app;
+mod area_fill;
 mod areas;
 mod bundle;
 mod camera;
@@ -52,6 +53,27 @@ fn main() -> eframe::Result {
             .or_else(|| std::env::var_os(MAP_ENV).map(PathBuf::from))
             .or_else(bundle::default_path);
         match app::import_changes_headless(&changes, path.as_deref()) {
+            Ok(note) => println!("{note}"),
+            Err(problem) => {
+                eprintln!("{problem}");
+                std::process::exit(1);
+            }
+        }
+        return Ok(());
+    }
+    // `--plan-areas [map]`: say where the rooms with no area would go.
+    // `--fill-areas [map]`: put them there, in the store.
+    if let Some(write) = match flag.as_deref() {
+        Some("--plan-areas") => Some(false),
+        Some("--fill-areas") => Some(true),
+        _ => None,
+    } {
+        let path = std::env::args()
+            .nth(2)
+            .map(PathBuf::from)
+            .or_else(|| std::env::var_os(MAP_ENV).map(PathBuf::from))
+            .or_else(bundle::default_path);
+        match app::fill_areas_headless(path.as_deref(), write) {
             Ok(note) => println!("{note}"),
             Err(problem) => {
                 eprintln!("{problem}");
