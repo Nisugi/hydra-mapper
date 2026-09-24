@@ -3115,9 +3115,10 @@ pub fn import_changes_headless(changes: &Path, path: Option<&Path>) -> Result<St
 
 /// `--plan-areas [map]` and `--fill-areas [map]`: put every room with a
 /// region and no area into one, from its title, location and walls (see
-/// [`crate::area_fill`]). Both write a review table beside the store,
-/// `<store>.fill.tsv`; only `--fill-areas` writes the store, keeping it as
-/// it was in `.json.bak`.
+/// [`crate::area_fill`]). Both write a review table beside the store --
+/// `<store>.fill-plan.tsv` for a plan, `<store>.fill.tsv` for a fill --
+/// and only `--fill-areas` writes the store, keeping it as it was in
+/// `.json.bak`.
 ///
 /// **Close the mapper first.** An open mapper holds the store in memory
 /// and would save over the fill with its next edit.
@@ -3132,7 +3133,9 @@ pub fn fill_areas_headless(path: Option<&Path>, write: bool) -> Result<String, S
         MapOverrides::load(&store_path).map_err(|e| format!("{} {e}", store_path.display()))?;
     let baseline = Baseline::of(&map);
     let fill = crate::area_fill::propose(&map, &store, &baseline);
-    let table = store_path.with_extension("fill.tsv");
+    // A plan gets its own table, so checking afterwards does not overwrite
+    // the record of what a fill did.
+    let table = store_path.with_extension(if write { "fill.tsv" } else { "fill-plan.tsv" });
     std::fs::write(
         &table,
         crate::area_fill::review_tsv(&fill, &map, &store, &baseline),
