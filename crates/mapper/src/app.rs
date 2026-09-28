@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 use cena_map::{Map, RoomId};
 use cena_map_layout::Cell;
+use cena_map_layout::scene::SceneRoom;
 use cena_map_layout::{
     Dir, EdgeAction, Layout, LayoutParams, MapScene, build_scene, generate_layout_tuned,
 };
@@ -123,8 +124,9 @@ enum Fit {
 enum EditAction {
     /// Shift a whole group by a cell delta.
     NudgeGroup { anchor: RoomKey, delta: Cell },
-    /// Place one room within its group's frame.
-    PinRoom { key: RoomKey, pin: Cell },
+    /// Place rooms, each within its own group's frame: the one room
+    /// Alt-dragged, or every picked room dragged together.
+    PinRooms { pins: Vec<(RoomKey, Cell)> },
     /// Drop a room's pin, returning it to where the solver put it.
     UnpinRoom { key: RoomKey },
     /// Forget every correction for the shown area.
@@ -258,14 +260,24 @@ pub struct MapperApp {
 
 /// A drag in progress. Committed as one correction on release, so dragging
 /// a group across the sheet is a single entry rather than one per frame.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct DragState {
-    /// The group being moved.
-    group: usize,
-    /// Set when only this room moves (Alt held at drag start).
-    room: Option<RoomId>,
+    /// What the drag carries.
+    moving: Moving,
     /// Pixels moved so far, converted to whole cells on release.
     accumulated: egui::Vec2,
+}
+
+/// What a drag carries, decided when it starts.
+#[derive(Debug, Clone)]
+enum Moving {
+    /// A whole group, by shifting its offset.
+    Group(usize),
+    /// These rooms, each pinned in its own group's frame: the one room
+    /// under an Alt-drag, or every picked room when the drag starts on
+    /// one of them. Taken when the drag starts, so the pick is what moves
+    /// even if it changes before the release.
+    Rooms(Vec<RoomId>),
 }
 
 impl MapperApp {
@@ -1108,14 +1120,29 @@ impl MapperApp {
     /// not record a trail of one-cell nudges.
     fn handle_drag(&mut self, hit: &draw::Hit) -> Option<EditAction> {
         if let Some((id, alt)) = hit.drag_started {
-            let group = self
-                .shown
-                .as_ref()
-                .and_then(|shown| shown.scene.room(id).map(|room| room.group));
-            self.drag = group.map(|group| DragState {
-                group,
-                room: alt.then_some(id),
-                accumulated: egui::Vec2::ZERO,
+            let picked = &self.picked_rooms;
+            self.drag = self.shown.as_ref().and_then(|shown| {
+                let group = shown.scene.room(id)?.group;
+                // A drag that starts on a picked room carries the whole
+                // pick; one that starts anywhere else carries the group,
+                // as it always has. Alt means this one room either way.
+                let moving = if alt {
+                    Moving::Rooms(vec![id])
+                } else if picked.contains(&id) {
+                    Moving::Rooms(
+                        picked
+                            .iter()
+                            .copied()
+                            .filter(|&r| shown.scene.room(r).is_some())
+                            .collect(),
+                    )
+                } else {
+                    Moving::Group(group)
+                };
+                Some(DragState {
+                    moving,
+                    accumulated: egui::Vec2::ZERO,
+                })
             });
         }
         if let (Some(delta), Some(drag)) = (hit.dragged_by, self.drag.as_mut()) {
@@ -1126,43 +1153,50 @@ impl MapperApp {
         }
 
         let drag = self.drag.take()?;
-        let scale = self
-            .shown
-            .as_ref()
-            .map_or(1, |shown| shown.scene.scale_of(drag.group));
-        let delta = cells_dragged(drag, self.camera, scale);
-        if delta.x == 0 && delta.y == 0 {
-            return None;
-        }
         let shown = self.shown.as_ref()?;
-        #[allow(clippy::single_match_else)] // both arms build a different edit
-        match drag.room {
-            // One room: pinned at its position within the group's own
-            // frame, which is its drawn cell less the group's offset.
-            Some(id) => {
-                let room = shown.scene.room(id)?;
-                let offset = shown
-                    .scene
-                    .group_offsets
-                    .get(&drag.group)
-                    .copied()
-                    .unwrap_or_default();
-                // The drawn cell is the solver's times the group's scale;
-                // the pin is in the solver's.
-                Some(EditAction::PinRoom {
-                    key: RoomKey::of(id, &shown.subset),
-                    pin: Cell {
-                        x: room.cell.x / scale - offset.x + delta.x,
-                        y: room.cell.y / scale - offset.y + delta.y,
-                    },
-                })
-            }
-            None => {
-                let group = shown.layout.groups.get(drag.group)?;
+        match drag.moving {
+            Moving::Group(index) => {
+                let scale = shown.scene.scale_of(index);
+                let delta = cells_dragged(drag.accumulated, self.camera, scale);
+                if delta.x == 0 && delta.y == 0 {
+                    return None;
+                }
+                let group = shown.layout.groups.get(index)?;
                 Some(EditAction::NudgeGroup {
                     anchor: RoomKey::anchor(group, &shown.subset)?,
                     delta,
                 })
+            }
+            // Each room is pinned at its position within its own group's
+            // frame, which is its drawn cell less the group's offset. The
+            // rooms of a pick can sit in different groups, at different
+            // scales, so each converts the drag at its own.
+            Moving::Rooms(ids) => {
+                let pins: Vec<(RoomKey, Cell)> = ids
+                    .into_iter()
+                    .filter_map(|id| {
+                        let room = shown.scene.room(id)?;
+                        let scale = shown.scene.scale_of(room.group);
+                        let delta = cells_dragged(drag.accumulated, self.camera, scale);
+                        if delta.x == 0 && delta.y == 0 {
+                            return None;
+                        }
+                        let offset = shown
+                            .scene
+                            .group_offsets
+                            .get(&room.group)
+                            .copied()
+                            .unwrap_or_default();
+                        // The drawn cell is the solver's times the group's
+                        // scale; the pin is in the solver's.
+                        let pin = Cell {
+                            x: room.cell.x / scale - offset.x + delta.x,
+                            y: room.cell.y / scale - offset.y + delta.y,
+                        };
+                        Some((RoomKey::of(id, &shown.subset), pin))
+                    })
+                    .collect();
+                (!pins.is_empty()).then_some(EditAction::PinRooms { pins })
             }
         }
     }
@@ -1188,9 +1222,11 @@ impl MapperApp {
                 let Some(area) = area else { return };
                 self.store.nudge_group(&area, anchor, delta);
             }
-            EditAction::PinRoom { key, pin } => {
+            EditAction::PinRooms { pins } => {
                 let Some(area) = area else { return };
-                self.store.pin_room(&area, key, Some(pin));
+                for (key, pin) in pins {
+                    self.store.pin_room(&area, key, Some(pin));
+                }
             }
             EditAction::UnpinRoom { key } => {
                 let Some(area) = area else { return };
@@ -2561,20 +2597,11 @@ impl eframe::App for MapperApp {
                 }
             }
 
-            // The in-flight drag, in whole cells, for the ghost preview.
-            let ghost = self.drag.map(|drag| {
-                let scale = shown.scene.scale_of(drag.group);
-                let d = cells_dragged(drag, self.camera, scale);
-                // Drawn back at the group's spacing.
-                (
-                    drag.group,
-                    drag.room,
-                    Cell {
-                        x: d.x * scale,
-                        y: d.y * scale,
-                    },
-                )
-            });
+            let ghost = self
+                .drag
+                .as_ref()
+                .map(|drag| ghost_cells(drag, &shown.scene, self.camera))
+                .unwrap_or_default();
             let focus = shown.draw_focus(self.view.off_region);
             let picked: HashSet<RoomId> = self.picked_rooms.iter().copied().collect();
             let hit = draw::scene(
@@ -2585,7 +2612,7 @@ impl eframe::App for MapperApp {
                 self.inspected,
                 &picked,
                 self.view,
-                ghost,
+                &ghost,
             );
             self.pointer(&hit);
             if edit_out.is_none() {
@@ -2694,10 +2721,12 @@ fn canvas_header(
         // with an empty one would destroy that work silently.
         ui.add_enabled_ui(can_edit, |ui| {
             ui.toggle_value(&mut view.edit_mode, "Edit")
-                .on_hover_text("Drag a group to move it; hold Alt for one room");
+                .on_hover_text(
+                    "Drag a group to move it; drag a picked room to move the pick; hold Alt for one room",
+                );
         });
         if view.edit_mode {
-            ui.label("drag a group (Alt: one room) · pick: Ctrl-click, Ctrl-drag");
+            ui.label("drag a group or a pick (Alt: one room) · pick: Ctrl-click, Ctrl-drag");
             // Deleting is offered only where the plate itself is
             // on screen, so it cannot be hit while looking at a
             // town that merely lost rooms to one.
@@ -3033,7 +3062,7 @@ fn offset_phrase(dx: i32, dy: i32) -> String {
 /// A drag's pixel travel as whole grid cells, rounded, so a move snaps to
 /// the grid the layout is drawn on.
 #[allow(clippy::cast_possible_truncation)]
-fn cells_dragged(drag: DragState, camera: Camera, scale: i32) -> Cell {
+fn cells_dragged(accumulated: egui::Vec2, camera: Camera, scale: i32) -> Cell {
     // A drawn cell is `scale` solver cells wide on a spread-out sheet;
     // the edit is in the solver's cells.
     #[allow(clippy::cast_precision_loss)] // a sheet scale is 1 or 2
@@ -3042,8 +3071,37 @@ fn cells_dragged(drag: DragState, camera: Camera, scale: i32) -> Cell {
         return Cell::default();
     }
     Cell {
-        x: (drag.accumulated.x / px).round() as i32,
-        y: (drag.accumulated.y / px).round() as i32,
+        x: (accumulated.x / px).round() as i32,
+        y: (accumulated.y / px).round() as i32,
+    }
+}
+
+/// Where every room an in-flight drag carries would land, in drawn cells,
+/// for the ghost preview. Each room snaps at its own group's scale, the
+/// same way the release will commit it.
+fn ghost_cells(drag: &DragState, scene: &MapScene, camera: Camera) -> Vec<Cell> {
+    let landing = |room: &SceneRoom| {
+        let scale = scene.scale_of(room.group);
+        let d = cells_dragged(drag.accumulated, camera, scale);
+        // Drawn back at the group's spacing.
+        Cell {
+            x: room.cell.x + d.x * scale,
+            y: room.cell.y + d.y * scale,
+        }
+    };
+    match &drag.moving {
+        Moving::Group(group) => scene
+            .sheet
+            .rooms
+            .iter()
+            .filter(|r| r.group == *group)
+            .map(landing)
+            .collect(),
+        Moving::Rooms(ids) => ids
+            .iter()
+            .filter_map(|&id| scene.room(id))
+            .map(landing)
+            .collect(),
     }
 }
 

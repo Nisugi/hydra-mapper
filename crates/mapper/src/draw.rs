@@ -68,7 +68,7 @@ pub struct Hit {
     /// dots included, the same rooms a click can hit.
     pub boxed: Vec<RoomId>,
     /// In edit mode: the room a drag just started on, and whether Alt was
-    /// held (move one room rather than its whole group).
+    /// held (move one room rather than its whole group or the pick).
     pub drag_started: Option<(RoomId, bool)>,
     /// In edit mode: pixels dragged this frame, to accumulate.
     pub dragged_by: Option<egui::Vec2>,
@@ -146,7 +146,7 @@ pub fn scene(
     selected: Option<RoomId>,
     picked: &HashSet<RoomId>,
     view: View,
-    ghost: Option<(usize, Option<RoomId>, Cell)>,
+    ghost: &[Cell],
 ) -> Hit {
     let View {
         edit_mode,
@@ -226,9 +226,7 @@ pub fn scene(
     if labels && camera.scale >= LABEL_MIN_SCALE {
         draw_labels(&painter, scene, focus, *camera, canvas);
     }
-    if let Some((group, room, delta)) = ghost {
-        draw_ghost(&painter, sheet, *camera, canvas, group, room, delta);
-    }
+    draw_ghost(&painter, *camera, canvas, ghost);
     if let (Some(rect), false) = (box_rect, response.drag_stopped()) {
         painter.rect(
             rect,
@@ -245,31 +243,12 @@ pub fn scene(
 }
 
 /// Where a drag would land, previewed as outlines while the mouse is down,
-/// so a move is aimed rather than guessed and undone.
-#[allow(clippy::cast_precision_loss)] // a drag delta is a handful of cells
-fn draw_ghost(
-    painter: &egui::Painter,
-    sheet: &SheetScene,
-    camera: Camera,
-    canvas: Rect,
-    group: usize,
-    room: Option<RoomId>,
-    delta: Cell,
-) {
+/// so a move is aimed rather than guessed and undone. `landing` is the
+/// drawn cell each carried room would end up in.
+fn draw_ghost(painter: &egui::Painter, camera: Camera, canvas: Rect, landing: &[Cell]) {
     let side = (ROOM_PX * camera.scale).max(2.0);
-    let shift = Vec2::new(
-        delta.x as f32 * camera.cell_px(),
-        delta.y as f32 * camera.cell_px(),
-    );
-    for scene_room in &sheet.rooms {
-        let moving = match room {
-            Some(id) => scene_room.id == id,
-            None => scene_room.group == group,
-        };
-        if !moving {
-            continue;
-        }
-        let at = camera.to_screen(scene_room.cell, canvas) + shift;
+    for &cell in landing {
+        let at = camera.to_screen(cell, canvas);
         painter.rect_stroke(
             Rect::from_center_size(at, Vec2::splat(side)),
             2.0,
