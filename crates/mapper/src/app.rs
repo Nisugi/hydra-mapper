@@ -6,8 +6,9 @@ use std::path::{Path, PathBuf};
 
 use cena_map::{Map, RoomId};
 use cena_map_layout::Cell;
+use cena_map_layout::scene::SceneRoom;
 use cena_map_layout::{
-    Dir, EdgeAction, Layout, MapScene, build_scene, generate_layout, generate_layout_with,
+    Dir, EdgeAction, Layout, LayoutParams, MapScene, build_scene, generate_layout_tuned,
 };
 
 use crate::areas::{self, AreaKind, Areas};
@@ -16,7 +17,7 @@ use crate::draw;
 use crate::export;
 use crate::focus::Focus;
 use crate::inspect::{Crossed, RoomFacts, bearing};
-use crate::overrides::{self, MapOverrides, RoomKey};
+use crate::overrides::{self, Baseline, MapOverrides, RoomKey};
 use crate::placement;
 use crate::svg;
 
@@ -67,9 +68,26 @@ struct Shown {
     /// records -- the scene carries only what it needs to draw.
     subset: Map,
     scene: MapScene,
+    /// A curated area whose rooms disagree about their region: the region
+    /// most of them carry, and the drawn rooms that carry another (or
+    /// none). Empty when they all agree.
+    majority: String,
+    off_region: HashSet<RoomId>,
     /// Set when the area has just changed, so the next frame -- the first
     /// one that knows how big the canvas is -- fits the camera to it.
     needs_fit: bool,
+}
+
+impl Shown {
+    /// What the canvas draws as squares, as dots, and in red.
+    fn draw_focus(&self, flag_off_region: bool) -> draw::Focus<'_> {
+        draw::Focus {
+            rooms: self.focus.rooms(),
+            streets: self.focus.streets(),
+            doors: self.focus.doors(),
+            flagged: flag_off_region.then_some(&self.off_region),
+        }
+    }
 }
 
 /// Panel colors. The canvas keeps its own in [`crate::draw`]; these are
@@ -106,8 +124,9 @@ enum Fit {
 enum EditAction {
     /// Shift a whole group by a cell delta.
     NudgeGroup { anchor: RoomKey, delta: Cell },
-    /// Place one room within its group's frame.
-    PinRoom { key: RoomKey, pin: Cell },
+    /// Place rooms, each within its own group's frame: the one room
+    /// Alt-dragged, or every picked room dragged together.
+    PinRooms { pins: Vec<(RoomKey, Cell)> },
     /// Drop a room's pin, returning it to where the solver put it.
     UnpinRoom { key: RoomKey },
     /// Forget every correction for the shown area.
@@ -159,6 +178,9 @@ enum EditAction {
 }
 
 pub struct MapperApp {
+    /// The layout's knobs, set from the canvas header. A change re-solves
+    /// the shown area.
+    params: LayoutParams,
     /// `Err` once, at startup, and shown instead of a window full of
     /// nothing; loading never happens again from inside the app (v1 is a
     /// one-shot viewer, not a file-open dialog -- `plan/26` names that as
@@ -196,8 +218,26 @@ pub struct MapperApp {
     new_plate: String,
     /// Name being typed for a new curated area.
     new_area: String,
+    /// The region box: filled from the region dropdown, applied by the
+    /// + buttons.
+    new_region: String,
     /// Regions whose areas are folded away in the Region tree.
     collapsed: BTreeSet<String>,
+    /// Rooms picked out to be assigned together.
+    ///
+    /// **Rooms, not groups.** It was groups first, and that was wrong: a
+    /// "group" is the solver's connected component, which on a town sheet
+    /// is every outdoor room drawn -- 246 of them on Mist Harbor. Picking
+    /// fifteen of those was impossible; Ctrl-click took all 246 or none.
+    /// So the unit is the room, picked two ways:
+    ///
+    ///   Ctrl-click   one room
+    ///   Ctrl-drag    every room drawn inside the box
+    ///
+    /// Kept to the rooms of the shown sheet: a new area empties it, and a
+    /// room an edit takes off this sheet (a plate move) drops out, so
+    /// nothing off screen is assigned by a panel describing what is on it.
+    picked_rooms: BTreeSet<RoomId>,
     /// A room to inspect once its area is on screen, from a room-number
     /// search. Applied after `show_selected`, which clears the selection.
     pending_inspect: Option<RoomId>,
@@ -220,14 +260,24 @@ pub struct MapperApp {
 
 /// A drag in progress. Committed as one correction on release, so dragging
 /// a group across the sheet is a single entry rather than one per frame.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct DragState {
-    /// The group being moved.
-    group: usize,
-    /// Set when only this room moves (Alt held at drag start).
-    room: Option<RoomId>,
+    /// What the drag carries.
+    moving: Moving,
     /// Pixels moved so far, converted to whole cells on release.
     accumulated: egui::Vec2,
+}
+
+/// What a drag carries, decided when it starts.
+#[derive(Debug, Clone)]
+enum Moving {
+    /// A whole group, by shifting its offset.
+    Group(usize),
+    /// These rooms, each pinned in its own group's frame: the one room
+    /// under an Alt-drag, or every picked room when the drag starts on
+    /// one of them. Taken when the drag starts, so the pick is what moves
+    /// even if it changes before the release.
+    Rooms(Vec<RoomId>),
 }
 
 impl MapperApp {
@@ -265,6 +315,8 @@ impl MapperApp {
                 location: Vec::new(),
                 derived: Vec::new(),
                 plates: Vec::new(),
+                placeable: HashSet::new(),
+                baseline: crate::overrides::Baseline::default(),
             },
         };
         // **Regions start shut.** 52 of them with their areas open is 222
@@ -287,6 +339,7 @@ impl MapperApp {
             eprintln!("could not save the seeded areas: {error}");
         }
         MapperApp {
+            params: LayoutParams::default(),
             map,
             areas,
             tab: AreaKind::Location,
@@ -302,11 +355,14 @@ impl MapperApp {
                 edit_mode: false,
                 labels: false,
                 interiors: false,
+                off_region: false,
             },
             drag: None,
             new_plate: String::new(),
             new_area: String::new(),
+            new_region: String::new(),
             collapsed,
+            picked_rooms: BTreeSet::new(),
             pending_inspect: None,
             trail: Vec::new(),
             export_note: None,
@@ -345,16 +401,12 @@ impl MapperApp {
                 if location.group_offsets.is_empty() && location.room_pins.is_empty() {
                     continue;
                 }
-                let rooms = areas::layout_rooms(&area.rooms, map);
+                let rooms = areas::layout_rooms(&area.rooms, map, &self.areas.placeable);
                 let Ok(subset) = Map::from_rooms(rooms) else {
                     continue;
                 };
                 let edges = location.edge_overrides(&subset);
-                let mut layout = if edges.is_empty() {
-                    generate_layout(&subset)
-                } else {
-                    generate_layout_with(&subset, &edges)
-                };
+                let mut layout = generate_layout_tuned(&subset, &edges, self.params);
                 overrides::apply(&mut layout, &subset, location);
                 out.extend(placement::resolve(&layout, &subset, location));
             }
@@ -363,13 +415,16 @@ impl MapperApp {
     }
 
     /// The bar above everything: the export button, and whatever the
-    /// corrections as a whole have to say. Returns whether to export.
-    fn corrections_bar(&mut self, ui: &mut egui::Ui, can_edit: bool) -> bool {
+    /// corrections as a whole have to say. Returns which export was
+    /// asked for: the combiner submission, or the region assignments.
+    fn corrections_bar(&mut self, ui: &mut egui::Ui, can_edit: bool) -> (bool, bool, bool) {
         // A store that will not load or save is said once, at the top,
         // because it means corrections are not being kept. The export
         // note shares the bar: both are about the corrections as a whole,
         // not about whatever area is on screen.
         let mut export_now = false;
+        let mut export_regions_now = false;
+        let mut export_areas_now = false;
         if self.store_problem.is_some() || self.export_note.is_some() || can_edit {
             egui::Panel::top("corrections").show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
@@ -382,7 +437,36 @@ impl MapperApp {
                             "Write the corrections as a dirto patch the combiner                                  can merge into the map",
                         )
                         .clicked();
+                    // Separate button because it is a separate artefact
+                    // for a separate reader: the combiner takes layout
+                    // corrections, `retag` takes facts about places.
+                    export_regions_now = ui
+                        .add_enabled(
+                            !self.store.region_moves.is_empty() || !self.store.area_moves.is_empty(),
+                            egui::Button::new("Export to curation"),
+                        )
+                        .on_hover_text(
+                            "Write every area and region assignment to curation/assignments.toml for retag to bake into gs.map",
+                        )
+                        .clicked();
                 });
+                export_areas_now = ui
+                    .add_enabled(self.map.is_ok(), egui::Button::new("Export areas"))
+                    .on_hover_text("Write every room's area and region as a TSV beside the store")
+                    .clicked();
+                if ui
+                    .add_enabled(
+                        self.store != MapOverrides::default(),
+                        egui::Button::new("Export my changes"),
+                    )
+                    .on_hover_text(
+                        "Write every edit made here to my-map-changes.json, to send back; \
+                         drop a changes file on this window to take one in",
+                    )
+                    .clicked()
+                {
+                    self.export_changes();
+                }
                 // Picking which areas to draw is a question asked while
                 // browsing the list, so its toggle lives here rather than
                 // with the canvas: the canvas header only exists once an
@@ -411,7 +495,7 @@ impl MapperApp {
             });
         });
         }
-        export_now
+        (export_now, export_regions_now, export_areas_now)
     }
 
     /// Draw every ticked area, and every plate hanging off one, as SVG
@@ -452,7 +536,7 @@ impl MapperApp {
             else {
                 continue;
             };
-            let rooms = areas::layout_rooms(&area.rooms, map);
+            let rooms = areas::layout_rooms(&area.rooms, map, &self.areas.placeable);
             let Ok(subset) = Map::from_rooms(rooms) else {
                 continue;
             };
@@ -460,11 +544,7 @@ impl MapperApp {
             let edges = location
                 .map(|l| l.edge_overrides(&subset))
                 .unwrap_or_default();
-            let mut layout = if edges.is_empty() {
-                generate_layout(&subset)
-            } else {
-                generate_layout_with(&subset, &edges)
-            };
+            let mut layout = generate_layout_tuned(&subset, &edges, self.params);
             if let Some(location) = location {
                 overrides::apply(&mut layout, &subset, location);
             }
@@ -599,93 +679,100 @@ impl MapperApp {
     /// working state, keyed for its own use, whereas this is what another
     /// program consumes -- uid-keyed, in the `dirto` vocabulary the layout
     /// engine already reads.
-    /// Write the region assignments as a `curation/` block.
+    /// Write the store's areas and region assignments to
+    /// `curation/assignments.toml`, beside the map, for `retag` to bake in.
     ///
-    /// **Why a separate export rather than the combiner one.** That file
-    /// is a submission of layout corrections -- drags, pins, plates,
-    /// pictures -- and its consumer is the combiner. A region assignment
-    /// is not a correction to a drawing; it is a fact about a place, and
-    /// its consumer is `retag`, which bakes it into `gs.map` where Hydra
-    /// and every other reader will find it.
-    ///
-    /// Written by **uid** where a room has one, because `[[assign]]`
-    /// blocks live in a file that outlives any single map build and our
-    /// own ids are renumbered when the map is rebuilt.
-    fn export_regions(&mut self) {
+    /// **Why not the combiner export.** That file is a submission of
+    /// layout corrections -- drags, pins, plates, pictures -- and its
+    /// consumer is the combiner. Which area and region a room is in is a
+    /// fact about a place, and its consumer is `retag`, which writes it
+    /// into `gs.map` where Hydra and every other reader will find it.
+    fn export_curation(&mut self) {
+        let Some(store_path) = self.store_path.as_deref() else {
+            self.export_note = Some("Nothing to export: no map is loaded.".to_owned());
+            return;
+        };
+        let dir = store_path
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join("curation");
+        let path = dir.join("assignments.toml");
+        let Ok(map) = &self.map else {
+            self.export_note = Some("Nothing to export: no map is loaded.".to_owned());
+            return;
+        };
+        let text = crate::room_table::assignments_toml(map, &self.store, &self.areas.baseline);
+        let written = std::fs::create_dir_all(&dir).and_then(|()| std::fs::write(&path, text));
+        self.export_note = Some(match written {
+            Ok(()) => format!(
+                "Wrote {} area assignment(s) and {} region assignment(s) to {};                  run `retag apply` to bake them into the map",
+                self.store.area_moves.len(),
+                self.store.region_moves.len(),
+                path.display()
+            ),
+            Err(error) => format!("Could not write {}: {error}", path.display()),
+        });
+    }
+
+    /// Every room's area and region, as the store has them now, to
+    /// `<store>.areas.tsv`. See [`crate::room_table`].
+    fn export_areas(&mut self) {
         let (Ok(map), Some(store_path)) = (&self.map, self.store_path.as_deref()) else {
             self.export_note = Some("Nothing to export: no map is loaded.".to_owned());
             return;
         };
-        if self.store.region_moves.is_empty() {
-            self.export_note = Some("No region assignments yet.".to_owned());
+        self.export_note = Some(write_areas(map, &self.store, store_path));
+    }
+
+    /// A copy of the store -- every edit made in this mapper, and nothing
+    /// the map already says -- as `my-map-changes.json` beside it, to send
+    /// back. The store's own format, so importing it is a merge of two
+    /// stores.
+    fn export_changes(&mut self) {
+        let Some(store_path) = self.store_path.as_deref() else {
+            self.export_note = Some("Nothing to export: no map is loaded.".to_owned());
+            return;
+        };
+        let path = store_path.with_file_name("my-map-changes.json");
+        self.export_note = Some(match self.store.save(&path) {
+            Ok(()) => format!("Wrote your changes to {} -- send that file", path.display()),
+            Err(error) => format!("Could not write {}: {error}", path.display()),
+        });
+    }
+
+    /// Changes files dropped on the window, merged into this store.
+    fn take_dropped(&mut self, ui: &egui::Ui) {
+        let dropped: Vec<std::path::PathBuf> = ui.ctx().input(|i| {
+            i.raw
+                .dropped_files
+                .iter()
+                .filter_map(|f| f.path.clone())
+                .collect()
+        });
+        if dropped.is_empty() {
             return;
         }
-        let mut by_region: BTreeMap<&str, (Vec<i64>, Vec<u32>)> = BTreeMap::new();
-        for (key, region) in &self.store.region_moves {
-            let entry = by_region.entry(region.as_str()).or_default();
-            match key {
-                RoomKey::Uid(uid) => entry.0.push(*uid),
-                RoomKey::Id(id) => entry.1.push(*id),
-            }
+        if self.store_problem.is_some() || self.store_path.is_none() {
+            self.export_note =
+                Some("Cannot take in changes: this store is not being saved.".to_owned());
+            return;
         }
-        let mut out = String::from(
-            "# Region assignments made in the mapper.
-             #
-             # Paste into `curation/regions.toml`. These outrank the mapdb
-             # join, the folds and the spread: a room named here says its
-             # region outright and needs none of that machinery.
-
-",
-        );
-        for (region, (uids, ids)) in &by_region {
-            let _ = writeln!(out, "[[assign]]");
-            let _ = writeln!(out, "region = {region:?}");
-            if !uids.is_empty() {
-                let mut sorted = uids.clone();
-                sorted.sort_unstable();
-                let _ = writeln!(out, "# {} rooms", sorted.len());
-                let _ = writeln!(out, "uids = [");
-                for chunk in sorted.chunks(12) {
-                    let line: Vec<String> = chunk.iter().map(i64::to_string).collect();
-                    let _ = writeln!(out, "  {},", line.join(", "));
+        let mut notes = Vec::new();
+        for path in dropped {
+            match MapOverrides::load(&path) {
+                Ok(theirs) => {
+                    let report = self.store.merge(&theirs);
+                    notes.push(format!("{}: {report}", path.display()));
                 }
-                let _ = writeln!(out, "]");
-            }
-            if !ids.is_empty() {
-                // A room the game has never numbered. Named by our id,
-                // which a map rebuild renumbers -- so it is written
-                // separately and said to be the weaker claim.
-                let mut sorted = ids.clone();
-                sorted.sort_unstable();
-                let _ = writeln!(
-                    out,
-                    "# {} rooms with no uid; ids do not survive a rebuild",
-                    sorted.len()
-                );
-                let _ = writeln!(out, "ids = [");
-                for chunk in sorted.chunks(12) {
-                    let line: Vec<String> = chunk.iter().map(u32::to_string).collect();
-                    let _ = writeln!(out, "  {},", line.join(", "));
+                Err(error) => {
+                    notes.push(format!("{}: not a changes file ({error})", path.display()));
                 }
-                let _ = writeln!(out, "]");
-            }
-            out.push('\n');
-        }
-        let path = store_path.with_extension("regions.toml");
-        match std::fs::write(&path, out) {
-            Ok(()) => {
-                let rooms = self.store.region_moves.len();
-                self.export_note = Some(format!(
-                    "Wrote {rooms} region assignment(s) in {} region(s) to {}",
-                    by_region.len(),
-                    path.display()
-                ));
-            }
-            Err(error) => {
-                self.export_note = Some(format!("Could not write {}: {error}", path.display()));
             }
         }
-        let _ = map;
+        self.save_store();
+        self.rebuild_areas();
+        self.refresh_shown();
+        self.export_note = Some(format!("Took in {}", notes.join("; ")));
     }
 
     fn export_corrections(&mut self) {
@@ -812,6 +899,21 @@ impl MapperApp {
         self.rebuild_shown(Fit::Keep);
     }
 
+    /// A knob moved last frame: re-solve what is shown, keeping focus and
+    /// selection, and frame the new sheet.
+    fn apply_knobs(&mut self) {
+        if self
+            .shown
+            .as_ref()
+            .is_some_and(|s| s.layout.town_scale != self.params.town_scale.max(1))
+        {
+            self.rebuild_shown(Fit::Keep);
+            if let Some(shown) = &mut self.shown {
+                shown.needs_fit = true;
+            }
+        }
+    }
+
     fn rebuild_shown(&mut self, fit: Fit) {
         let Ok(map) = &self.map else {
             return;
@@ -837,7 +939,7 @@ impl MapperApp {
                 area.kind == AreaKind::Plates || !self.store.is_plated(RoomKey::of(id, map))
             })
             .collect();
-        let rooms = areas::layout_rooms(&own, map);
+        let rooms = areas::layout_rooms(&own, map, &self.areas.placeable);
         if rooms.is_empty() {
             self.shown = None;
             return;
@@ -851,6 +953,21 @@ impl MapperApp {
         };
         let name = area.name.clone();
         let store_key = area.store_key();
+        let majority = area.parent.clone().unwrap_or_default();
+        let off_region: HashSet<RoomId> = if area.contested.is_some() {
+            area.rooms
+                .iter()
+                .copied()
+                .filter(|&id| {
+                    self.store
+                        .region_in(RoomKey::of(id, map), &self.areas.baseline)
+                        .unwrap_or(areas::NO_REGION)
+                        != majority
+                })
+                .collect()
+        } else {
+            HashSet::new()
+        };
         let location = self.store.location(&store_key);
         // Edge corrections go IN to the solve: they change what the solver
         // does, so the rooms are placed by the corrected geometry. Moves
@@ -858,11 +975,7 @@ impl MapperApp {
         let edges = location
             .map(|l| l.edge_overrides(&subset))
             .unwrap_or_default();
-        let mut layout = if edges.is_empty() {
-            generate_layout(&subset)
-        } else {
-            generate_layout_with(&subset, &edges)
-        };
+        let mut layout = generate_layout_tuned(&subset, &edges, self.params);
         if let Some(location) = location {
             overrides::apply(&mut layout, &subset, location);
         }
@@ -880,6 +993,10 @@ impl MapperApp {
             // area just left would be worse than no button.
             self.inspected = None;
             self.trail.clear();
+            // Nor does a picked set: a region and an official area share
+            // rooms, and a selection made on one would otherwise follow
+            // into the other half-visible.
+            self.picked_rooms.clear();
         } else if self
             .inspected
             .is_some_and(|id| scene.room(id).is_none() && subset.room(id).is_none())
@@ -892,6 +1009,13 @@ impl MapperApp {
             // the case the trail exists for.
             self.inspected = self.trail.pop();
         }
+        // The picked rooms survive a re-solve of the same area -- ids do
+        // not move -- but not onto a sheet that does not draw them.
+        self.picked_rooms.retain(|&id| scene.room(id).is_some());
+        let off_region = off_region
+            .into_iter()
+            .filter(|&id| scene.room(id).is_some())
+            .collect();
         self.shown = Some(Shown {
             name,
             focus,
@@ -899,6 +1023,8 @@ impl MapperApp {
             layout,
             subset,
             scene,
+            majority,
+            off_region,
             needs_fit: needs_fit_for(fit),
         });
     }
@@ -922,6 +1048,71 @@ impl MapperApp {
         self.inspected = (self.inspected != Some(id)).then_some(id);
     }
 
+    /// The selection as the panel needs it: how many rooms, and every key
+    /// to assign.
+    fn picked(&self) -> (usize, Vec<RoomKey>) {
+        let keys: Vec<RoomKey> = self.map.as_ref().ok().map_or_else(Vec::new, |whole| {
+            let mut keys: Vec<RoomKey> = self
+                .picked_rooms
+                .iter()
+                .map(|&id| RoomKey::of(id, whole))
+                .collect();
+            keys.sort_unstable();
+            keys.dedup();
+            keys
+        });
+        (self.picked_rooms.len(), keys)
+    }
+
+    /// What a click or a box on the canvas does: inspect, or pick.
+    fn pointer(&mut self, hit: &draw::Hit) {
+        if let Some(id) = hit.clicked {
+            if hit.ctrl {
+                self.toggle_room(id);
+            } else {
+                self.clicked(id);
+            }
+        }
+        // A box ADDS: sweeping a second box over part of the first should
+        // grow the selection, not punch holes in it. Ctrl-click is there
+        // for taking single rooms back out.
+        if let Some(&first) = hit.boxed.first() {
+            self.seed_with_inspected(first);
+            self.picked_rooms.extend(hit.boxed.iter().copied());
+        }
+    }
+
+    /// The room already clicked joins a selection being started.
+    ///
+    /// Click one room, Ctrl-click a second: two rooms are picked, which is
+    /// what everyone expects of Ctrl-click and what the first version did
+    /// not do -- the plain click inspected a room and the Ctrl-click then
+    /// started a selection without it.
+    fn seed_with_inspected(&mut self, clicked: RoomId) {
+        if self.picked_rooms.is_empty()
+            && let Some(first) = self.inspected
+            && first != clicked
+            && self
+                .shown
+                .as_ref()
+                .is_some_and(|s| s.scene.room(first).is_some())
+        {
+            self.picked_rooms.insert(first);
+        }
+    }
+
+    /// Ctrl-click: pick this one room, or unpick it.
+    ///
+    /// Toggling rather than adding, because the mistake someone makes
+    /// while picking fifteen rooms is clicking one twice, and having to
+    /// start again would be worse than the tedium it replaces.
+    fn toggle_room(&mut self, id: RoomId) {
+        self.seed_with_inspected(id);
+        if !self.picked_rooms.remove(&id) {
+            self.picked_rooms.insert(id);
+        }
+    }
+
     /// Track a drag across frames and turn a finished one into an edit.
     ///
     /// The whole drag is one correction: pixels accumulate while the mouse
@@ -929,14 +1120,29 @@ impl MapperApp {
     /// not record a trail of one-cell nudges.
     fn handle_drag(&mut self, hit: &draw::Hit) -> Option<EditAction> {
         if let Some((id, alt)) = hit.drag_started {
-            let group = self
-                .shown
-                .as_ref()
-                .and_then(|shown| shown.scene.room(id).map(|room| room.group));
-            self.drag = group.map(|group| DragState {
-                group,
-                room: alt.then_some(id),
-                accumulated: egui::Vec2::ZERO,
+            let picked = &self.picked_rooms;
+            self.drag = self.shown.as_ref().and_then(|shown| {
+                let group = shown.scene.room(id)?.group;
+                // A drag that starts on a picked room carries the whole
+                // pick; one that starts anywhere else carries the group,
+                // as it always has. Alt means this one room either way.
+                let moving = if alt {
+                    Moving::Rooms(vec![id])
+                } else if picked.contains(&id) {
+                    Moving::Rooms(
+                        picked
+                            .iter()
+                            .copied()
+                            .filter(|&r| shown.scene.room(r).is_some())
+                            .collect(),
+                    )
+                } else {
+                    Moving::Group(group)
+                };
+                Some(DragState {
+                    moving,
+                    accumulated: egui::Vec2::ZERO,
+                })
             });
         }
         if let (Some(delta), Some(drag)) = (hit.dragged_by, self.drag.as_mut()) {
@@ -947,43 +1153,50 @@ impl MapperApp {
         }
 
         let drag = self.drag.take()?;
-        let scale = self
-            .shown
-            .as_ref()
-            .map_or(1, |shown| shown.scene.scale_of(drag.group));
-        let delta = cells_dragged(drag, self.camera, scale);
-        if delta.x == 0 && delta.y == 0 {
-            return None;
-        }
         let shown = self.shown.as_ref()?;
-        #[allow(clippy::single_match_else)] // both arms build a different edit
-        match drag.room {
-            // One room: pinned at its position within the group's own
-            // frame, which is its drawn cell less the group's offset.
-            Some(id) => {
-                let room = shown.scene.room(id)?;
-                let offset = shown
-                    .scene
-                    .group_offsets
-                    .get(&drag.group)
-                    .copied()
-                    .unwrap_or_default();
-                // The drawn cell is the solver's times the group's scale;
-                // the pin is in the solver's.
-                Some(EditAction::PinRoom {
-                    key: RoomKey::of(id, &shown.subset),
-                    pin: Cell {
-                        x: room.cell.x / scale - offset.x + delta.x,
-                        y: room.cell.y / scale - offset.y + delta.y,
-                    },
-                })
-            }
-            None => {
-                let group = shown.layout.groups.get(drag.group)?;
+        match drag.moving {
+            Moving::Group(index) => {
+                let scale = shown.scene.scale_of(index);
+                let delta = cells_dragged(drag.accumulated, self.camera, scale);
+                if delta.x == 0 && delta.y == 0 {
+                    return None;
+                }
+                let group = shown.layout.groups.get(index)?;
                 Some(EditAction::NudgeGroup {
                     anchor: RoomKey::anchor(group, &shown.subset)?,
                     delta,
                 })
+            }
+            // Each room is pinned at its position within its own group's
+            // frame, which is its drawn cell less the group's offset. The
+            // rooms of a pick can sit in different groups, at different
+            // scales, so each converts the drag at its own.
+            Moving::Rooms(ids) => {
+                let pins: Vec<(RoomKey, Cell)> = ids
+                    .into_iter()
+                    .filter_map(|id| {
+                        let room = shown.scene.room(id)?;
+                        let scale = shown.scene.scale_of(room.group);
+                        let delta = cells_dragged(drag.accumulated, self.camera, scale);
+                        if delta.x == 0 && delta.y == 0 {
+                            return None;
+                        }
+                        let offset = shown
+                            .scene
+                            .group_offsets
+                            .get(&room.group)
+                            .copied()
+                            .unwrap_or_default();
+                        // The drawn cell is the solver's times the group's
+                        // scale; the pin is in the solver's.
+                        let pin = Cell {
+                            x: room.cell.x / scale - offset.x + delta.x,
+                            y: room.cell.y / scale - offset.y + delta.y,
+                        };
+                        Some((RoomKey::of(id, &shown.subset), pin))
+                    })
+                    .collect();
+                (!pins.is_empty()).then_some(EditAction::PinRooms { pins })
             }
         }
     }
@@ -1009,9 +1222,11 @@ impl MapperApp {
                 let Some(area) = area else { return };
                 self.store.nudge_group(&area, anchor, delta);
             }
-            EditAction::PinRoom { key, pin } => {
+            EditAction::PinRooms { pins } => {
                 let Some(area) = area else { return };
-                self.store.pin_room(&area, key, Some(pin));
+                for (key, pin) in pins {
+                    self.store.pin_room(&area, key, Some(pin));
+                }
             }
             EditAction::UnpinRoom { key } => {
                 let Some(area) = area else { return };
@@ -1065,7 +1280,15 @@ impl MapperApp {
                 membership_changed = true;
             }
             EditAction::DeleteArea { area } => {
-                self.store.delete_area(&area);
+                let baked: Vec<RoomKey> = self
+                    .areas
+                    .baseline
+                    .area
+                    .iter()
+                    .filter(|(_, a)| **a == area)
+                    .map(|(k, _)| *k)
+                    .collect();
+                self.store.delete_area(&area, baked);
                 membership_changed = true;
             }
         }
@@ -1079,18 +1302,76 @@ impl MapperApp {
         }
     }
 
+    /// The inspector when there is a selection but no inspected room.
+    fn selection_only_panel(&mut self, ui: &mut egui::Ui, can_edit: bool) -> Option<EditAction> {
+        let (picked_rooms, picked_keys) = self.picked();
+        let mut edit = None;
+        let mut clear_selection = false;
+        let whole = self.map.as_ref().ok()?;
+        let store = &self.store;
+        let baseline = &self.areas.baseline;
+        let mut boxes = PlaceBoxes {
+            region: &mut self.new_region,
+            area: &mut self.new_area,
+        };
+        let new_plate = &mut self.new_plate;
+        let edit_out = &mut edit;
+        egui::Panel::right("inspector").show(ui, |ui| {
+            ui.heading("Selection");
+            if !can_edit {
+                ui.weak("Editing is off.");
+                return;
+            }
+            if let Some(action) = selection_panel(
+                ui,
+                store,
+                &Picked {
+                    rooms: picked_rooms,
+                    keys: &picked_keys,
+                },
+                new_plate,
+                &mut clear_selection,
+            )
+            .or_else(|| place_panel(ui, store, baseline, whole, None, &picked_keys, &mut boxes))
+            {
+                *edit_out = Some(action);
+            }
+        });
+        if clear_selection || edit.is_some() {
+            self.picked_rooms.clear();
+        }
+        edit
+    }
+
     /// The inspector panel, drawn before the central panel so egui gives
     /// the canvas whatever space is left.
     fn inspector_panel(&mut self, ui: &mut egui::Ui, can_edit: bool) -> Option<EditAction> {
+        // A selection with nothing inspected still needs somewhere to
+        // act. Picking fifteen rooms and finding no panel -- because the
+        // last click was a Ctrl-click, which selects rather than
+        // inspects -- is the state this avoids.
+        if self.inspected.is_none() && !self.picked_rooms.is_empty() {
+            return self.selection_only_panel(ui, can_edit);
+        }
         let (Some(shown), Some(id)) = (&self.shown, self.inspected) else {
             return None;
         };
+        // Gathered before the mutable borrows below: the panel closure
+        // holds `&mut self.new_area`, so nothing can call a `&self`
+        // method after that point.
+        let (picked_rooms, picked_keys) = self.picked();
+        let mut clear_selection = false;
+
         let mut edit = None;
         let edit_out = &mut edit;
         let mut open = true;
         let store = &self.store;
+        let baseline = &self.areas.baseline;
         let new_plate = &mut self.new_plate;
-        let new_area = &mut self.new_area;
+        let mut boxes = PlaceBoxes {
+            region: &mut self.new_region,
+            area: &mut self.new_area,
+        };
         let edit_mode = self.view.edit_mode && can_edit;
 
         let whole = self.map.as_ref().ok();
@@ -1138,12 +1419,17 @@ impl MapperApp {
                 visiting_room(ui, whole, id, &mut follow);
                 if edit_mode
                     && let Some(action) =
-                        visiting_membership(ui, shown, store, whole, id, new_plate)
-                            // A visited room is outside the shown area, so
-                            // it is in no group of that area's layout: room
-                            // at a time is all there is to offer here.
-                            .or_else(|| region_membership(ui, store, whole, id, None))
-                            .or_else(|| area_membership(ui, store, whole, id, None, new_area))
+                        visiting_membership(ui, shown, store, whole, id, new_plate).or_else(|| {
+                            place_panel(
+                                ui,
+                                store,
+                                baseline,
+                                whole,
+                                Some(id),
+                                &picked_keys,
+                                &mut boxes,
+                            )
+                        })
                 {
                     *edit_out = Some(action);
                 }
@@ -1159,6 +1445,20 @@ impl MapperApp {
             );
             if !edit_mode {
                 return;
+            }
+            // The selection acts on many rooms at once, so it comes
+            // before the controls for the one room being inspected.
+            if let Some(action) = selection_panel(
+                ui,
+                store,
+                &Picked {
+                    rooms: picked_rooms,
+                    keys: &picked_keys,
+                },
+                new_plate,
+                &mut clear_selection,
+            ) {
+                *edit_out = Some(action);
             }
             // Editing controls live below the facts, so the panel
             // reads the same whether or not Edit is on.
@@ -1180,9 +1480,7 @@ impl MapperApp {
                 *edit_out = Some(action);
             }
             if let Some(action) = whole.and_then(|w| {
-                region_membership(ui, store, w, id, group_keys(shown, id, w)).or_else(|| {
-                    area_membership(ui, store, w, id, group_keys(shown, id, w), new_area)
-                })
+                place_panel(ui, store, baseline, w, Some(id), &picked_keys, &mut boxes)
             }) {
                 *edit_out = Some(action);
             }
@@ -1197,6 +1495,24 @@ impl MapperApp {
             self.walk_to(next);
         } else if back {
             self.inspected = self.trail.pop();
+        }
+        // An assignment consumes the selection -- leaving it picked
+        // invites assigning the same rooms twice -- but only
+        // one made FROM the selection. Unpinning a room or fixing an
+        // edge is unrelated and must not throw the picking away.
+        let acted_on_selection = !picked_keys.is_empty()
+            && match &edit {
+                Some(
+                    EditAction::AssignArea { keys, .. }
+                    | EditAction::AssignRegion { keys, .. }
+                    | EditAction::NewArea { keys, .. }
+                    | EditAction::MoveRooms { keys, .. }
+                    | EditAction::NewPlate { keys, .. },
+                ) => *keys == picked_keys,
+                _ => false,
+            };
+        if clear_selection || acted_on_selection {
+            self.picked_rooms.clear();
         }
         edit
     }
@@ -1372,7 +1688,16 @@ fn inspector(
             }
         }
         if !facts.tags.is_empty() {
-            ui.label(format!("Tags: {}", facts.tags.join(", ")));
+            // Forage names make a room's tag list run to a hundred entries,
+            // which pushed its exits and layout off the panel. Always
+            // foldable; shut to start with once it is long.
+            let count = facts.tags.len();
+            egui::CollapsingHeader::new(format!("Tags ({count})"))
+                .id_salt("tags_collapsed")
+                .default_open(count <= TAGS_BEFORE_COLLAPSING)
+                .show(ui, |ui| {
+                    ui.label(facts.tags.join(", "));
+                });
         }
         if facts.entrance {
             ui.colored_label(ENTRANCE_COLOR, "Hosts a doorway into an interior");
@@ -1460,6 +1785,10 @@ fn inspector(
 /// read at a glance. Nothing is hidden: the header says how many there
 /// are and opens to the same list.
 const EXITS_BEFORE_COLLAPSING: usize = 12;
+
+/// Tags past this many start folded: a room's forage names alone can run
+/// to a hundred.
+const TAGS_BEFORE_COLLAPSING: usize = 8;
 
 /// The exit list, with rooms outside this area as links to follow.
 fn exit_list(ui: &mut egui::Ui, facts: &RoomFacts, follow: &mut Option<RoomId>) {
@@ -1628,287 +1957,328 @@ fn visiting_membership(
     edit
 }
 
-/// Saying which region a room is in.
+/// What the selection covers.
+#[derive(Clone, Copy)]
+struct Picked<'a> {
+    rooms: usize,
+    keys: &'a [RoomKey],
+}
+
+/// The selection: what is picked, and what to do with it.
 ///
-/// **This is the field the whole region tier is trying to become.**
-/// Today a room's region is derived three ways over: joined from the
-/// official mapdb by uid, translated through `[[fold]]` where that
-/// field named an area rather than a region, then spread into
-/// unregioned ground by inference. 7,395 of the 31,685 regioned rooms
-/// -- a quarter -- carry `map:region-inferred` to say the answer is a
-/// guess. Every assignment made here is one room that no longer needs
-/// any of it.
+/// **Why this exists.** The per-room controls offer "- room" and
+/// "- group", and on a town sheet the group is the whole outdoor
+/// component -- 246 rooms on Mist Harbor -- so there was nothing between
+/// one room and all of them. Pick exactly the rooms meant, act once.
 ///
-/// The region is CHOSEN, never typed. The thirteen are decided in
-/// `curation/regions.toml` and a free-text box would let a typo mint a
-/// fourteenth silently, which is the opposite of the point. An area, by
-/// contrast, is minted here on purpose: nobody has decided the areas
-/// yet, and deciding them is the work.
-fn region_membership(
+/// Shown only when something is picked, so the ordinary inspector is
+/// unchanged for anyone not doing a bulk pass.
+fn selection_panel(
     ui: &mut egui::Ui,
     store: &MapOverrides,
-    whole: &Map,
-    id: RoomId,
-    group: Option<Vec<RoomKey>>,
+    picked: &Picked<'_>,
+    new_plate: &mut String,
+    clear: &mut bool,
 ) -> Option<EditAction> {
+    let Picked { rooms, keys } = *picked;
+    if rooms == 0 {
+        return None;
+    }
     let mut edit = None;
-    let key = RoomKey::of(id, whole);
-    let assigned = store.region_of(key);
-    let derived = whole
-        .room(id)
-        .and_then(|r| r.meta.iter().find_map(|m| m.strip_prefix("region:")));
-    let inferred = whole
-        .room(id)
-        .is_some_and(|r| r.meta.iter().any(|m| m == "map:region-inferred"));
-
     ui.separator();
-    ui.strong("Region");
-    match (assigned, derived) {
-        // Said outright, and the map already agrees.
-        (Some(a), Some(d)) if a == d => {
-            ui.label(format!("{a} (assigned)"));
+    ui.horizontal(|ui| {
+        ui.strong(format!("Selected: {rooms} room(s)"));
+        if ui.button("Clear").clicked() {
+            *clear = true;
         }
-        // Said outright, and the map has not caught up: `retag` has not
-        // run since. Worth showing both rather than pretending.
-        (Some(a), Some(d)) => {
-            ui.label(format!("{a} (assigned)"));
-            ui.weak(format!("map still says {d} -- run retag"));
-        }
-        (Some(a), None) => {
-            ui.label(format!("{a} (assigned)"));
-            ui.weak("map has none yet -- run retag");
-        }
-        (None, Some(d)) if inferred => {
-            ui.label(d);
-            ui.weak("inferred, not decided");
-        }
-        (None, Some(d)) => {
-            ui.label(d);
-        }
-        (None, None) => {
-            ui.weak("no region");
-        }
-    }
-
-    if assigned.is_some() {
-        ui.horizontal(|ui| {
-            if ui
-                .button("- room")
-                .on_hover_text("Stop saying which region this room is in")
-                .clicked()
-            {
-                edit = Some(EditAction::AssignRegion {
-                    keys: vec![key],
-                    to: None,
-                });
-            }
-            if let Some(keys) = &group
-                && ui
-                    .button("- group")
-                    .on_hover_text("Stop saying, for every room of this group")
-                    .clicked()
-            {
-                edit = Some(EditAction::AssignRegion {
-                    keys: keys.clone(),
-                    to: None,
-                });
-            }
+    });
+    ui.weak("Ctrl-click: a room.  Ctrl-drag: a box.");
+    let on_a_plate = keys
+        .iter()
+        .filter(|k| store.membership_moves.contains_key(k))
+        .count();
+    if on_a_plate > 0
+        && ui
+            .button("- from plate")
+            .on_hover_text(format!(
+                "Take {on_a_plate} selected room(s) off their plate"
+            ))
+            .clicked()
+    {
+        edit = Some(EditAction::MoveRooms {
+            keys: keys.to_vec(),
+            to: None,
         });
     }
-
-    // The regions to choose from are the ones already in the map, so the
-    // list cannot drift from `curation/regions.toml` and a typo cannot
-    // invent one.
-    let mut chosen: Option<String> = None;
-    egui::ComboBox::from_id_salt("assign_region")
-        .selected_text("Say the region...")
-        .show_ui(ui, |ui| {
-            for name in known_regions(whole) {
-                let label = match &group {
-                    Some(keys) => format!("{name} ({} in group)", keys.len()),
-                    None => name.clone(),
-                };
-                if ui.selectable_label(false, label).clicked() {
-                    chosen = Some(name);
-                }
-            }
-        });
-    if let Some(name) = chosen {
-        edit = Some(EditAction::AssignRegion {
-            keys: group.unwrap_or_else(|| vec![key]),
-            to: Some(name),
-        });
+    if let Some(action) = selection_plate(ui, store, rooms, keys, new_plate) {
+        edit = Some(action);
     }
     edit
 }
 
-/// Every region the map names, sorted. Cheap enough to walk the rooms
-/// for: it is a few dozen strings out of 34,000 rooms and this runs only
-/// while a combo is open.
-fn known_regions(map: &Map) -> Vec<String> {
-    let mut names: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-    for room in map.rooms() {
-        if let Some(name) = room.meta.iter().find_map(|m| m.strip_prefix("region:")) {
-            names.insert(name.to_owned());
-        }
-    }
-    names.into_iter().collect()
-}
-
-/// Putting a room in a curated area.
+/// Moving a picked set onto a plate, or onto a new one.
 ///
-/// Beside the plate controls and deliberately not merged with them. A
-/// PLATE is a sheet -- a drawing surface, so a room can sit on one and
-/// still belong somewhere else. An AREA is the place the room is. The
-/// two are one mechanism and two meanings, and while the shape of the
-/// curation is still being worked out it is cheaper to keep them apart
-/// than to discover later that one answer was overwriting the other.
-///
-/// An area does not record its region: that is read from its rooms' own
-/// `meta:region:`, so an area appears under the right region the moment
-/// it has a room and the tree cannot disagree with the map. Correcting
-/// the region is a separate act, on the rooms -- see `region_membership`
-/// below.
-fn area_membership(
+/// A plate is the other place a selection wants to go: carving a town's
+/// satellites off its sheet is the same act as assigning them, done
+/// with the same picking.
+fn selection_plate(
     ui: &mut egui::Ui,
     store: &MapOverrides,
-    whole: &Map,
-    id: RoomId,
-    group: Option<Vec<RoomKey>>,
-    new_area: &mut String,
+    rooms: usize,
+    keys: &[RoomKey],
+    new_plate: &mut String,
 ) -> Option<EditAction> {
     let mut edit = None;
-    let key = RoomKey::of(id, whole);
-    // A group is what usually wants assigning -- a building, a run of
-    // street -- so every action here comes in a room flavour and a group
-    // flavour. Assigning 400 hunting rooms one at a time is not curation,
-    // it is data entry.
-    let group = group.filter(|keys| !keys.is_empty());
-
-    ui.add_space(8.0);
-    ui.strong("Area");
-    ui.label(
-        egui::RichText::new("the place a room is, not the sheet it is drawn on")
-            .weak()
-            .small(),
-    );
-    match store.area_moves.get(&key) {
-        Some(area) => {
-            ui.label(format!("In: {}", store.area_name(area)));
-        }
-        None => {
-            ui.label("In: no area yet");
-        }
-    }
-
-    // Removal, before assignment: getting a room OUT is the action
-    // someone reaches for after a mistake, and burying it under the
-    // combo makes a wrong assignment feel permanent.
-    let assigned_here = store.area_moves.contains_key(&key);
-    let assigned_in_group = group.as_ref().map_or(0, |keys| {
-        keys.iter()
-            .filter(|k| store.area_moves.contains_key(k))
-            .count()
-    });
-    if assigned_here || assigned_in_group > 0 {
-        ui.horizontal(|ui| {
-            if ui
-                .add_enabled(assigned_here, egui::Button::new("- room"))
-                .on_hover_text("Take this room out of its area")
-                .clicked()
-            {
-                edit = Some(EditAction::AssignArea {
-                    keys: vec![key],
-                    to: None,
-                });
-            }
-            if let Some(keys) = &group
-                && ui
-                    .add_enabled(assigned_in_group > 0, egui::Button::new("- group"))
-                    .on_hover_text(format!(
-                        "Take all {assigned_in_group} assigned rooms of this group out"
-                    ))
-                    .clicked()
-            {
-                edit = Some(EditAction::AssignArea {
-                    keys: keys.clone(),
-                    to: None,
-                });
-            }
-        });
-    }
-
-    edit.or_else(|| assign_to_area(ui, store, key, group.as_ref(), new_area))
-}
-
-/// The half of the Area panel that puts rooms somewhere: the existing
-/// areas, and the box that makes a new one.
-fn assign_to_area(
-    ui: &mut egui::Ui,
-    store: &MapOverrides,
-    key: RoomKey,
-    group: Option<&Vec<RoomKey>>,
-    new_area: &mut String,
-) -> Option<EditAction> {
-    let mut edit = None;
-    if !store.custom_areas.is_empty() {
+    if !store.custom_maps.is_empty() {
         let mut chosen: Option<String> = None;
-        egui::ComboBox::from_id_salt("assign_to_area")
-            .selected_text("Put in an area...")
+        egui::ComboBox::from_id_salt("assign_selection_plate")
+            .selected_text("Move all onto a plate...")
             .show_ui(ui, |ui| {
-                for (area, curated) in &store.custom_areas {
-                    let label = match group {
-                        Some(keys) => format!("{} ({} in group)", curated.name, keys.len()),
-                        None => curated.name.clone(),
-                    };
-                    if ui.selectable_label(false, label).clicked() {
-                        chosen = Some(area.clone());
+                for plate in store.custom_maps.keys() {
+                    if ui
+                        .selectable_label(
+                            false,
+                            format!("{} ({rooms} rooms)", store.plate_name(plate)),
+                        )
+                        .clicked()
+                    {
+                        chosen = Some(plate.clone());
                     }
                 }
             });
-        if let Some(area) = chosen {
-            edit = Some(EditAction::AssignArea {
-                keys: group.cloned().unwrap_or_else(|| vec![key]),
-                to: Some(area),
+        if let Some(plate) = chosen {
+            edit = Some(EditAction::MoveRooms {
+                keys: keys.to_vec(),
+                to: Some(plate),
             });
         }
     }
-
     ui.horizontal(|ui| {
         ui.add(
-            egui::TextEdit::singleline(new_area)
-                .hint_text("new area name")
+            egui::TextEdit::singleline(new_plate)
+                .hint_text("new plate name")
                 .desired_width(120.0),
         );
-        let named = !new_area.trim().is_empty();
         if ui
-            .add_enabled(named, egui::Button::new("+ room"))
-            .on_hover_text("Make this area and put this room in it")
+            .add_enabled(!new_plate.trim().is_empty(), egui::Button::new("+ all"))
+            .on_hover_text(format!(
+                "Make this plate and move all {rooms} rooms onto it"
+            ))
             .clicked()
         {
-            edit = Some(EditAction::NewArea {
-                name: new_area.trim().to_owned(),
-                keys: vec![key],
+            edit = Some(EditAction::NewPlate {
+                name: new_plate.trim().to_owned(),
+                keys: keys.to_vec(),
             });
-            new_area.clear();
+            new_plate.clear();
         }
-        if let Some(keys) = group
+    });
+
+    edit
+}
+
+/// The two text boxes the place panel fills from its dropdowns.
+struct PlaceBoxes<'a> {
+    region: &'a mut String,
+    area: &'a mut String,
+}
+
+/// Which region and which area: for the inspected room, for the
+/// selection, or both.
+///
+/// **Pick, then apply.** Each dropdown only fills its box; the + buttons
+/// apply what the box says, to this room or to every selected room. So
+/// the same two buttons serve one room and five hundred, and a stray
+/// click in a dropdown changes nothing.
+///
+/// A region is **chosen**, never minted: the thirteen are decided in
+/// `curation/regions.toml`, so the box must hold one of them before +
+/// will apply it. An area is minted here on purpose -- deciding the areas
+/// is the work -- so a new name makes a new area.
+///
+/// "- " takes the room back out: out of its assigned region (back to what
+/// the map says), or out of its area altogether.
+fn place_panel(
+    ui: &mut egui::Ui,
+    store: &MapOverrides,
+    baseline: &Baseline,
+    whole: &Map,
+    room: Option<RoomId>,
+    selected: &[RoomKey],
+    boxes: &mut PlaceBoxes<'_>,
+) -> Option<EditAction> {
+    let key = room.map(|id| RoomKey::of(id, whole));
+    let mut edit = None;
+
+    ui.separator();
+    ui.strong("Region");
+    if let (Some(id), Some(key)) = (room, key) {
+        let inferred = whole
+            .room(id)
+            .is_some_and(|r| r.meta.iter().any(|m| m == "map:region-inferred"));
+        match (store.region_of(key), baseline.region.get(&key)) {
+            (Some(a), _) => ui.label(format!("{a} (assigned)")),
+            (None, Some(d)) if inferred => ui.label(format!("{d} (inferred)")),
+            (None, Some(d)) => ui.label(d.as_str()),
+            (None, None) => ui.weak("no region"),
+        };
+    }
+    let mut regions: Vec<&str> = baseline.regions.iter().map(String::as_str).collect();
+    regions.extend(store.region_moves.values().map(String::as_str));
+    regions.sort_unstable();
+    regions.dedup();
+    picker(ui, "region_pick", &regions, boxes.region);
+    let region = boxes.region.trim().to_owned();
+    let known = regions.contains(&region.as_str());
+    let assigned = |k: &RoomKey| store.region_of(*k).is_some();
+    if let Some(keys) = apply_buttons(
+        ui,
+        "region",
+        known,
+        key.is_some_and(|k| assigned(&k)),
+        selected.iter().filter(|k| assigned(k)).count(),
+        key,
+        selected,
+    ) {
+        edit = Some(match keys {
+            Apply::Add(keys) => EditAction::AssignRegion {
+                keys,
+                to: Some(region.clone()),
+            },
+            Apply::Remove(keys) => EditAction::AssignRegion { keys, to: None },
+        });
+    }
+    if !region.is_empty() && !known {
+        ui.weak("not a region -- pick one from the list");
+    }
+
+    ui.add_space(8.0);
+    ui.strong("Area");
+    if let Some(key) = key {
+        match store.area_of(key, baseline) {
+            Some(area) => ui.label(format!("In: {}", store.area_title(area, baseline))),
+            None => ui.label("In: no area yet"),
+        };
+    }
+    let areas = store.known_areas(baseline);
+    let names: Vec<&str> = areas.values().map(String::as_str).collect();
+    picker(ui, "area_pick", &names, boxes.area);
+    let name = boxes.area.trim().to_owned();
+    let in_area = |k: &RoomKey| store.area_of(*k, baseline).is_some();
+    if let Some(keys) = apply_buttons(
+        ui,
+        "area",
+        !name.is_empty(),
+        key.is_some_and(|k| in_area(&k)),
+        selected.iter().filter(|k| in_area(k)).count(),
+        key,
+        selected,
+    ) {
+        edit = Some(match keys {
+            Apply::Add(keys) => match areas.iter().find(|(_, n)| **n == name) {
+                Some((area, _)) => EditAction::AssignArea {
+                    keys,
+                    to: Some(area.clone()),
+                },
+                None => EditAction::NewArea {
+                    name: name.clone(),
+                    keys,
+                },
+            },
+            Apply::Remove(keys) => EditAction::AssignArea { keys, to: None },
+        });
+    }
+    if !name.is_empty() && !areas.values().any(|n| *n == name) {
+        ui.weak("new area -- + makes it");
+    }
+    edit
+}
+
+/// A dropdown that fills `text` and a box showing it. Choosing from the
+/// list applies nothing.
+fn picker(ui: &mut egui::Ui, id: &str, choices: &[&str], text: &mut String) {
+    ui.horizontal(|ui| {
+        egui::ComboBox::from_id_salt(id)
+            .selected_text("\u{25be}")
+            .width(24.0)
+            .show_ui(ui, |ui| {
+                for choice in choices {
+                    if ui.selectable_label(text == choice, *choice).clicked() {
+                        (*choice).clone_into(text);
+                    }
+                }
+            });
+        ui.add(egui::TextEdit::singleline(text).desired_width(170.0));
+    });
+}
+
+/// What an apply row asked for.
+enum Apply {
+    Add(Vec<RoomKey>),
+    Remove(Vec<RoomKey>),
+}
+
+/// "+ room  + selected (N)" and "- room  - selected (N)": the same four
+/// buttons for region and area. `ready` is whether the box holds
+/// something to apply; `room_has` and `selected_have` say whether there
+/// is anything to take out.
+fn apply_buttons(
+    ui: &mut egui::Ui,
+    what: &str,
+    ready: bool,
+    room_has: bool,
+    selected_have: usize,
+    room: Option<RoomKey>,
+    selected: &[RoomKey],
+) -> Option<Apply> {
+    let mut out = None;
+    let n = selected.len();
+    ui.horizontal(|ui| {
+        if let Some(key) = room
             && ui
-                .add_enabled(named, egui::Button::new("+ group"))
+                .add_enabled(ready, egui::Button::new("+ room"))
+                .on_hover_text(format!("Put this room in the {what} in the box"))
+                .clicked()
+        {
+            out = Some(Apply::Add(vec![key]));
+        }
+        if n > 0
+            && ui
+                .add_enabled(ready, egui::Button::new(format!("+ selected ({n})")))
                 .on_hover_text(format!(
-                    "Make this area and put all {} rooms of this group in it",
-                    keys.len()
+                    "Put all {n} selected rooms in the {what} in the box"
                 ))
                 .clicked()
         {
-            edit = Some(EditAction::NewArea {
-                name: new_area.trim().to_owned(),
-                keys: keys.clone(),
-            });
-            new_area.clear();
+            out = Some(Apply::Add(selected.to_vec()));
         }
     });
-    edit
+    if room_has || selected_have > 0 {
+        ui.horizontal(|ui| {
+            if let Some(key) = room
+                && ui
+                    .add_enabled(room_has, egui::Button::new("- room"))
+                    .on_hover_text(format!("Take this room out of its {what}"))
+                    .clicked()
+            {
+                out = Some(Apply::Remove(vec![key]));
+            }
+            if n > 0
+                && ui
+                    .add_enabled(
+                        selected_have > 0,
+                        egui::Button::new(format!("- selected ({selected_have})")),
+                    )
+                    .on_hover_text(format!(
+                        "Take the {selected_have} selected rooms that have one out of their {what}"
+                    ))
+                    .clicked()
+            {
+                out = Some(Apply::Remove(selected.to_vec()));
+            }
+        });
+    }
+    out
 }
 
 /// The ten compass bearings a person can force, in the order the combo
@@ -1953,7 +2323,49 @@ fn edges_editor(
     let saved = store.location(&shown.store_key);
 
     ui.add_space(8.0);
-    ui.strong("Edges");
+    // Collapsed past the same length as the exit list, for the same
+    // reason: an Elemental Confluence room has sixty-odd edges, and
+    // listing them inline put the Area and Plate controls out of reach.
+    // The header says how many carry a correction, so collapsing it
+    // cannot hide that anything was changed.
+    let editable = facts.exits.iter().filter(|e| e.to_title.is_some()).count();
+    if editable > EXITS_BEFORE_COLLAPSING {
+        let corrected = facts
+            .exits
+            .iter()
+            .filter(|e| e.to_title.is_some())
+            .filter(|e| {
+                saved.is_some_and(|l| {
+                    l.edge_action(here, RoomKey::of(e.to, &shown.subset))
+                        .is_some()
+                })
+            })
+            .count();
+        let title = if corrected > 0 {
+            format!("Edges ({editable}, {corrected} corrected)")
+        } else {
+            format!("Edges ({editable})")
+        };
+        egui::CollapsingHeader::new(title)
+            .id_salt("edges_collapsed")
+            .default_open(false)
+            .show(ui, |ui| edge_rows(ui, shown, facts, here, saved, &mut edit));
+    } else {
+        ui.strong("Edges");
+        edge_rows(ui, shown, facts, here, saved, &mut edit);
+    }
+    edit
+}
+
+/// One row per editable edge: the command, and the correction combo.
+fn edge_rows(
+    ui: &mut egui::Ui,
+    shown: &Shown,
+    facts: &RoomFacts,
+    here: RoomKey,
+    saved: Option<&crate::overrides::LocationOverrides>,
+    edit: &mut Option<EditAction>,
+) {
     for exit in &facts.exits {
         // An exit leading out of this area cannot be corrected here: the
         // solver never saw the far room, so constraining it would mean
@@ -1974,7 +2386,7 @@ fn edges_editor(
                             .selectable_label(current == action, edge_label(action))
                             .clicked()
                         {
-                            edit = Some(EditAction::SetEdge {
+                            *edit = Some(EditAction::SetEdge {
                                 a: here,
                                 b: there,
                                 action,
@@ -1991,7 +2403,6 @@ fn edges_editor(
         });
         ui.small(format!("   -> {title}"));
     }
-    edit
 }
 
 /// The editing half of the inspector: which plate this room is on, and the
@@ -2115,6 +2526,8 @@ impl eframe::App for MapperApp {
             });
             return;
         }
+        self.apply_knobs();
+        self.take_dropped(ui);
 
         let mut edit: Option<EditAction> = None;
         let edit_out = &mut edit;
@@ -2127,8 +2540,11 @@ impl eframe::App for MapperApp {
         let go_to_plate = &mut jump;
         let can_edit = self.store_path.is_some() && self.store_problem.is_none();
 
-        if self.corrections_bar(ui, can_edit) {
-            self.export_corrections();
+        match self.corrections_bar(ui, can_edit) {
+            (true, _, _) => self.export_corrections(),
+            (_, true, _) => self.export_curation(),
+            (_, _, true) => self.export_areas(),
+            _ => {}
         }
 
         let mut changed = false;
@@ -2160,8 +2576,10 @@ impl eframe::App for MapperApp {
                 ui,
                 shown,
                 &self.store,
+                &self.areas.baseline,
                 self.tab,
                 &mut self.view,
+                &mut self.params,
                 can_edit,
                 edit_out,
                 go_to_plate,
@@ -2179,37 +2597,24 @@ impl eframe::App for MapperApp {
                 }
             }
 
-            // The in-flight drag, in whole cells, for the ghost preview.
-            let ghost = self.drag.map(|drag| {
-                let scale = shown.scene.scale_of(drag.group);
-                let d = cells_dragged(drag, self.camera, scale);
-                // Drawn back at the group's spacing.
-                (
-                    drag.group,
-                    drag.room,
-                    Cell {
-                        x: d.x * scale,
-                        y: d.y * scale,
-                    },
-                )
-            });
-            let focus = draw::Focus {
-                rooms: shown.focus.rooms(),
-                streets: shown.focus.streets(),
-                doors: shown.focus.doors(),
-            };
+            let ghost = self
+                .drag
+                .as_ref()
+                .map(|drag| ghost_cells(drag, &shown.scene, self.camera))
+                .unwrap_or_default();
+            let focus = shown.draw_focus(self.view.off_region);
+            let picked: HashSet<RoomId> = self.picked_rooms.iter().copied().collect();
             let hit = draw::scene(
                 ui,
                 &shown.scene,
                 &focus,
                 &mut self.camera,
                 self.inspected,
+                &picked,
                 self.view,
-                ghost,
+                &ghost,
             );
-            if let Some(id) = hit.clicked {
-                self.clicked(id);
-            }
+            self.pointer(&hit);
             if edit_out.is_none() {
                 *edit_out = self.handle_drag(&hit);
             }
@@ -2223,6 +2628,24 @@ impl eframe::App for MapperApp {
     }
 }
 
+/// "Wrong region (N)", on an area split across regions: paints red the
+/// rooms not in the region most of it carries, so they can be picked and
+/// moved.
+fn wrong_region_toggle(ui: &mut egui::Ui, shown: &Shown, view: &mut draw::View) {
+    if shown.off_region.is_empty() {
+        return;
+    }
+    ui.toggle_value(
+        &mut view.off_region,
+        egui::RichText::new(format!("Wrong region ({})", shown.off_region.len()))
+            .color(egui::Color32::from_rgb(255, 90, 90)),
+    )
+    .on_hover_text(format!(
+        "Paint red the rooms not in {}, the region most of this area is in",
+        shown.majority
+    ));
+}
+
 /// The bar above the canvas: the area name, the sheet toggles, Fit, and
 /// the edit controls.
 ///
@@ -2233,8 +2656,10 @@ fn canvas_header(
     ui: &mut egui::Ui,
     shown: &mut Shown,
     store: &MapOverrides,
+    baseline: &Baseline,
     tab: AreaKind,
     view: &mut draw::View,
+    params: &mut LayoutParams,
     can_edit: bool,
     edit_out: &mut Option<EditAction>,
     go_to_plate: &mut Option<String>,
@@ -2287,28 +2712,25 @@ fn canvas_header(
                     }
                 });
         }
+        wrong_region_toggle(ui, shown, view);
         ui.separator();
-        if ui.button("Fit").clicked() {
-            shown.needs_fit = true;
-        }
-        ui.toggle_value(&mut view.labels, "Labels")
-            .on_hover_text("Draw room titles (hover still shows them)");
-        ui.toggle_value(&mut view.interiors, "Interiors")
-            .on_hover_text("Draw every interior room as a dot, not only each building's door");
+        view_controls(ui, shown, view, params);
         ui.separator();
         // Editing is refused outright while the store would not
         // load: the file holds hand curation, and saving over it
         // with an empty one would destroy that work silently.
         ui.add_enabled_ui(can_edit, |ui| {
             ui.toggle_value(&mut view.edit_mode, "Edit")
-                .on_hover_text("Drag a group to move it; hold Alt for one room");
+                .on_hover_text(
+                    "Drag a group to move it; drag a picked room to move the pick; hold Alt for one room",
+                );
         });
         if view.edit_mode {
-            ui.label("drag a group (Alt: one room)");
+            ui.label("drag a group or a pick (Alt: one room) · pick: Ctrl-click, Ctrl-drag");
             // Deleting is offered only where the plate itself is
             // on screen, so it cannot be hit while looking at a
             // town that merely lost rooms to one.
-            if let Some(action) = delete_area_button(ui, store, tab, &shown.name) {
+            if let Some(action) = delete_area_button(ui, store, baseline, tab, &shown.name) {
                 *edit_out = Some(action);
             }
             if tab == AreaKind::Plates
@@ -2436,17 +2858,23 @@ fn area_label(
 fn delete_area_button(
     ui: &mut egui::Ui,
     store: &MapOverrides,
+    baseline: &Baseline,
     tab: AreaKind,
     shown: &str,
 ) -> Option<EditAction> {
     if tab != AreaKind::Region {
         return None;
     }
-    let (key, _) = store.custom_areas.iter().find(|(_, a)| a.name == shown)?;
+    let (key, _) = store
+        .custom_areas
+        .iter()
+        .map(|(k, a)| (k.clone(), a.name.clone()))
+        .chain(baseline.areas.iter().map(|(k, n)| (k.clone(), n.clone())))
+        .find(|(_, name)| name == shown)?;
     ui.button("Delete area")
         .on_hover_text("Release every room; the rooms themselves are untouched")
         .clicked()
-        .then(|| EditAction::DeleteArea { area: key.clone() })
+        .then_some(EditAction::DeleteArea { area: key })
 }
 
 /// "room 7562 is in Wehnimer's Landing", as a link that goes there.
@@ -2483,26 +2911,6 @@ fn room_search(
         .on_hover_text("Show that area and inspect the room")
         .clicked()
         .then_some((kind, index, found))
-}
-
-/// The whole-map keys of the group `id` sits in, for assigning a
-/// building or a run of street in one action.
-///
-/// Keyed against the WHOLE map rather than the shown subset: an area is a
-/// fact about a room, so which area happened to be on screen when it was
-/// assigned must not change the answer.
-fn group_keys(shown: &Shown, id: RoomId, whole: &Map) -> Option<Vec<RoomKey>> {
-    let group = shown.scene.room(id)?.group;
-    Some(
-        shown
-            .layout
-            .groups
-            .get(group)?
-            .room_ids
-            .iter()
-            .map(|&rid| RoomKey::of(rid, whole))
-            .collect(),
-    )
 }
 
 /// A row's text, styled by what it is.
@@ -2654,7 +3062,7 @@ fn offset_phrase(dx: i32, dy: i32) -> String {
 /// A drag's pixel travel as whole grid cells, rounded, so a move snaps to
 /// the grid the layout is drawn on.
 #[allow(clippy::cast_possible_truncation)]
-fn cells_dragged(drag: DragState, camera: Camera, scale: i32) -> Cell {
+fn cells_dragged(accumulated: egui::Vec2, camera: Camera, scale: i32) -> Cell {
     // A drawn cell is `scale` solver cells wide on a spread-out sheet;
     // the edit is in the solver's cells.
     #[allow(clippy::cast_precision_loss)] // a sheet scale is 1 or 2
@@ -2663,9 +3071,167 @@ fn cells_dragged(drag: DragState, camera: Camera, scale: i32) -> Cell {
         return Cell::default();
     }
     Cell {
-        x: (drag.accumulated.x / px).round() as i32,
-        y: (drag.accumulated.y / px).round() as i32,
+        x: (accumulated.x / px).round() as i32,
+        y: (accumulated.y / px).round() as i32,
     }
+}
+
+/// Where every room an in-flight drag carries would land, in drawn cells,
+/// for the ghost preview. Each room snaps at its own group's scale, the
+/// same way the release will commit it.
+fn ghost_cells(drag: &DragState, scene: &MapScene, camera: Camera) -> Vec<Cell> {
+    let landing = |room: &SceneRoom| {
+        let scale = scene.scale_of(room.group);
+        let d = cells_dragged(drag.accumulated, camera, scale);
+        // Drawn back at the group's spacing.
+        Cell {
+            x: room.cell.x + d.x * scale,
+            y: room.cell.y + d.y * scale,
+        }
+    };
+    match &drag.moving {
+        Moving::Group(group) => scene
+            .sheet
+            .rooms
+            .iter()
+            .filter(|r| r.group == *group)
+            .map(landing)
+            .collect(),
+        Moving::Rooms(ids) => ids
+            .iter()
+            .filter_map(|&id| scene.room(id))
+            .map(landing)
+            .collect(),
+    }
+}
+
+/// Write the room table beside the store; the note says where, or why not.
+fn write_areas(map: &Map, store: &MapOverrides, store_path: &Path) -> String {
+    let path = store_path.with_extension("areas.tsv");
+    let baseline = Baseline::of(map);
+    match std::fs::write(&path, crate::room_table::areas_tsv(map, store, &baseline)) {
+        Ok(()) => format!("Wrote {} rooms to {}", map.rooms().len(), path.display()),
+        Err(error) => format!("Could not write {}: {error}", path.display()),
+    }
+}
+
+/// `--export-curation`: `curation/assignments.toml` from the store beside
+/// the map, with no window.
+///
+/// # Errors
+///
+/// When there is no map path, or the store will not parse -- an empty
+/// store would write a file unassigning every room.
+pub fn export_curation_headless(path: Option<&Path>) -> Result<String, String> {
+    let map = load_map(path).map_err(|p| p.to_string())?;
+    let store_path = overrides::store_path(path.ok_or("no map path")?);
+    let store =
+        MapOverrides::load(&store_path).map_err(|e| format!("{} {e}", store_path.display()))?;
+    let baseline = Baseline::of(&map);
+    let dir = store_path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("curation");
+    let target = dir.join("assignments.toml");
+    let text = crate::room_table::assignments_toml(&map, &store, &baseline);
+    std::fs::create_dir_all(&dir)
+        .and_then(|()| std::fs::write(&target, text))
+        .map_err(|e| format!("Could not write {}: {e}", target.display()))?;
+    Ok(format!(
+        "Wrote the curation ({} area edit(s) and {} region assignment(s) in the store) to {}",
+        store.area_moves.len(),
+        store.region_moves.len(),
+        target.display()
+    ))
+}
+
+/// `--import <changes> [map]`: merge a contributor's changes file into the
+/// store beside the map, keeping the store as it was in `.json.bak`.
+///
+/// # Errors
+///
+/// When either file will not load, or the store cannot be written.
+pub fn import_changes_headless(changes: &Path, path: Option<&Path>) -> Result<String, String> {
+    let store_path = overrides::store_path(path.ok_or("no map path")?);
+    let mut store =
+        MapOverrides::load(&store_path).map_err(|e| format!("{} {e}", store_path.display()))?;
+    let theirs = MapOverrides::load(changes).map_err(|e| format!("{} {e}", changes.display()))?;
+    if store_path.exists() {
+        std::fs::copy(&store_path, store_path.with_extension("json.bak"))
+            .map_err(|e| format!("Could not back up {}: {e}", store_path.display()))?;
+    }
+    let report = store.merge(&theirs);
+    store
+        .save(&store_path)
+        .map_err(|e| format!("Could not write {}: {e}", store_path.display()))?;
+    Ok(format!(
+        "Took in {report} from {} into {}",
+        changes.display(),
+        store_path.display()
+    ))
+}
+
+/// `--plan-areas [map]` and `--fill-areas [map]`: put every room with a
+/// region and no area into one, from its title, location and walls (see
+/// [`crate::area_fill`]). Both write a review table beside the store --
+/// `<store>.fill-plan.tsv` for a plan, `<store>.fill.tsv` for a fill --
+/// and only `--fill-areas` writes the store, keeping it as it was in
+/// `.json.bak`.
+///
+/// **Close the mapper first.** An open mapper holds the store in memory
+/// and would save over the fill with its next edit.
+///
+/// # Errors
+///
+/// When the map or store will not load, or a file cannot be written.
+pub fn fill_areas_headless(path: Option<&Path>, write: bool) -> Result<String, String> {
+    let map = load_map(path).map_err(|p| p.to_string())?;
+    let store_path = overrides::store_path(path.ok_or("no map path")?);
+    let mut store =
+        MapOverrides::load(&store_path).map_err(|e| format!("{} {e}", store_path.display()))?;
+    let baseline = Baseline::of(&map);
+    let fill = crate::area_fill::propose(&map, &store, &baseline);
+    // A plan gets its own table, so checking afterwards does not overwrite
+    // the record of what a fill did.
+    let table = store_path.with_extension(if write { "fill.tsv" } else { "fill-plan.tsv" });
+    std::fs::write(
+        &table,
+        crate::area_fill::review_tsv(&fill, &map, &store, &baseline),
+    )
+    .map_err(|e| format!("Could not write {}: {e}", table.display()))?;
+    if !write {
+        return Ok(format!(
+            "{fill}. Nothing written; review {}",
+            table.display()
+        ));
+    }
+    if store_path.exists() {
+        std::fs::copy(&store_path, store_path.with_extension("json.bak"))
+            .map_err(|e| format!("Could not back up {}: {e}", store_path.display()))?;
+    }
+    crate::area_fill::apply(&fill, &map, &mut store);
+    store
+        .save(&store_path)
+        .map_err(|e| format!("Could not write {}: {e}", store_path.display()))?;
+    Ok(format!(
+        "{fill}. Written to {}; each room is listed in {}",
+        store_path.display(),
+        table.display()
+    ))
+}
+
+/// `--export-areas`: the same export, with no window.
+///
+/// # Errors
+///
+/// When the map will not load or the store will not parse -- the table
+/// would say every room is unassigned, which is worse than nothing.
+pub fn export_areas_headless(path: Option<&Path>) -> Result<String, String> {
+    let map = load_map(path).map_err(|p| p.to_string())?;
+    let store_path = overrides::store_path(path.ok_or("no map path")?);
+    let store =
+        MapOverrides::load(&store_path).map_err(|e| format!("{} {e}", store_path.display()))?;
+    Ok(write_areas(&map, &store, &store_path))
 }
 
 fn load_map(path: Option<&Path>) -> Result<Map, LoadProblem> {
@@ -2673,14 +3239,46 @@ fn load_map(path: Option<&Path>) -> Result<Map, LoadProblem> {
         return Err(LoadProblem::NoPath);
     };
     let path_str = path.display().to_string();
-    let bytes = std::fs::read(path).map_err(|error| LoadProblem::CouldNotRead {
-        path: path_str.clone(),
-        error,
-    })?;
+    // A bundled build's default path names no file unless someone put a
+    // map there; the embedded one stands in. Only for that path, so a
+    // mistyped one still says it could not be read.
+    let bytes = match std::fs::read(path) {
+        Ok(bytes) => std::borrow::Cow::Owned(bytes),
+        Err(error) => match crate::bundle::MAP {
+            Some(bytes) if crate::bundle::default_path().as_deref() == Some(path) => {
+                std::borrow::Cow::Borrowed(bytes)
+            }
+            _ => {
+                return Err(LoadProblem::CouldNotRead {
+                    path: path_str,
+                    error,
+                });
+            }
+        },
+    };
     cena_map::binary::decode(&bytes).map_err(|error| LoadProblem::NotAMap {
         path: path_str,
         error,
     })
+}
+
+/// Fit, the drawing toggles, and the layout's knobs. A knob re-solves
+/// the shown area when it moves.
+fn view_controls(
+    ui: &mut egui::Ui,
+    shown: &mut Shown,
+    view: &mut draw::View,
+    params: &mut LayoutParams,
+) {
+    if ui.button("Fit").clicked() {
+        shown.needs_fit = true;
+    }
+    ui.toggle_value(&mut view.labels, "Labels")
+        .on_hover_text("Draw room titles (hover still shows them)");
+    ui.toggle_value(&mut view.interiors, "Interiors")
+        .on_hover_text("Draw every interior room as a dot, not only each building's door");
+    ui.separator();
+    ui.add(egui::Slider::new(&mut params.town_scale, 1..=12).text("Town scale"));
 }
 
 #[cfg(test)]

@@ -44,11 +44,27 @@ impl LayoutStats {
             }
         }
 
+        // Overlaps on the one sheet every room is drawn on: outdoor cells
+        // at the town scale, buildings at their own, exactly as the scene
+        // draws them. (Counting the outdoor groups alone, unscaled, could
+        // not see a building laid on a street.)
+        let interiors: HashSet<usize> = layout.interiors.iter().copied().collect();
         let mut cells: HashSet<Cell> = HashSet::new();
         let mut overlaps = 0;
-        for c in fin.values() {
-            if !cells.insert(*c) {
-                overlaps += 1;
+        for group in &layout.groups {
+            let scale = if interiors.contains(&group.index) {
+                1
+            } else {
+                layout.town_scale
+            };
+            for &id in &group.room_ids {
+                let c = group.final_cell(id);
+                if !cells.insert(Cell {
+                    x: c.x * scale,
+                    y: c.y * scale,
+                }) {
+                    overlaps += 1;
+                }
             }
         }
 
@@ -57,7 +73,7 @@ impl LayoutStats {
         let mut connector_lens: Vec<i32> = Vec::new();
         let mut seen: HashSet<(RoomId, RoomId)> = HashSet::new();
         for room in map.rooms() {
-            for exit in &room.exits {
+            for exit in room.exits.iter().filter(|e| crate::regions::is_passage(e)) {
                 let target = exit.to;
                 let (Some(&a), Some(&b)) = (fin.get(&room.id), fin.get(&target)) else {
                     continue;

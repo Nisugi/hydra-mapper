@@ -39,6 +39,15 @@ pub(crate) const CONNECTOR_LINE: Color32 = Color32::from_rgb(150, 120, 90);
 pub(crate) const LABEL_COLOR: Color32 = Color32::from_rgb(220, 220, 200);
 pub(crate) const CANVAS_BG: Color32 = Color32::from_rgb(24, 26, 30);
 const SELECTED_STROKE: Color32 = Color32::from_rgb(250, 250, 250);
+/// The wash behind a room whose group is picked for assignment. Faint,
+/// because a hundred of them are on screen at once and the sheet still
+/// has to be readable underneath.
+const PICKED_FILL: Color32 = Color32::from_rgb(40, 66, 96);
+/// A room flagged for attention -- one whose region is not its area's.
+/// Loud on purpose: the point is to find them at any zoom.
+const FLAGGED_FILL: Color32 = Color32::from_rgb(255, 40, 40);
+/// The Ctrl-drag selection box, translucent so the rooms show through.
+const BOX_FILL: Color32 = Color32::from_rgba_premultiplied(30, 45, 65, 60);
 const HOVER_STROKE: Color32 = Color32::from_rgb(200, 220, 250);
 const GHOST_STROKE: Color32 = Color32::from_rgb(250, 220, 120);
 
@@ -47,13 +56,19 @@ const GHOST_STROKE: Color32 = Color32::from_rgb(250, 220, 120);
 ///
 /// Only the click is reported. Hovering is handled here, as a tooltip, so
 /// the caller never needs to know about it.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Hit {
     /// The room just clicked. `None` on a drag, so panning never changes
     /// the selection.
     pub clicked: Option<RoomId>,
+    /// Ctrl was held on that click: pick this ONE room rather than
+    /// inspecting it.
+    pub ctrl: bool,
+    /// A Ctrl-drag box just closed: every room drawn inside it, to pick --
+    /// dots included, the same rooms a click can hit.
+    pub boxed: Vec<RoomId>,
     /// In edit mode: the room a drag just started on, and whether Alt was
-    /// held (move one room rather than its whole group).
+    /// held (move one room rather than its whole group or the pick).
     pub drag_started: Option<(RoomId, bool)>,
     /// In edit mode: pixels dragged this frame, to accumulate.
     pub dragged_by: Option<egui::Vec2>,
@@ -63,6 +78,7 @@ pub struct Hit {
 
 /// How the canvas behaves and what it draws, beyond the sheet itself.
 #[derive(Clone, Copy, Debug)]
+#[allow(clippy::struct_excessive_bools)] // independent toggles, not a state machine
 pub struct View {
     /// Dragging moves rooms instead of panning.
     pub edit_mode: bool,
@@ -71,6 +87,8 @@ pub struct View {
     /// Every interior room out of focus is drawn as a dot, not only the
     /// door you enter its building by.
     pub interiors: bool,
+    /// The rooms whose region is not their area's are painted red.
+    pub off_region: bool,
 }
 
 /// What is in focus: the rooms drawn as squares. Everything else on the
@@ -85,9 +103,16 @@ pub struct Focus<'a> {
     /// rooms hosting a doorway: drawn as larger dots when out of focus,
     /// so the ways in are visible.
     pub doors: &'a HashSet<RoomId>,
+    /// Rooms painted red, drawn wherever they are so none hides inside a
+    /// building out of focus.
+    pub flagged: Option<&'a HashSet<RoomId>>,
 }
 
 impl Focus<'_> {
+    fn flagged(&self, id: RoomId) -> bool {
+        self.flagged.is_some_and(|f| f.contains(&id))
+    }
+
     fn has(&self, id: RoomId) -> bool {
         self.rooms.contains(&id)
     }
@@ -97,7 +122,11 @@ impl Focus<'_> {
     /// is one dot where you enter it, not its floor plan sprinkled beside
     /// the street.
     fn shows(&self, id: RoomId, interiors: bool) -> bool {
-        interiors || self.has(id) || self.streets.contains(&id) || self.doors.contains(&id)
+        interiors
+            || self.has(id)
+            || self.streets.contains(&id)
+            || self.doors.contains(&id)
+            || self.flagged(id)
     }
 }
 
@@ -108,19 +137,22 @@ impl Focus<'_> {
 /// `camera` is borrowed mutably because the same gesture that draws the
 /// frame also moves the view: egui reports the drag on the response the
 /// painter is allocated from, so there is no earlier point to handle it.
+#[allow(clippy::too_many_arguments)] // one call site, each a distinct fact
 pub fn scene(
     ui: &mut egui::Ui,
     scene: &MapScene,
     focus: &Focus<'_>,
     camera: &mut Camera,
     selected: Option<RoomId>,
+    picked: &HashSet<RoomId>,
     view: View,
-    ghost: Option<(usize, Option<RoomId>, Cell)>,
+    ghost: &[Cell],
 ) -> Hit {
     let View {
         edit_mode,
         labels,
         interiors,
+        off_region: _,
     } = view;
     let sheet = &scene.sheet;
     if sheet.rooms.is_empty() {
@@ -132,8 +164,19 @@ pub fn scene(
     let canvas = response.rect;
     painter.rect_filled(canvas, 0.0, CANVAS_BG);
 
-    // In edit mode a drag moves rooms, so the view must not pan with it.
-    apply_input(ui, &response, camera, edit_mode);
+    // A drag that STARTS with Ctrl held is a selection box, for the whole
+    // of the drag: where it began is remembered, so letting go of Ctrl
+    // halfway does not turn it into a pan or a move.
+    let box_key = response.id.with("selection_box");
+    if response.drag_started() && ui.input(|i| i.modifiers.command) {
+        let origin = ui.input(|i| i.pointer.press_origin());
+        ui.data_mut(|d| d.insert_temp(box_key, origin));
+    }
+    let box_origin: Option<Pos2> = ui.data(|d| d.get_temp::<Option<Pos2>>(box_key)).flatten();
+
+    // In edit mode a drag moves rooms, and a box drag draws a box; in
+    // neither may the view pan along with it.
+    apply_input(ui, &response, camera, edit_mode || box_origin.is_some());
 
     let hovered = response
         .hover_pos()
@@ -142,9 +185,29 @@ pub fn scene(
     // select whichever one the release happened over.
     let mut hit = Hit {
         clicked: response.clicked().then_some(hovered).flatten(),
+        ctrl: ui.input(|i| i.modifiers.command),
         ..Hit::default()
     };
-    if edit_mode {
+    let box_rect = box_origin.and_then(|origin| {
+        ui.input(|i| i.pointer.latest_pos())
+            .map(|now| Rect::from_two_pos(origin, now))
+    });
+    if box_origin.is_some() && response.drag_stopped() {
+        if let Some(rect) = box_rect {
+            // Everything drawn is boxable -- dots too, the same rooms a
+            // click can hit -- so a building's rooms can be picked without
+            // entering it. (It took only the rooms in focus, which from the
+            // streets is no interior at all.)
+            hit.boxed = sheet
+                .rooms
+                .iter()
+                .filter(|r| focus.shows(r.id, interiors))
+                .filter(|r| rect.contains(camera.to_screen(r.cell, canvas)))
+                .map(|r| r.id)
+                .collect();
+        }
+        ui.data_mut(|d| d.remove::<Option<Pos2>>(box_key));
+    } else if edit_mode && box_origin.is_none() {
         if response.drag_started() {
             hit.drag_started = hovered.map(|id| (id, ui.input(|i| i.modifiers.alt)));
         }
@@ -158,13 +221,20 @@ pub fn scene(
     let painter = painter.with_clip_rect(canvas);
     draw_edges(&painter, sheet, focus, *camera, canvas);
     draw_rooms(
-        &painter, sheet, focus, interiors, *camera, canvas, selected, hovered,
+        &painter, sheet, focus, interiors, *camera, canvas, selected, picked, hovered,
     );
     if labels && camera.scale >= LABEL_MIN_SCALE {
         draw_labels(&painter, scene, focus, *camera, canvas);
     }
-    if let Some((group, room, delta)) = ghost {
-        draw_ghost(&painter, sheet, *camera, canvas, group, room, delta);
+    draw_ghost(&painter, *camera, canvas, ghost);
+    if let (Some(rect), false) = (box_rect, response.drag_stopped()) {
+        painter.rect(
+            rect,
+            0.0,
+            BOX_FILL,
+            Stroke::new(1.0, HOVER_STROKE),
+            StrokeKind::Inside,
+        );
     }
     if let Some(id) = hovered {
         hover_tooltip(&response, sheet, id);
@@ -173,31 +243,12 @@ pub fn scene(
 }
 
 /// Where a drag would land, previewed as outlines while the mouse is down,
-/// so a move is aimed rather than guessed and undone.
-#[allow(clippy::cast_precision_loss)] // a drag delta is a handful of cells
-fn draw_ghost(
-    painter: &egui::Painter,
-    sheet: &SheetScene,
-    camera: Camera,
-    canvas: Rect,
-    group: usize,
-    room: Option<RoomId>,
-    delta: Cell,
-) {
+/// so a move is aimed rather than guessed and undone. `landing` is the
+/// drawn cell each carried room would end up in.
+fn draw_ghost(painter: &egui::Painter, camera: Camera, canvas: Rect, landing: &[Cell]) {
     let side = (ROOM_PX * camera.scale).max(2.0);
-    let shift = Vec2::new(
-        delta.x as f32 * camera.cell_px(),
-        delta.y as f32 * camera.cell_px(),
-    );
-    for scene_room in &sheet.rooms {
-        let moving = match room {
-            Some(id) => scene_room.id == id,
-            None => scene_room.group == group,
-        };
-        if !moving {
-            continue;
-        }
-        let at = camera.to_screen(scene_room.cell, canvas) + shift;
+    for &cell in landing {
+        let at = camera.to_screen(cell, canvas);
         painter.rect_stroke(
             Rect::from_center_size(at, Vec2::splat(side)),
             2.0,
@@ -290,15 +341,56 @@ fn draw_edges(
         // Scaled so lines thin out as the view pulls back, but never to
         // nothing.
         let width = (camera.scale * 1.5).max(0.5);
-        let stroke = match edge.kind {
-            SceneEdgeKind::Directional | SceneEdgeKind::Stub => {
-                Stroke::new(width, DIRECTIONAL_LINE)
+        // A routed line bends around the rooms it would have crossed.
+        let mut path = vec![a];
+        path.extend(
+            edge.via
+                .iter()
+                .map(|p| camera.point_to_screen(p.x, p.y, canvas)),
+        );
+        path.push(b);
+        match edge.kind {
+            SceneEdgeKind::Directional => {
+                painter.line(path, Stroke::new(width, DIRECTIONAL_LINE));
             }
-            SceneEdgeKind::Connector => Stroke::new(width * 0.7, CONNECTOR_LINE),
-        };
-        painter.line_segment([a, b], stroke);
+            SceneEdgeKind::Connector => {
+                painter.line(path, Stroke::new(width * 0.7, CONNECTOR_LINE));
+            }
+            // Stretched too far to draw whole: a short tick out of each
+            // end toward the other, labelled with the room it leads to, so
+            // the link is there to see without a line across the sheet. A
+            // stub with a movement label is a bearingless walk, drawn in
+            // the connector colour.
+            SceneEdgeKind::Stub => {
+                let color = if edge.label.is_some() {
+                    CONNECTOR_LINE
+                } else {
+                    DIRECTIONAL_LINE
+                };
+                let cell = (camera.to_screen(Cell { x: 1, y: 0 }, canvas)
+                    - camera.to_screen(Cell { x: 0, y: 0 }, canvas))
+                .length();
+                let reach = (cell * STUB_CELLS).min((b - a).length() / 2.0);
+                let dir = (b - a).normalized();
+                let font = egui::FontId::proportional((cell * 0.9).clamp(7.0, 12.0));
+                for (from, toward, partner) in [(a, dir, edge.b_room), (b, -dir, edge.a_room)] {
+                    let tip = from + toward * reach;
+                    painter.line_segment([from, tip], Stroke::new(width, color));
+                    painter.text(
+                        tip,
+                        egui::Align2::CENTER_CENTER,
+                        partner.0.to_string(),
+                        font.clone(),
+                        color,
+                    );
+                }
+            }
+        }
     }
 }
+
+/// How far a stub reaches out of each end, in sheet cells.
+const STUB_CELLS: f32 = 1.5;
 
 /// A room in focus is a square; one out of focus is a dot on the road --
 /// larger where a door leads in -- so the whole area is always there to
@@ -312,6 +404,7 @@ fn draw_rooms(
     camera: Camera,
     canvas: Rect,
     selected: Option<RoomId>,
+    picked: &HashSet<RoomId>,
     hovered: Option<RoomId>,
 ) {
     let side = (ROOM_PX * camera.scale).max(2.0);
@@ -325,13 +418,24 @@ fn draw_rooms(
             continue;
         }
         let is_selected = selected == Some(room.id);
+        // A room in the multi-group selection, waiting to be assigned.
+        // Drawn under everything else so the inspected room's own
+        // highlight still reads on top of it.
+        if picked.contains(&room.id) {
+            painter.rect_filled(rect.expand(side * 0.35), 2.0, PICKED_FILL);
+        }
+        let flagged = focus.flagged(room.id);
         if !focus.has(room.id) {
             let r = if focus.doors.contains(&room.id) {
                 (side * 0.3).max(2.5)
             } else {
                 (side * 0.18).max(1.5)
             };
-            painter.circle_filled(centre, r, ECHO_DOT);
+            if flagged {
+                painter.circle_filled(centre, r.max(side * 0.3).max(3.0), FLAGGED_FILL);
+            } else {
+                painter.circle_filled(centre, r, ECHO_DOT);
+            }
             if is_selected || hovered == Some(room.id) {
                 let color = if is_selected {
                     SELECTED_STROKE
@@ -354,7 +458,7 @@ fn draw_rooms(
         painter.rect(
             rect,
             2.0 * camera.scale,
-            ROOM_FILL,
+            if flagged { FLAGGED_FILL } else { ROOM_FILL },
             Stroke::new(width, stroke_color),
             StrokeKind::Outside,
         );

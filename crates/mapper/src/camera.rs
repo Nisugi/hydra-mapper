@@ -88,6 +88,13 @@ impl Camera {
             )
     }
 
+    /// As [`Self::to_screen`], for a point between cells: a bend in a
+    /// routed line.
+    pub fn point_to_screen(self, x: f32, y: f32, canvas: Rect) -> Pos2 {
+        let px = self.cell_px();
+        canvas.center() + Vec2::new((x - self.center.x) * px, (y - self.center.y) * px)
+    }
+
     /// The inverse: which cell coordinate sits under a screen position.
     /// Fractional on purpose -- zooming about the pointer needs the exact
     /// point under it, not the nearest room.

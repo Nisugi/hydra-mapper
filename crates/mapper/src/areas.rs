@@ -36,7 +36,7 @@ use std::collections::{BTreeMap, HashSet};
 
 use cena_map::{Map, RoomId};
 
-use crate::overrides::{MapOverrides, RoomKey};
+use crate::overrides::{Baseline, MapOverrides, RoomKey};
 
 /// `areas.tsv` as produced by `research/jev-trial/areas.py`, compiled in so
 /// the binary needs no data file beside it.
@@ -165,6 +165,12 @@ pub struct Areas {
     pub location: Vec<Area>,
     pub derived: Vec<Area>,
     pub plates: Vec<Area>,
+    /// Every room worth laying out, whichever list names it: see
+    /// [`layout_rooms`].
+    pub placeable: HashSet<RoomId>,
+    /// The areas and regions the map itself carries, which the store's
+    /// edits sit on top of.
+    pub baseline: Baseline,
 }
 
 impl Areas {
@@ -197,18 +203,21 @@ impl Areas {
             .iter()
             .flat_map(|a| a.rooms.iter().copied())
             .collect();
+        let baseline = Baseline::of(map);
         Areas {
             official,
             region: {
-                let mut rows = region_areas(map);
-                let curated = curated_areas(map, store);
-                rows.extend(unareaed(map, store, &rows));
+                let mut rows = region_areas(map, store, &baseline);
+                let curated = curated_areas(map, store, &baseline);
+                rows.extend(unareaed(map, store, &baseline, &rows));
                 rows.extend(curated);
                 rows
             },
             location: location_areas(map, &claimed),
             derived: derived_areas(map),
             plates: plate_areas(map, store),
+            placeable: cena_map_layout::regions::placeable_rooms(map),
+            baseline,
         }
     }
 
@@ -331,13 +340,15 @@ fn official_areas(map: &Map) -> Vec<Area> {
 /// dropped. 11,994 of them is a third of the map -- the hunting grounds
 /// Simutronics does not classify -- and "which rooms does the official
 /// grouping not reach" is a question worth being able to click on.
-fn region_areas(map: &Map) -> Vec<Area> {
+///
+/// A room's region is the one a person assigned where there is one: an
+/// assignment moves the room to its new region's row at once, rather than
+/// waiting for `retag` to bake it into the map.
+fn region_areas(map: &Map, store: &MapOverrides, baseline: &Baseline) -> Vec<Area> {
     let mut by_region: BTreeMap<&str, Vec<RoomId>> = BTreeMap::new();
     for room in map.rooms() {
-        let name = room
-            .meta
-            .iter()
-            .find_map(|m| m.strip_prefix("region:"))
+        let name = store
+            .region_in(RoomKey::of(room.id, map), baseline)
             .unwrap_or("");
         by_region.entry(name).or_default().push(room.id);
     }
@@ -365,17 +376,14 @@ fn region_areas(map: &Map) -> Vec<Area> {
 ///
 /// A region with nothing left gets no row at all -- an empty queue is
 /// worth the absence of a line, not a line saying zero.
-fn unareaed(map: &Map, store: &MapOverrides, regions: &[Area]) -> Vec<Area> {
+fn unareaed(map: &Map, store: &MapOverrides, baseline: &Baseline, regions: &[Area]) -> Vec<Area> {
     let mut left: BTreeMap<&str, Vec<RoomId>> = BTreeMap::new();
     for room in map.rooms() {
-        if store.area_moves.contains_key(&RoomKey::of(room.id, map)) {
+        let key = RoomKey::of(room.id, map);
+        if store.area_of(key, baseline).is_some() {
             continue;
         }
-        let name = room
-            .meta
-            .iter()
-            .find_map(|m| m.strip_prefix("region:"))
-            .unwrap_or(NO_REGION);
+        let name = store.region_in(key, baseline).unwrap_or(NO_REGION);
         left.entry(name).or_default().push(room.id);
     }
     regions
@@ -421,8 +429,17 @@ pub const NO_REGION: &str = "(no region)";
 /// better one.
 ///
 /// Returns how many areas it made, for the note in the UI.
+///
+/// Nor when the map already carries areas: those are the curation, baked
+/// in, and a store seeded on top of them would hold thirteen thousand
+/// entries that say nothing the map does not.
 pub fn seed_from_official(map: &Map, store: &mut MapOverrides) -> usize {
-    if !store.custom_areas.is_empty() {
+    if !store.custom_areas.is_empty()
+        || map
+            .rooms()
+            .iter()
+            .any(|r| r.meta.iter().any(|m| m.starts_with("area:")))
+    {
         return 0;
     }
     let official = official_areas(map);
@@ -441,12 +458,11 @@ pub fn seed_from_official(map: &Map, store: &mut MapOverrides) -> usize {
 /// the tree honest: there is no second place for the answer to live and
 /// go stale. An area whose rooms disagree sits under the majority and
 /// says so.
-fn curated_areas(map: &Map, store: &MapOverrides) -> Vec<Area> {
+fn curated_areas(map: &Map, store: &MapOverrides, baseline: &Baseline) -> Vec<Area> {
     let mut by_area: BTreeMap<&str, Vec<RoomId>> = BTreeMap::new();
     for room in map.rooms() {
-        let key = RoomKey::of(room.id, map);
-        if let Some(area) = store.area_moves.get(&key) {
-            by_area.entry(area.as_str()).or_default().push(room.id);
+        if let Some(area) = store.area_of(RoomKey::of(room.id, map), baseline) {
+            by_area.entry(area).or_default().push(room.id);
         }
     }
     by_area
@@ -454,9 +470,8 @@ fn curated_areas(map: &Map, store: &MapOverrides) -> Vec<Area> {
         .map(|(key, rooms)| {
             let mut votes: BTreeMap<&str, usize> = BTreeMap::new();
             for id in &rooms {
-                let name = map
-                    .room(*id)
-                    .and_then(|r| r.meta.iter().find_map(|m| m.strip_prefix("region:")))
+                let name = store
+                    .region_in(RoomKey::of(*id, map), baseline)
                     .unwrap_or(NO_REGION);
                 *votes.entry(name).or_default() += 1;
             }
@@ -466,7 +481,7 @@ fn curated_areas(map: &Map, store: &MapOverrides) -> Vec<Area> {
                 .max_by_key(|&(_, n)| n)
                 .unwrap_or((NO_REGION, 0));
             Area {
-                name: store.area_name(key).to_owned(),
+                name: store.area_title(key, baseline).to_owned(),
                 kind: AreaKind::Region,
                 parent: Some(parent.to_owned()),
                 contested: (top < total).then_some((top, total)),
@@ -534,8 +549,27 @@ fn location_areas(map: &Map, claimed: &HashSet<RoomId>) -> Vec<Area> {
 /// Only rooms that would otherwise be **wholly cut off** pull anything in,
 /// so an area that is already whole is laid out from exactly its own
 /// rooms, as before.
+///
+/// **Only a place is laid out**, own or pulled: `placeable` is
+/// [`regions::placeable_rooms`], so a removed room, an urchin hideout
+/// and a room nothing reaches are left off whichever list named them. And
+/// only a walk attaches: a teleport says nothing about where two rooms
+/// sit, so it pulls nothing in.
+///
+/// [`regions::placeable_rooms`]: cena_map_layout::regions::placeable_rooms
 #[must_use]
-pub fn layout_rooms(area_rooms: &[RoomId], map: &Map) -> Vec<cena_map::Room> {
+pub fn layout_rooms(
+    area_rooms: &[RoomId],
+    map: &Map,
+    placeable: &HashSet<RoomId>,
+) -> Vec<cena_map::Room> {
+    let is_passage = cena_map_layout::regions::is_passage;
+    let area_rooms: Vec<RoomId> = area_rooms
+        .iter()
+        .copied()
+        .filter(|id| placeable.contains(id))
+        .collect();
+    let area_rooms = area_rooms.as_slice();
     let own: HashSet<RoomId> = area_rooms.iter().copied().collect();
 
     // Who points at a room, so a one-way door inward still counts as an
@@ -544,7 +578,7 @@ pub fn layout_rooms(area_rooms: &[RoomId], map: &Map) -> Vec<cena_map::Room> {
     let mut inbound: BTreeMap<RoomId, Vec<RoomId>> = BTreeMap::new();
     for room in map.rooms() {
         for exit in &room.exits {
-            if own.contains(&exit.to) && !own.contains(&room.id) {
+            if own.contains(&exit.to) && !own.contains(&room.id) && is_passage(exit) {
                 inbound.entry(exit.to).or_default().push(room.id);
             }
         }
@@ -558,9 +592,10 @@ pub fn layout_rooms(area_rooms: &[RoomId], map: &Map) -> Vec<cena_map::Room> {
         let neighbours: Vec<RoomId> = room
             .exits
             .iter()
+            .filter(|e| is_passage(e))
             .map(|e| e.to)
             .chain(inbound.get(&id).into_iter().flatten().copied())
-            .filter(|n| map.room(*n).is_some())
+            .filter(|n| placeable.contains(n))
             .collect();
         // A room with a neighbour of its own is attached already; only one
         // with none is stranded by the boundary.
@@ -581,6 +616,7 @@ pub fn layout_rooms(area_rooms: &[RoomId], map: &Map) -> Vec<cena_map::Room> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cena_map_layout::regions::placeable_rooms;
 
     /// The bundled file parses and both kinds of row are present, so a
     /// mangled copy fails here rather than as an empty list in the window.
@@ -660,7 +696,7 @@ mod tests {
         let b = room_in(RoomId(2), "the Upper Trollfang");
         let map = Map::from_rooms(vec![a, b]).expect("no duplicate ids");
 
-        let regions = region_areas(&map);
+        let regions = region_areas(&map, &MapOverrides::default(), &Baseline::of(&map));
         let listed: Vec<RoomId> = regions
             .iter()
             .flat_map(|r| r.rooms.iter().copied())
@@ -719,7 +755,7 @@ mod tests {
         store.set_area(RoomKey::of(RoomId(1), &map), Some(&key));
         store.set_area(RoomKey::of(RoomId(2), &map), Some(&key));
 
-        let areas = curated_areas(&map, &store);
+        let areas = curated_areas(&map, &store, &Baseline::of(&map));
         assert_eq!(areas.len(), 1);
         assert_eq!(areas[0].name, "Hearthstone");
         assert_eq!(areas[0].parent.as_deref(), Some("Wehnimer's Landing"));
@@ -743,7 +779,7 @@ mod tests {
             store.set_area(RoomKey::of(RoomId(id), &map), Some(&key));
         }
 
-        let areas = curated_areas(&map, &store);
+        let areas = curated_areas(&map, &store, &Baseline::of(&map));
         assert_eq!(areas[0].parent.as_deref(), Some("Wehnimer's Landing"));
         assert_eq!(areas[0].contested, Some((2, 3)));
     }
@@ -758,7 +794,7 @@ mod tests {
         let key = store.create_area("Stone Valley");
         store.set_area(RoomKey::of(RoomId(1), &map), Some(&key));
 
-        let areas = curated_areas(&map, &store);
+        let areas = curated_areas(&map, &store, &Baseline::of(&map));
         assert_eq!(areas[0].parent.as_deref(), Some(NO_REGION));
     }
 
@@ -823,15 +859,23 @@ mod tests {
         let map = Map::from_rooms(vec![a, b]).expect("no duplicate ids");
 
         let mut store = MapOverrides::default();
-        let regions = region_areas(&map);
-        assert_eq!(unareaed(&map, &store, &regions)[0].rooms.len(), 2);
+        let regions = region_areas(&map, &MapOverrides::default(), &Baseline::of(&map));
+        assert_eq!(
+            unareaed(&map, &store, &Baseline::of(&map), &regions)[0]
+                .rooms
+                .len(),
+            2
+        );
 
         let key = store.create_area("Town");
         store.set_area(RoomKey::of(RoomId(1), &map), Some(&key));
-        assert_eq!(unareaed(&map, &store, &regions)[0].rooms, vec![RoomId(2)]);
+        assert_eq!(
+            unareaed(&map, &store, &Baseline::of(&map), &regions)[0].rooms,
+            vec![RoomId(2)]
+        );
 
         store.set_area(RoomKey::of(RoomId(2), &map), Some(&key));
-        assert!(unareaed(&map, &store, &regions).is_empty());
+        assert!(unareaed(&map, &store, &Baseline::of(&map), &regions).is_empty());
     }
 
     /// A room with just enough filled in to carry an id and a location.
@@ -855,6 +899,77 @@ mod tests {
         }
     }
 
+    fn baked(id: u32, meta: &[&str]) -> cena_map::Room {
+        let mut room = room_in(RoomId(id), "somewhere");
+        room.meta = meta.iter().map(|m| (*m).to_owned()).collect();
+        room
+    }
+
+    /// Assigning a region moves the room to that region's row at once --
+    /// not only after `retag` has baked it into the map. It stayed under
+    /// the region the map carried, which made an assignment look ignored.
+    #[test]
+    fn an_assigned_region_moves_the_room() {
+        let map = Map::from_rooms(vec![
+            baked(1, &["region:Icemule Trace"]),
+            baked(2, &["region:Icemule Trace"]),
+        ])
+        .expect("no duplicate ids");
+        let mut store = MapOverrides::default();
+        store.set_region(RoomKey::of(RoomId(2), &map), Some("Wehnimer's Landing"));
+        let regions = region_areas(&map, &store, &Baseline::of(&map));
+        let rows = |name: &str| {
+            regions
+                .iter()
+                .find(|a| a.name == name)
+                .map(|a| a.rooms.clone())
+                .unwrap_or_default()
+        };
+        assert_eq!(rows("Icemule Trace"), vec![RoomId(1)]);
+        assert_eq!(rows("Wehnimer's Landing"), vec![RoomId(2)]);
+    }
+
+    /// The map's own areas are the curation: an empty store shows them,
+    /// a room taken out of one stays out, and the export for `retag` is
+    /// the whole curation rather than the store's few edits.
+    #[test]
+    fn baked_areas_show_and_edits_sit_on_top() {
+        let map = Map::from_rooms(vec![
+            baked(1, &["area:landing-town", "region:Wehnimer's Landing"]),
+            baked(2, &["area:landing-town", "region:Wehnimer's Landing"]),
+        ])
+        .expect("no duplicate ids");
+        let baseline = Baseline::of(&map);
+        let mut store = MapOverrides::default();
+        let areas = curated_areas(&map, &store, &baseline);
+        assert_eq!(areas.len(), 1);
+        assert_eq!(areas[0].name, "landing-town");
+        assert_eq!(areas[0].rooms, vec![RoomId(1), RoomId(2)]);
+
+        store.set_area(RoomKey::of(RoomId(2), &map), None);
+        let areas = curated_areas(&map, &store, &baseline);
+        assert_eq!(
+            areas[0].rooms,
+            vec![RoomId(1)],
+            "a room taken out came back"
+        );
+
+        let toml = crate::room_table::assignments_toml(&map, &store, &baseline);
+        assert!(toml.contains("name = \"landing-town\""), "{toml}");
+        assert!(
+            toml.contains(
+                "ids = [
+  1,
+]"
+            ),
+            "{toml}"
+        );
+        assert!(
+            !toml.contains("  2,"),
+            "an unassigned room was exported: {toml}"
+        );
+    }
+
     /// A room whose only doorway is in another area is drawn with that
     /// doorway, so the boundary does not leave it floating alone.
     ///
@@ -872,7 +987,7 @@ mod tests {
         ])
         .expect("no duplicate ids");
 
-        let rooms = layout_rooms(&[shop], &map);
+        let rooms = layout_rooms(&[shop], &map, &placeable_rooms(&map));
         let ids: Vec<RoomId> = rooms.iter().map(|r| r.id).collect();
         assert!(ids.contains(&shop));
         assert!(
@@ -894,7 +1009,10 @@ mod tests {
         ])
         .expect("no duplicate ids");
 
-        let ids: Vec<RoomId> = layout_rooms(&[a, b], &map).iter().map(|r| r.id).collect();
+        let ids: Vec<RoomId> = layout_rooms(&[a, b], &map, &placeable_rooms(&map))
+            .iter()
+            .map(|r| r.id)
+            .collect();
         assert_eq!(ids.len(), 2, "pulled in a neighbour that was not needed");
         assert!(!ids.contains(&outside));
     }
@@ -911,21 +1029,65 @@ mod tests {
         ])
         .expect("no duplicate ids");
 
-        let ids: Vec<RoomId> = layout_rooms(&[shop], &map).iter().map(|r| r.id).collect();
+        let ids: Vec<RoomId> = layout_rooms(&[shop], &map, &placeable_rooms(&map))
+            .iter()
+            .map(|r| r.id)
+            .collect();
         assert!(
             ids.contains(&street),
             "a room reachable only one way was left stranded"
         );
     }
 
-    /// A room with no exits at all has nothing to pull in -- 27 rooms of
-    /// `gs.map` are dead records, and inventing a neighbour for them would
-    /// be worse than leaving them alone.
+    /// A room with no exits at all is nowhere: nothing to place it by, and
+    /// inventing a neighbour for it would be worse than leaving it off.
     #[test]
-    fn a_room_with_no_exits_pulls_nothing() {
+    fn a_room_with_no_exits_is_not_laid_out() {
         let lone = RoomId(1);
         let map = Map::from_rooms(vec![room_linked(lone, "nowhere", &[])]).expect("one room");
-        assert_eq!(layout_rooms(&[lone], &map).len(), 1);
+        assert!(layout_rooms(&[lone], &map, &placeable_rooms(&map)).is_empty());
+    }
+
+    /// A gone room is not laid out even when a list names it, and a
+    /// stranded room does not pull one in as its doorway.
+    #[test]
+    fn a_gone_room_is_neither_laid_out_nor_pulled_in() {
+        let (shop, street, old) = (RoomId(1), RoomId(2), RoomId(3));
+        let mut gone = room_linked(old, "streets", &[shop]);
+        gone.meta.push("map:status:gone".to_owned());
+        let map = Map::from_rooms(vec![
+            room_linked(shop, "shops", &[street, old]),
+            room_linked(street, "streets", &[shop]),
+            gone,
+        ])
+        .expect("no duplicate ids");
+
+        let ids: Vec<RoomId> = layout_rooms(&[shop, old], &map, &placeable_rooms(&map))
+            .iter()
+            .map(|r| r.id)
+            .collect();
+        assert_eq!(ids, vec![shop, street]);
+    }
+
+    /// A teleport is not a doorway: a room stranded by the boundary pulls
+    /// in what it walks to, not where a routine lands it.
+    #[test]
+    fn a_teleport_pulls_nothing_in() {
+        let (shop, street, far) = (RoomId(1), RoomId(2), RoomId(3));
+        let mut map_shop = room_linked(shop, "shops", &[street, far]);
+        map_shop.exits[1].crossing = cena_map::Crossing::PassThrough(cena_map::Pass);
+        let map = Map::from_rooms(vec![
+            map_shop,
+            room_linked(street, "streets", &[shop]),
+            room_linked(far, "far away", &[]),
+        ])
+        .expect("no duplicate ids");
+
+        let ids: Vec<RoomId> = layout_rooms(&[shop], &map, &placeable_rooms(&map))
+            .iter()
+            .map(|r| r.id)
+            .collect();
+        assert!(!ids.contains(&far), "pulled in a room across a teleport");
     }
 
     /// A room with just enough filled in to carry an id, a location and

@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use cena_map::{Crossing, Map, Room, RoomId};
 
 use crate::positioner::Group;
+use crate::regions::is_passage;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Entrance {
@@ -79,7 +80,7 @@ pub fn classify(groups: &[Group], map: &Map) -> Classification {
             let Some(room) = map.room(room_id) else {
                 continue;
             };
-            for exit in &room.exits {
+            for exit in room.exits.iter().filter(|e| is_passage(e)) {
                 if let Some(&target_group) = component_of.get(&exit.to)
                     && target_group != group.index
                 {
@@ -116,9 +117,9 @@ pub fn classify(groups: &[Group], map: &Map) -> Classification {
     }
 }
 
-/// Entrances: every edge from an outdoor room into an interior component.
-/// Factored out so classification overrides can recompute after flipping
-/// groups between sheets.
+/// Entrances: every walk from an outdoor room into an interior component.
+/// A routine or a teleport that lands in a building is not its door: it
+/// gets no door marker, and the building does not hang beside it.
 fn compute_entrances(
     groups: &[Group],
     map: &Map,
@@ -140,7 +141,7 @@ fn compute_entrances(
             let Some(room) = map.room(room_id) else {
                 continue;
             };
-            for exit in &room.exits {
+            for exit in room.exits.iter().filter(|e| is_passage(e)) {
                 let Some(&target_group) = component_of.get(&exit.to) else {
                     continue;
                 };
@@ -156,17 +157,6 @@ fn compute_entrances(
         }
     }
     (entrances, entrance_room_ids)
-}
-
-/// Recompute doorway markers from the current interior set -- for callers
-/// that move groups between sheets after classification (the packer's
-/// try-inline pass), mirroring what `apply_sheet_overrides` does for
-/// curated flips.
-pub fn recompute_entrances(classification: &mut Classification, groups: &[Group], map: &Map) {
-    let (entrances, entrance_room_ids) =
-        compute_entrances(groups, map, &classification.interior_groups);
-    classification.entrances = entrances;
-    classification.entrance_room_ids = entrance_room_ids;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -265,10 +255,11 @@ pub const ZONE_COMPONENT_ROOMS: usize = 50;
 /// with a shape of its own to the outdoor sheet.
 pub const COURTYARD_ROOMS: usize = 2;
 
-/// Interior clusters: interior groups connected by ANY exit between interior
-/// rooms form one walkable interior space (one building) -- "go arch" joins
-/// as surely as "north". Only edges that lead outdoors (or into a
-/// zone-sized component) separate. Returns interior group index -> cluster
+/// Interior clusters: interior groups connected by any walk between
+/// interior rooms form one walkable interior space (one building) -- "go
+/// arch" joins as surely as "north". Edges that lead outdoors or into a
+/// zone-sized component separate, and so does a routine or a teleport:
+/// the Rift is not a wing of the Birthing Sands. Returns interior group index -> cluster
 /// id (the smallest group index in the cluster), so ids are stable for a
 /// given map build.
 #[must_use]
@@ -297,7 +288,7 @@ pub fn interior_clusters(
             let Some(room) = map.room(room_id) else {
                 continue;
             };
-            for exit in &room.exits {
+            for exit in room.exits.iter().filter(|e| is_passage(e)) {
                 let Some(&other) = group_of.get(&exit.to) else {
                     continue; // outdoors or outside the selection: a boundary
                 };

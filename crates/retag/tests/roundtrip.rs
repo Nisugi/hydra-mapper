@@ -533,6 +533,12 @@ fn an_unjoined_room_gets_no_region() {
         if filled.contains(&room.id.0) {
             continue;
         }
+        // Or where a person assigned it in the mapper.
+        if curation.assignments.regions.iter().any(|b| {
+            b.ids.contains(&room.id.0) || room.uid.first().is_some_and(|u| b.uids.contains(&u.0))
+        }) {
+            continue;
+        }
         if room.meta.iter().any(|m| m == "map:region-inferred") {
             continue;
         }
@@ -804,21 +810,57 @@ fn region_fills(plan: &Plan) -> std::collections::BTreeMap<u32, String> {
         .collect()
 }
 
-/// Follow a fold chain to the region it ends in: `The Rift` ->
-/// `Pinefar / Aenatumgana` -> `Icemule Trace`. A uid listed under any
-/// name along the way agrees with the region finally written.
-fn resolve_fold(curation: &Curation, name: &str) -> String {
-    let mut current = name.to_owned();
-    for _ in 0..8 {
-        match curation
-            .decisions
-            .folds
+/// The mapper's curation reaches the map: an assigned room gets its area,
+/// an assigned region outranks what the map said and clears the
+/// "inferred" flag, a room named by id is reached, and a room no area
+/// holds any more loses the one it had.
+#[test]
+fn assignments_are_baked_into_the_map() {
+    use cena_retag::rules::{AreaAssignment, AssignmentFile, RegionAssignment};
+
+    let mut town = room(1, "[Town Square]", vec![]);
+    town.uid = vec![cena_map::Uid(101)];
+    town.meta = vec![
+        "region:Icemule Trace".to_owned(),
+        "map:region-inferred".to_owned(),
+    ];
+    let mut stale = room(2, "[Old Shop]", vec![]);
+    stale.uid = vec![cena_map::Uid(102)];
+    stale.meta = vec!["area:gone-away".to_owned()];
+    let unnumbered = room(3, "[Back Room]", vec![]);
+    let map = Map::from_rooms(vec![town, stale, unnumbered]).expect("no duplicate ids");
+
+    let curation = Curation {
+        assignments: AssignmentFile {
+            areas: vec![AreaAssignment {
+                key: "landing.town".to_owned(),
+                name: "wehnimers-landing-town".to_owned(),
+                uids: vec![101],
+                ids: vec![3],
+            }],
+            regions: vec![RegionAssignment {
+                region: "Wehnimer's Landing".to_owned(),
+                uids: vec![101],
+                ids: vec![],
+            }],
+        },
+        ..Curation::default()
+    };
+    let rooms = apply(map.rooms(), &plan(&map, &curation));
+    let meta = |id: u32| {
+        let mut m = rooms
             .iter()
-            .find(|f| f.region == current)
-        {
-            Some(f) => current = f.into.clone(),
-            None => break,
-        }
-    }
-    current
+            .find(|r| r.id.0 == id)
+            .expect("kept")
+            .meta
+            .clone();
+        m.sort();
+        m
+    };
+    assert_eq!(
+        meta(1),
+        ["area:wehnimers-landing-town", "region:Wehnimer's Landing"]
+    );
+    assert!(meta(2).is_empty(), "the stale area stayed: {:?}", meta(2));
+    assert_eq!(meta(3), ["area:wehnimers-landing-town"]);
 }

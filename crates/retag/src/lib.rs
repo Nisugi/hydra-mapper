@@ -125,7 +125,38 @@ fn tag_regions(plan: &mut Plan, rooms: &[Room], curation: &Curation) {
         }
     }
 
+    // A person's say-so outranks all of it: the mapdb join, the folds
+    // and the spread. Keyed the way the mapper keys a room -- its first
+    // uid, or its id when it has none.
+    let mut assigned: BTreeMap<RoomKey, &str> = BTreeMap::new();
+    for block in &curation.assignments.regions {
+        for uid in &block.uids {
+            assigned.insert(RoomKey::Uid(*uid), block.region.as_str());
+        }
+        for id in &block.ids {
+            assigned.insert(RoomKey::Id(*id), block.region.as_str());
+        }
+    }
+
     for room in rooms {
+        if let Some(region) = assigned.get(&RoomKey::of(room)) {
+            let meta = format!("region:{region}");
+            for old in room.meta.iter().filter(|m| {
+                (m.starts_with("region:") && **m != meta) || *m == "map:region-inferred"
+            }) {
+                plan.changes.push(Change::DropMeta {
+                    id: room.id.0,
+                    meta: old.clone(),
+                });
+            }
+            if !room.meta.contains(&meta) {
+                plan.changes.push(Change::AddMeta {
+                    id: room.id.0,
+                    meta,
+                });
+            }
+            continue;
+        }
         // A room the game numbers once belongs where that number says.
         // A room it numbers NINE times, once per town, is a plane the
         // towns each open onto -- and `find_map` would take whichever
@@ -169,13 +200,66 @@ fn tag_regions(plan: &mut Plan, rooms: &[Room], curation: &Curation) {
                 });
             }
         }
-        if room.meta.iter().any(|m| *m == meta) {
+        if room.meta.contains(&meta) {
             continue;
         }
         plan.changes.push(Change::AddMeta {
             id: room.id.0,
             meta,
         });
+    }
+}
+
+/// How the mapper names a room: its first uid, or its id when the game
+/// never numbered it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum RoomKey {
+    Uid(i64),
+    Id(u32),
+}
+
+impl RoomKey {
+    fn of(room: &Room) -> RoomKey {
+        room.uid
+            .first()
+            .map_or(RoomKey::Id(room.id.0), |u| RoomKey::Uid(u.0))
+    }
+}
+
+/// Write `meta:area:<name>` from the mapper's curated areas, and take it
+/// off any room no area holds any more, so unassigning in the mapper
+/// reaches the map too. One area per room: a room named in two blocks
+/// takes the later, as the store would.
+fn tag_areas(plan: &mut Plan, rooms: &[Room], curation: &Curation) {
+    let mut area_of: BTreeMap<RoomKey, &str> = BTreeMap::new();
+    for area in &curation.assignments.areas {
+        for uid in &area.uids {
+            area_of.insert(RoomKey::Uid(*uid), area.name.as_str());
+        }
+        for id in &area.ids {
+            area_of.insert(RoomKey::Id(*id), area.name.as_str());
+        }
+    }
+    for room in rooms {
+        let want = area_of
+            .get(&RoomKey::of(room))
+            .map(|name| format!("area:{name}"));
+        for old in room.meta.iter().filter(|m| m.starts_with("area:")) {
+            if want.as_ref() != Some(old) {
+                plan.changes.push(Change::DropMeta {
+                    id: room.id.0,
+                    meta: old.clone(),
+                });
+            }
+        }
+        if let Some(meta) = want
+            && !room.meta.contains(&meta)
+        {
+            plan.changes.push(Change::AddMeta {
+                id: room.id.0,
+                meta,
+            });
+        }
     }
 }
 
@@ -230,7 +314,7 @@ fn fold_of(curation: &Curation, name: &str) -> String {
             .decisions
             .regions
             .iter()
-            .find(|r| r.members.iter().any(|m| *m == current))
+            .find(|r| r.members.contains(&current))
         {
             current = r.name.clone();
             continue;
@@ -290,10 +374,8 @@ fn spread_regions(plan: &mut Plan, rooms: &[Room], curation: &Curation) {
                     region.insert(*id, name.to_owned());
                 }
             }
-            Change::DropMeta { id, meta } => {
-                if meta.starts_with("region:") {
-                    region.remove(id);
-                }
+            Change::DropMeta { id, meta } if meta.starts_with("region:") => {
+                region.remove(id);
             }
             _ => {}
         }
@@ -630,6 +712,9 @@ pub fn plan(map: &Map, curation: &Curation) -> Plan {
 
     // Pass 2f: regions spread into the ground between them.
     spread_regions(&mut plan, rooms, curation);
+
+    // Pass 2g: areas, as the mapper curated them.
+    tag_areas(&mut plan, rooms, curation);
 
     // Pass 3: rooms the game no longer has.
     for id in removed_rooms(rooms, &reachable) {

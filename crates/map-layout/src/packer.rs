@@ -233,7 +233,7 @@ pub(crate) fn commit_segments(
         let Some(room) = map.room(room_id) else {
             continue;
         };
-        for exit in &room.exits {
+        for exit in room.exits.iter().filter(|e| crate::regions::is_passage(e)) {
             let target_id = exit.to;
             if !group.positions.contains_key(&target_id) {
                 continue;
@@ -292,7 +292,7 @@ pub(crate) fn collect_connector_edges(
             let Some(room) = map.room(room_id) else {
                 continue;
             };
-            for exit in &room.exits {
+            for exit in room.exits.iter().filter(|e| crate::regions::is_passage(e)) {
                 let target_id = exit.to;
                 let Some(&other) = component_of.get(&target_id) else {
                     continue;
@@ -363,7 +363,7 @@ pub(crate) fn add_bridged_edges(
             let Some(room) = map.room(room_id) else {
                 continue;
             };
-            for exit in &room.exits {
+            for exit in room.exits.iter().filter(|e| crate::regions::is_passage(e)) {
                 let target_id = exit.to;
                 let Some(&target_group) = component_of_all.get(&target_id) else {
                     continue;
