@@ -16,7 +16,7 @@ use std::collections::{HashMap, HashSet};
 use cena_map::RoomId;
 
 use crate::positioner::Cell;
-use crate::scene::{Point, SceneEdgeKind, SheetScene};
+use crate::scene::{Point, SceneEdgeKind, SceneRoom, SheetScene};
 
 /// How close, in sheet cells, a line may pass a room's centre before it
 /// reads as running through the room. A drawn room is 18 px in a 28 px
@@ -27,13 +27,7 @@ pub const CLEARANCE: f32 = 0.4;
 /// rerouted around it where a bend can clear. Stubs are left alone: they
 /// are drawn as ticks at their ends, not as lines.
 pub fn route_edges(sheet: &mut SheetScene) {
-    let mut at: HashMap<(i32, i32), Vec<RoomId>> = HashMap::new();
-    for room in &sheet.rooms {
-        at.entry((room.cell.x, room.cell.y))
-            .or_default()
-            .push(room.id);
-    }
-    let rooms = Obstacles { at };
+    let rooms = Obstacles::of(&sheet.rooms);
     for edge in &mut sheet.edges {
         if edge.kind == SceneEdgeKind::Stub {
             continue;
@@ -51,14 +45,41 @@ pub fn route_edges(sheet: &mut SheetScene) {
 }
 
 /// Room centres on the sheet, by cell, for asking what a line passes near.
-struct Obstacles {
+/// Also what [`crate::quality`] measures a drawn sheet with, so the count of
+/// lines through rooms is the one this pass works to lower.
+pub(crate) struct Obstacles {
     at: HashMap<(i32, i32), Vec<RoomId>>,
 }
 
 impl Obstacles {
-    /// The rooms, other than `ends`, that the polyline `path` passes
-    /// within [`CLEARANCE`] of. Walked in half-cell steps, looking at the
-    /// cells around each step, so the cost is the line's length and not
+    /// The room centres of `rooms`.
+    pub(crate) fn of(rooms: &[SceneRoom]) -> Obstacles {
+        let mut at: HashMap<(i32, i32), Vec<RoomId>> = HashMap::new();
+        for room in rooms {
+            at.entry((room.cell.x, room.cell.y))
+                .or_default()
+                .push(room.id);
+        }
+        Obstacles { at }
+    }
+
+    /// The rooms, other than `ends`, that the polyline `path` passes within
+    /// [`CLEARANCE`] of.
+    pub(crate) fn rooms_near(&self, path: &[Point], ends: &[RoomId]) -> Vec<RoomId> {
+        let mut out = Vec::new();
+        for p in self.near(path, ends) {
+            #[allow(clippy::cast_possible_truncation)]
+            let cell = (p.x.round() as i32, p.y.round() as i32);
+            if let Some(ids) = self.at.get(&cell) {
+                out.extend(ids.iter().filter(|id| !ends.contains(id)));
+            }
+        }
+        out
+    }
+
+    /// The cells of rooms, other than `ends`, that the polyline `path`
+    /// passes within [`CLEARANCE`] of. Walked in half-cell steps, looking at
+    /// the cells around each step, so the cost is the line's length and not
     /// the size of its bounding box.
     fn near(&self, path: &[Point], ends: &[RoomId]) -> Vec<Point> {
         let mut seen: HashSet<(i32, i32)> = HashSet::new();
@@ -198,7 +219,7 @@ fn same(p: Point, q: Point) -> bool {
 }
 
 #[allow(clippy::cast_precision_loss)]
-fn point(c: Cell) -> Point {
+pub(crate) fn point(c: Cell) -> Point {
     Point {
         x: c.x as f32,
         y: c.y as f32,

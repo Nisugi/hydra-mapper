@@ -42,6 +42,7 @@ pub mod overrides;
 pub mod packer;
 pub mod pipeline;
 pub mod positioner;
+pub mod quality;
 pub mod regions;
 pub mod routing;
 pub mod satisfiable;
@@ -59,6 +60,7 @@ pub use pipeline::{
     generate_layout_with,
 };
 pub use positioner::{Cell, Group, PackMethod, Violation};
+pub use quality::Quality;
 pub use satisfiable::{Axis, Problem, is_satisfiable, place_by_order, problems};
 pub use scene::{MapScene, SheetScene, Unit, UnitKind, build_scene};
 pub use stats::LayoutStats;

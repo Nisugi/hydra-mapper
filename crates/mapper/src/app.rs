@@ -25,7 +25,7 @@ use crate::svg;
 /// rather than only on stderr -- a tool that cannot show a map should say
 /// why, not open blank.
 #[derive(Debug)]
-enum LoadProblem {
+pub(crate) enum LoadProblem {
     NoPath,
     CouldNotRead {
         path: String,
@@ -3234,7 +3234,7 @@ pub fn export_areas_headless(path: Option<&Path>) -> Result<String, String> {
     Ok(write_areas(&map, &store, &store_path))
 }
 
-fn load_map(path: Option<&Path>) -> Result<Map, LoadProblem> {
+pub(crate) fn load_map(path: Option<&Path>) -> Result<Map, LoadProblem> {
     let Some(path) = path else {
         return Err(LoadProblem::NoPath);
     };

@@ -1,0 +1,274 @@
+//! How well a drawn sheet reads, by the author's four rules for a tuned map
+//! (Hydra's `plan/53` §6 item 1): *"exits drawn right not against their
+//! direction, lines not drawn through rooms, buildings sitting under the
+//! right lines, exits without a direction being placed in a smart way."*
+//!
+//! Measured on the scene as it is drawn, after the overrides and the
+//! routing, because that is what a reader sees:
+//!
+//! 1. **Against their bearing**: an exit whose compass direction the drawn
+//!    offset contradicts, by the positioner's own test (signs, so a
+//!    stretched edge passes; `positioner.rs`, `validate_component`).
+//! 2. **Through rooms**: a drawn line passing within
+//!    [`CLEARANCE`](crate::routing::CLEARANCE) of a room it does not join,
+//!    by the routing pass's own test. Stubs are ticks, not lines.
+//! 3. **Under a line not theirs**: a building's room that a line passes
+//!    over, when neither end of that line is in the building.
+//! 4. **Exits with no direction**: a pair of rooms joined only by exits
+//!    with no bearing either way (`go door`, `out`, a climb). How they are
+//!    drawn: as a line of some length, as a stub, or not at all; and how
+//!    many of those lines cross another line.
+
+use std::collections::{HashMap, HashSet};
+
+use serde::Serialize;
+
+use cena_map::{Map, RoomId};
+
+use crate::Layout;
+use crate::direction::DirectionMap;
+use crate::routing::{Obstacles, point};
+use crate::scene::{MapScene, Point, STREETS, SceneEdge, SceneEdgeKind};
+
+/// One sheet's counts, or several summed.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct Quality {
+    /// Rooms drawn.
+    pub rooms: usize,
+    /// Rule 1: exits drawn against their compass direction.
+    pub against_bearing: usize,
+    /// Rule 2: drawn lines that pass over a room they do not join.
+    pub lines_through_rooms: usize,
+    /// Rule 3: building rooms under a line whose ends are both outside the
+    /// building.
+    pub rooms_under_foreign_lines: usize,
+    /// Rule 4: pairs of rooms joined only by exits with no direction.
+    pub directionless: usize,
+    /// ... of those, drawn as a line.
+    pub directionless_lines: usize,
+    /// ... drawn as a stub, the line too long to draw.
+    pub directionless_stubs: usize,
+    /// ... not drawn at all.
+    pub directionless_undrawn: usize,
+    /// ... drawn as a line that crosses another line.
+    pub directionless_crossing: usize,
+    /// The drawn lengths of the directionless lines, in sheet cells.
+    #[serde(skip)]
+    pub directionless_lengths: Vec<f32>,
+}
+
+impl Quality {
+    /// Add `other`'s counts to these.
+    pub fn add(&mut self, other: &Quality) {
+        self.rooms += other.rooms;
+        self.against_bearing += other.against_bearing;
+        self.lines_through_rooms += other.lines_through_rooms;
+        self.rooms_under_foreign_lines += other.rooms_under_foreign_lines;
+        self.directionless += other.directionless;
+        self.directionless_lines += other.directionless_lines;
+        self.directionless_stubs += other.directionless_stubs;
+        self.directionless_undrawn += other.directionless_undrawn;
+        self.directionless_crossing += other.directionless_crossing;
+        self.directionless_lengths
+            .extend_from_slice(&other.directionless_lengths);
+    }
+
+    /// The `q`th quantile (0 to 1) of the directionless lines' lengths.
+    #[must_use]
+    pub fn directionless_length(&self, q: f32) -> Option<f32> {
+        let mut lengths = self.directionless_lengths.clone();
+        if lengths.is_empty() {
+            return None;
+        }
+        lengths.sort_by(f32::total_cmp);
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            clippy::cast_precision_loss
+        )]
+        let at = ((lengths.len() - 1) as f32 * q.clamp(0.0, 1.0)).round() as usize;
+        lengths.get(at).copied()
+    }
+}
+
+/// `scene`'s counts: `layout` and `map` are what it was built from.
+#[must_use]
+pub fn measure(scene: &MapScene, layout: &Layout, map: &Map) -> Quality {
+    // The directions the scene was drawn by, corrections included, as
+    // `build_scene` takes them.
+    let mut dirs = DirectionMap::build(map);
+    dirs.apply_edge_overrides(map, &layout.edges);
+    let sheet = &scene.sheet;
+    let cell_of: HashMap<RoomId, (i32, i32)> = sheet
+        .rooms
+        .iter()
+        .map(|room| (room.id, (room.cell.x, room.cell.y)))
+        .collect();
+    let mut quality = Quality {
+        rooms: sheet.rooms.len(),
+        ..Quality::default()
+    };
+
+    // Rule 1, and the pairs rule 4 is about.
+    let mut directionless: HashSet<(RoomId, RoomId)> = HashSet::new();
+    for room in map.rooms() {
+        let Some(&(ax, ay)) = cell_of.get(&room.id) else {
+            continue;
+        };
+        for exit in &room.exits {
+            let Some(&(bx, by)) = cell_of.get(&exit.to) else {
+                continue;
+            };
+            match dirs.get(room.id, exit.to) {
+                Some(dir) if dir.is_compass() => {
+                    let (ex, ey) = dir.offset();
+                    if (bx - ax).signum() != ex.signum() || (by - ay).signum() != ey.signum() {
+                        quality.against_bearing += 1;
+                    }
+                }
+                None if dirs.get(exit.to, room.id).is_none()
+                    && crate::regions::is_passage(exit)
+                    && room.id != exit.to =>
+                {
+                    directionless.insert(pair(room.id, exit.to));
+                }
+                // Up and down, or a bearing only one way: not directionless.
+                _ => {}
+            }
+        }
+    }
+
+    // Rules 2 and 3.
+    let obstacles = Obstacles::of(&sheet.rooms);
+    let mut under: HashSet<RoomId> = HashSet::new();
+    for edge in sheet.edges.iter().filter(|e| e.kind != SceneEdgeKind::Stub) {
+        let ends = [edge.a_room, edge.b_room];
+        let crossed = obstacles.rooms_near(&path(edge), &ends);
+        if crossed.is_empty() {
+            continue;
+        }
+        quality.lines_through_rooms += 1;
+        let end_units = [scene.unit_of(edge.a_room), scene.unit_of(edge.b_room)];
+        for room in crossed {
+            match scene.unit_of(room) {
+                Some(unit) if unit != STREETS && !end_units.contains(&Some(unit)) => {
+                    under.insert(room);
+                }
+                _ => {}
+            }
+        }
+    }
+    quality.rooms_under_foreign_lines = under.len();
+
+    // Rule 4.
+    let drawn: HashMap<(RoomId, RoomId), &SceneEdge> = sheet
+        .edges
+        .iter()
+        .map(|edge| (pair(edge.a_room, edge.b_room), edge))
+        .collect();
+    let lines: Vec<(Vec<Point>, [RoomId; 2])> = sheet
+        .edges
+        .iter()
+        .filter(|e| e.kind != SceneEdgeKind::Stub)
+        .map(|e| (path(e), [e.a_room, e.b_room]))
+        .collect();
+    quality.directionless = directionless.len();
+    for ends in &directionless {
+        match drawn.get(ends) {
+            None => quality.directionless_undrawn += 1,
+            Some(edge) if edge.kind == SceneEdgeKind::Stub => quality.directionless_stubs += 1,
+            Some(edge) => {
+                quality.directionless_lines += 1;
+                let own = path(edge);
+                quality.directionless_lengths.push(length(&own));
+                let crosses = lines.iter().any(|(other, other_ends)| {
+                    !other_ends.contains(&edge.a_room)
+                        && !other_ends.contains(&edge.b_room)
+                        && paths_cross(&own, other)
+                });
+                if crosses {
+                    quality.directionless_crossing += 1;
+                }
+            }
+        }
+    }
+    quality
+}
+
+/// An unordered pair, smaller id first.
+fn pair(a: RoomId, b: RoomId) -> (RoomId, RoomId) {
+    if a.0 <= b.0 { (a, b) } else { (b, a) }
+}
+
+/// A drawn edge as the polyline it is drawn along.
+fn path(edge: &SceneEdge) -> Vec<Point> {
+    let mut points = vec![point(edge.a)];
+    points.extend(edge.via.iter().copied());
+    points.push(point(edge.b));
+    points
+}
+
+fn length(path: &[Point]) -> f32 {
+    path.windows(2)
+        .map(|s| (s[1].x - s[0].x).hypot(s[1].y - s[0].y))
+        .sum()
+}
+
+/// Whether any segment of `a` properly crosses any segment of `b`.
+fn paths_cross(a: &[Point], b: &[Point]) -> bool {
+    a.windows(2)
+        .any(|s| b.windows(2).any(|t| segments_cross(s[0], s[1], t[0], t[1])))
+}
+
+/// Whether segments `p1`-`p2` and `q1`-`q2` cross at a point inside both;
+/// touching at an end, or lying along each other, is not a crossing.
+fn segments_cross(p1: Point, p2: Point, q1: Point, q2: Point) -> bool {
+    let cross =
+        |o: Point, a: Point, b: Point| (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+    let d1 = cross(q1, q2, p1);
+    let d2 = cross(q1, q2, p2);
+    let d3 = cross(p1, p2, q1);
+    let d4 = cross(p1, p2, q2);
+    let eps = 1e-4;
+    ((d1 > eps && d2 < -eps) || (d1 < -eps && d2 > eps))
+        && ((d3 > eps && d4 < -eps) || (d3 < -eps && d4 > eps))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Point, segments_cross};
+
+    fn p(x: f32, y: f32) -> Point {
+        Point { x, y }
+    }
+
+    /// An X crosses; lines that meet at an end, run along each other, or
+    /// miss do not.
+    #[test]
+    fn a_crossing_is_one_inside_both_segments() {
+        assert!(segments_cross(
+            p(0.0, 0.0),
+            p(2.0, 2.0),
+            p(0.0, 2.0),
+            p(2.0, 0.0)
+        ));
+        assert!(!segments_cross(
+            p(0.0, 0.0),
+            p(1.0, 1.0),
+            p(1.0, 1.0),
+            p(2.0, 0.0)
+        ));
+        assert!(!segments_cross(
+            p(0.0, 0.0),
+            p(2.0, 0.0),
+            p(1.0, 0.0),
+            p(3.0, 0.0)
+        ));
+        assert!(!segments_cross(
+            p(0.0, 0.0),
+            p(1.0, 0.0),
+            p(0.0, 1.0),
+            p(1.0, 1.0)
+        ));
+    }
+}

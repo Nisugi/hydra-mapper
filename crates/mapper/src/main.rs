@@ -20,6 +20,7 @@ mod focus;
 mod inspect;
 mod overrides;
 mod placement;
+mod quality_report;
 mod room_table;
 mod svg;
 
@@ -53,6 +54,23 @@ fn main() -> eframe::Result {
             .or_else(|| std::env::var_os(MAP_ENV).map(PathBuf::from))
             .or_else(bundle::default_path);
         match app::import_changes_headless(&changes, path.as_deref()) {
+            Ok(note) => println!("{note}"),
+            Err(problem) => {
+                eprintln!("{problem}");
+                std::process::exit(1);
+            }
+        }
+        return Ok(());
+    }
+    // `--quality [map]`: every area laid out, measured by the four rules
+    // and timed, into `<map>.quality.tsv`.
+    if flag.as_deref() == Some("--quality") {
+        let path = std::env::args()
+            .nth(2)
+            .map(PathBuf::from)
+            .or_else(|| std::env::var_os(MAP_ENV).map(PathBuf::from))
+            .or_else(bundle::default_path);
+        match quality_report::quality_headless(path.as_deref()) {
             Ok(note) => println!("{note}"),
             Err(problem) => {
                 eprintln!("{problem}");
