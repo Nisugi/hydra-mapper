@@ -128,8 +128,8 @@ fn main() {
     }
     for (name, ids) in &rows {
         let mut fields = vec![String::new(); columns.len()];
-        fields[name_at] = name.clone();
-        fields[source_at] = "official layout".to_owned();
+        fields[name_at].clone_from(name);
+        "official layout".clone_into(&mut fields[source_at]);
         fields[rooms_at] = ids.len().to_string();
         fields[ids_at] = ids.iter().map(u32::to_string).collect::<Vec<_>>().join(" ");
         let _ = writeln!(out, "{}", fields.join("\t"));

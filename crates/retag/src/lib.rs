@@ -586,6 +586,45 @@ impl Plan {
     }
 }
 
+/// Each room's disposition as its marks: the verdict's and the event's
+/// meta added, and the tags they subsume dropped.
+fn apply_verdicts(
+    plan: &mut Plan,
+    rooms: &[Room],
+    assigned: &BTreeMap<u32, (Verdict, Option<String>)>,
+) {
+    let by_id: BTreeMap<u32, &Room> = rooms.iter().map(|r| (r.id.0, r)).collect();
+    for (id, (verdict, event)) in assigned {
+        *plan.verdicts.entry(*verdict).or_default() += 1;
+        let Some(room) = by_id.get(id) else { continue };
+        if let Some(meta) = verdict.meta()
+            && !room.meta.iter().any(|m| m == meta)
+        {
+            plan.changes.push(Change::AddMeta {
+                id: *id,
+                meta: meta.to_owned(),
+            });
+        }
+        if let Some(event) = event {
+            let meta = format!("event:{event}");
+            if !room.meta.contains(&meta) {
+                plan.changes.push(Change::AddMeta { id: *id, meta });
+            }
+        }
+        // The tags this subsumes. `rewritten` is deliberately not here:
+        // Cairnfang Manor is rewritten and live, so it is not a
+        // disposition and keeps its tag.
+        for tag in ["gone", "closed", "missing"] {
+            if room.tags.iter().any(|t| t == tag) {
+                plan.changes.push(Change::DropTag {
+                    id: *id,
+                    tag: tag.to_owned(),
+                });
+            }
+        }
+    }
+}
+
 /// Work out every change, without making any.
 ///
 /// `plan` and `apply` share this so the report cannot drift from the
@@ -651,36 +690,8 @@ pub fn plan(map: &Map, curation: &Curation) -> Plan {
         }
     }
 
+    apply_verdicts(&mut plan, rooms, &assigned);
     let by_id: BTreeMap<u32, &Room> = rooms.iter().map(|r| (r.id.0, r)).collect();
-    for (id, (verdict, event)) in &assigned {
-        *plan.verdicts.entry(*verdict).or_default() += 1;
-        let Some(room) = by_id.get(id) else { continue };
-        if let Some(meta) = verdict.meta()
-            && !room.meta.iter().any(|m| m == meta)
-        {
-            plan.changes.push(Change::AddMeta {
-                id: *id,
-                meta: meta.to_owned(),
-            });
-        }
-        if let Some(event) = event {
-            let meta = format!("event:{event}");
-            if !room.meta.contains(&meta) {
-                plan.changes.push(Change::AddMeta { id: *id, meta });
-            }
-        }
-        // The tags this subsumes. `rewritten` is deliberately not here:
-        // Cairnfang Manor is rewritten and live, so it is not a
-        // disposition and keeps its tag.
-        for tag in ["gone", "closed", "missing"] {
-            if room.tags.iter().any(|t| t == tag) {
-                plan.changes.push(Change::DropTag {
-                    id: *id,
-                    tag: tag.to_owned(),
-                });
-            }
-        }
-    }
 
     // Pass 2b: the disposition tags no area rule reached.
     convert_loose_tags(&mut plan, rooms, curation, &assigned, &reachable);

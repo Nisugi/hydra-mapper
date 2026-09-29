@@ -1,4 +1,4 @@
-//! What would derive_areas' regions look like if they came from
+//! What would `derive_areas`' regions look like if they came from
 //! `meta:region:` instead of munging `location`?
 #![allow(clippy::expect_used, reason = "hand-run probe")]
 use std::collections::{BTreeMap, BTreeSet};

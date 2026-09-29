@@ -45,7 +45,7 @@ fn main() {
                     .entry(loc.clone())
                     .or_default()
                     .entry(reg.to_owned())
-                    .or_default() += 1
+                    .or_default() += 1;
             }
             None => *unfilled.entry(loc.clone()).or_default() += 1,
         }

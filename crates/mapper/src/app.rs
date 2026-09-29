@@ -1343,6 +1343,31 @@ impl MapperApp {
         edit
     }
 
+    /// What the back button returns to, named rather than numbered: "back
+    /// to [Town Square Central]" says where it goes.
+    fn previous_title(&self) -> Option<String> {
+        self.trail.last().and_then(|&id| {
+            self.map
+                .as_ref()
+                .ok()
+                .and_then(|m| m.room(id))
+                .and_then(|r| r.title.first().cloned())
+                .or_else(|| Some(format!("room {}", id.0)))
+        })
+    }
+
+    /// The inspector's closing, following an exit, or going back.
+    fn after_inspector(&mut self, open: bool, follow: Option<RoomId>, back: bool) {
+        if !open {
+            self.inspected = None;
+            self.trail.clear();
+        } else if let Some(next) = follow {
+            self.walk_to(next);
+        } else if back {
+            self.inspected = self.trail.pop();
+        }
+    }
+
     /// The inspector panel, drawn before the central panel so egui gives
     /// the canvas whatever space is left.
     fn inspector_panel(&mut self, ui: &mut egui::Ui, can_edit: bool) -> Option<EditAction> {
@@ -1360,6 +1385,7 @@ impl MapperApp {
         // holds `&mut self.new_area`, so nothing can call a `&self`
         // method after that point.
         let (picked_rooms, picked_keys) = self.picked();
+        let previous = self.previous_title();
         let mut clear_selection = false;
 
         let mut edit = None;
@@ -1378,37 +1404,9 @@ impl MapperApp {
         let visiting = shown.subset.room(id).is_none();
         let mut follow = None;
         let mut back = false;
-        // What the back button returns to, named rather than numbered:
-        // "back to [Town Square Central]" says where it goes.
-        let previous = self.trail.last().and_then(|&id| {
-            self.map
-                .as_ref()
-                .ok()
-                .and_then(|m| m.room(id))
-                .and_then(|r| r.title.first().cloned())
-                .or_else(|| Some(format!("room {}", id.0)))
-        });
 
         egui::Panel::right("inspector").show(ui, |ui| {
-            ui.horizontal(|ui| {
-                if ui
-                    .button("x")
-                    .on_hover_text("Close the inspector")
-                    .clicked()
-                {
-                    open = false;
-                }
-                if let Some(previous) = &previous
-                    && ui
-                        .button("\u{2190}")
-                        .on_hover_text(format!("Back to {previous}"))
-                        .clicked()
-                {
-                    back = true;
-                }
-                ui.label("Inspector");
-            });
-            ui.separator();
+            inspector_header(ui, previous.as_deref(), &mut open, &mut back);
             if visiting {
                 // A room reached through an exit out of this area. It is
                 // not laid out here, so there are no layout diagnostics
@@ -1463,20 +1461,7 @@ impl MapperApp {
             // Editing controls live below the facts, so the panel
             // reads the same whether or not Edit is on.
             ui.separator();
-            let key = RoomKey::of(id, &shown.subset);
-            if store
-                .location(&shown.name)
-                .is_some_and(|l| l.room_pins.contains_key(&key))
-                && ui
-                    .button("Unpin room")
-                    .on_hover_text("Put this room back where the solver placed it")
-                    .clicked()
-            {
-                *edit_out = Some(EditAction::UnpinRoom { key });
-            }
-            if let Some(facts) = RoomFacts::gather(id, &shown.subset, &shown.layout)
-                && let Some(action) = edges_editor(ui, shown, store, &facts)
-            {
+            if let Some(action) = room_edits(ui, shown, store, id) {
                 *edit_out = Some(action);
             }
             if let Some(action) = whole.and_then(|w| {
@@ -1488,14 +1473,7 @@ impl MapperApp {
                 *edit_out = Some(action);
             }
         });
-        if !open {
-            self.inspected = None;
-            self.trail.clear();
-        } else if let Some(next) = follow {
-            self.walk_to(next);
-        } else if back {
-            self.inspected = self.trail.pop();
-        }
+        self.after_inspector(open, follow, back);
         // An assignment consumes the selection -- leaving it picked
         // invites assigning the same rooms twice -- but only
         // one made FROM the selection. Unpinning a room or fixing an
@@ -2403,6 +2381,61 @@ fn edge_rows(
         });
         ui.small(format!("   -> {title}"));
     }
+}
+
+/// The inspector's top row: close, and back to the room it came from.
+fn inspector_header(ui: &mut egui::Ui, previous: Option<&str>, open: &mut bool, back: &mut bool) {
+    ui.horizontal(|ui| {
+        if ui
+            .button("x")
+            .on_hover_text("Close the inspector")
+            .clicked()
+        {
+            *open = false;
+        }
+        if let Some(previous) = previous
+            && ui
+                .button("\u{2190}")
+                .on_hover_text(format!("Back to {previous}"))
+                .clicked()
+        {
+            *back = true;
+        }
+        ui.label("Inspector");
+    });
+    ui.separator();
+}
+
+/// The inspected room's own controls: *Unpin room*, then its edges. Both
+/// are drawn; an edge's edit wins if both are made in one frame.
+fn room_edits(
+    ui: &mut egui::Ui,
+    shown: &Shown,
+    store: &MapOverrides,
+    id: RoomId,
+) -> Option<EditAction> {
+    let unpin = unpin_button(ui, shown, store, id);
+    let edges = RoomFacts::gather(id, &shown.subset, &shown.layout)
+        .and_then(|facts| edges_editor(ui, shown, store, &facts));
+    edges.or(unpin)
+}
+
+/// *Unpin room*, for a room with a hand pin.
+fn unpin_button(
+    ui: &mut egui::Ui,
+    shown: &Shown,
+    store: &MapOverrides,
+    id: RoomId,
+) -> Option<EditAction> {
+    let key = RoomKey::of(id, &shown.subset);
+    (store
+        .location(&shown.name)
+        .is_some_and(|l| l.room_pins.contains_key(&key))
+        && ui
+            .button("Unpin room")
+            .on_hover_text("Put this room back where the solver placed it")
+            .clicked())
+    .then_some(EditAction::UnpinRoom { key })
 }
 
 /// The editing half of the inspector: which plate this room is on, and the
