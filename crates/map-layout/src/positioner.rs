@@ -1152,6 +1152,14 @@ fn reweld_violations(
     }
 }
 
+/// How much longer, in total edge length, a group put right by
+/// [`crate::satisfiable::place_near`] may be drawn. Measured on gs.map,
+/// events aside, exits against their direction from 649: at 5%, 521; at
+/// 10%, 505; at 15%, 499; at 20%, 488 -- and lines crossing another fewest
+/// at 10% (1,878, against 1,885, 1,880 and 1,882), every other rule no
+/// worse at any of them. The knee.
+const NEAR_STRETCH_PERCENT: i64 = 10;
+
 /// Put right what violations the solver left on satisfiable data, when an
 /// arrangement that does is a clean win; the violations that remain.
 fn repair_component(
@@ -1177,9 +1185,15 @@ fn repair_component(
     {
         optimize_component(room_order, &mut placed, map, dirs);
         let fixed = validate_component(room_order, &placed, map, dirs);
+        // A little longer is allowed here, as it is not for the ordering
+        // pass below: this moves only what the bearings force, so it
+        // cannot redraw the group. On gs.map every satisfiable group it
+        // tried it put right entirely, and 37 were refused on length
+        // alone, 16 of them for under 2%.
         if fixed.len() < violations.len()
             && stacked(&placed) == 0
-            && edge_length(room_order, &placed, map) <= edge_length(room_order, positions, map)
+            && edge_length(room_order, &placed, map) * 100
+                <= edge_length(room_order, positions, map) * (100 + NEAR_STRETCH_PERCENT)
         {
             *positions = placed;
             violations = fixed;
