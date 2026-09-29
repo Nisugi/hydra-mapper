@@ -226,39 +226,48 @@ impl RoomKey {
     }
 }
 
-/// Write `meta:area:<name>` from the mapper's curated areas, and take it
-/// off any room no area holds any more, so unassigning in the mapper
-/// reaches the map too. One area per room: a room named in two blocks
-/// takes the later, as the store would.
+/// Write `meta:area:<name>` from the mapper's curated areas, and
+/// `meta:mapname:<map>` where the area is on a map, and take either off any
+/// room that no longer has it, so unassigning in the mapper reaches the
+/// map too. One area per room: a room named in two blocks takes the
+/// later, as the store would.
 fn tag_areas(plan: &mut Plan, rooms: &[Room], curation: &Curation) {
-    let mut area_of: BTreeMap<RoomKey, &str> = BTreeMap::new();
+    let mut area_of: BTreeMap<RoomKey, &rules::AreaAssignment> = BTreeMap::new();
     for area in &curation.assignments.areas {
         for uid in &area.uids {
-            area_of.insert(RoomKey::Uid(*uid), area.name.as_str());
+            area_of.insert(RoomKey::Uid(*uid), area);
         }
         for id in &area.ids {
-            area_of.insert(RoomKey::Id(*id), area.name.as_str());
+            area_of.insert(RoomKey::Id(*id), area);
         }
     }
     for room in rooms {
-        let want = area_of
-            .get(&RoomKey::of(room))
-            .map(|name| format!("area:{name}"));
-        for old in room.meta.iter().filter(|m| m.starts_with("area:")) {
-            if want.as_ref() != Some(old) {
-                plan.changes.push(Change::DropMeta {
+        let area = area_of.get(&RoomKey::of(room));
+        let want = [
+            ("area:", area.map(|a| format!("area:{}", a.name))),
+            (
+                "mapname:",
+                area.and_then(|a| a.map.as_ref())
+                    .map(|m| format!("mapname:{m}")),
+            ),
+        ];
+        for (prefix, want) in want {
+            for old in room.meta.iter().filter(|m| m.starts_with(prefix)) {
+                if want.as_ref() != Some(old) {
+                    plan.changes.push(Change::DropMeta {
+                        id: room.id.0,
+                        meta: old.clone(),
+                    });
+                }
+            }
+            if let Some(meta) = want
+                && !room.meta.contains(&meta)
+            {
+                plan.changes.push(Change::AddMeta {
                     id: room.id.0,
-                    meta: old.clone(),
+                    meta,
                 });
             }
-        }
-        if let Some(meta) = want
-            && !room.meta.contains(&meta)
-        {
-            plan.changes.push(Change::AddMeta {
-                id: room.id.0,
-                meta,
-            });
         }
     }
 }

@@ -19,6 +19,7 @@ mod draw;
 mod export;
 mod focus;
 mod inspect;
+mod maps;
 mod overrides;
 mod placement;
 mod quality_report;
@@ -85,6 +86,21 @@ fn main() -> eframe::Result {
             map_at(2).as_deref(),
             check,
         ));
+        return Ok(());
+    }
+    // `--suggest-maps [map]`: the areas worth putting on one map.
+    // `--accept-map <name> [map]`: put the suggestion of that name on it,
+    // in the store, as the window's Accept does.
+    if flag.as_deref() == Some("--suggest-maps") {
+        finish(maps::suggest_headless(map_at(2).as_deref(), None));
+        return Ok(());
+    }
+    if flag.as_deref() == Some("--accept-map") {
+        let Some(name) = std::env::args().nth(2) else {
+            eprintln!("usage: cena-mapper --accept-map <name> [map]");
+            std::process::exit(2);
+        };
+        finish(maps::suggest_headless(map_at(3).as_deref(), Some(&name)));
         return Ok(());
     }
     // `--plan-areas [map]`: say where the rooms with no area would go.

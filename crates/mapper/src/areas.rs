@@ -83,13 +83,17 @@ pub enum AreaKind {
     /// Plates a person made, and moved rooms onto, to keep satellites off
     /// a town's own sheet. See [`crate::overrides`].
     Plates,
+    /// Maps: curated areas laid out together as one sheet. See
+    /// [`crate::maps`].
+    Maps,
 }
 
 impl AreaKind {
     /// Every list, in tab order.
-    pub const ALL: [AreaKind; 5] = [
+    pub const ALL: [AreaKind; 6] = [
         AreaKind::Official,
         AreaKind::Region,
+        AreaKind::Maps,
         AreaKind::Location,
         AreaKind::Derived,
         AreaKind::Plates,
@@ -103,6 +107,7 @@ impl AreaKind {
             AreaKind::Location => "Location",
             AreaKind::Derived => "Derived",
             AreaKind::Plates => "Plates",
+            AreaKind::Maps => "Maps",
         }
     }
 }
@@ -127,6 +132,9 @@ impl Area {
             // that name would otherwise share a grid.
             AreaKind::Region if self.parent.is_some() => format!("curated:{}", self.name),
             AreaKind::Region => format!("region:{}", self.name),
+            // A map is often named as one of its areas' locations, and
+            // its corrections are its own sheet's.
+            AreaKind::Maps => format!("map:{}", self.name),
             _ => self.name.clone(),
         }
     }
@@ -165,6 +173,7 @@ pub struct Areas {
     pub location: Vec<Area>,
     pub derived: Vec<Area>,
     pub plates: Vec<Area>,
+    pub maps: Vec<Area>,
     /// Every room worth laying out, whichever list names it: see
     /// [`layout_rooms`].
     pub placeable: HashSet<RoomId>,
@@ -216,6 +225,7 @@ impl Areas {
             location: location_areas(map, &claimed),
             derived: derived_areas(map),
             plates: plate_areas(map, store),
+            maps: crate::maps::map_areas(map, store, &baseline),
             placeable: cena_map_layout::regions::placeable_rooms(map),
             baseline,
         }
@@ -231,6 +241,7 @@ impl Areas {
             AreaKind::Location => &self.location,
             AreaKind::Derived => &self.derived,
             AreaKind::Plates => &self.plates,
+            AreaKind::Maps => &self.maps,
         }
     }
 }

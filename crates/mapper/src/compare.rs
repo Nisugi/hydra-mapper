@@ -146,7 +146,8 @@ pub fn compare_headless(area: &str, path: Option<&Path>) -> Result<String, Strin
     // pictures and the rules still say how it reads.
     let none = overrides::LocationOverrides::default();
     let hand = store
-        .location(&format!("curated:{area}"))
+        .location(&format!("map:{area}"))
+        .or_else(|| store.location(&format!("curated:{area}")))
         .or_else(|| store.location(area))
         .unwrap_or(&none);
     let edges = hand.edge_overrides(&subset);

@@ -1,22 +1,27 @@
 //! The areas the map is laid out by, and the rooms each is laid out from:
 //! what the mapper's window and gate use, and what Hydra lays out at launch
 //! (`plan/53` §7). An area is the one baked into the map as `meta:area:`
-//! by the mapper's `retag`.
+//! by the mapper's `retag`, and a map a group of them laid out as one sheet
+//! (`meta:mapname:`): Cold River and the Hinterwilds are one map, each an area
+//! of it.
 
 use std::collections::{BTreeMap, HashSet};
 
 use cena_map::{Map, RoomId};
 
-/// Every area baked into `map`, by name, with its own rooms.
+/// Every sheet baked into `map`, by name, with its own rooms: a map's
+/// areas together under the map's name, and an area on no map alone.
 #[must_use]
 pub fn baked(map: &Map) -> BTreeMap<String, Vec<RoomId>> {
-    let mut by_area: BTreeMap<String, Vec<RoomId>> = BTreeMap::new();
+    let mut by_sheet: BTreeMap<String, Vec<RoomId>> = BTreeMap::new();
     for room in map.rooms() {
-        if let Some(area) = room.meta.iter().find_map(|m| m.strip_prefix("area:")) {
-            by_area.entry(area.to_owned()).or_default().push(room.id);
+        let find = |prefix: &str| room.meta.iter().find_map(|m| m.strip_prefix(prefix));
+        if let Some(area) = find("area:") {
+            let sheet = find("mapname:").unwrap_or(area);
+            by_sheet.entry(sheet.to_owned()).or_default().push(room.id);
         }
     }
-    by_area
+    by_sheet
 }
 
 /// The rooms to lay an area out from: its own, plus the neighbours a
@@ -103,4 +108,45 @@ pub fn layout_rooms(
         .chain(pulled.into_iter().filter(|id| !own.contains(id)))
         .filter_map(|id| map.room(id).cloned())
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn room(id: u32, meta: &[&str]) -> cena_map::Room {
+        cena_map::Room {
+            id: RoomId(id),
+            uid: vec![],
+            title: vec![],
+            description: vec![],
+            paths: vec![],
+            location: None,
+            location_unknowable: false,
+            check_location: false,
+            unique_loot: vec![],
+            climate: None,
+            terrain: None,
+            tags: vec![],
+            meta: meta.iter().map(|m| (*m).to_owned()).collect(),
+            image: None,
+            exits: vec![],
+        }
+    }
+
+    /// A map's areas are one sheet under the map's name; an area on no
+    /// map is its own; the mapper's `map:` flags name no map.
+    #[test]
+    fn a_maps_areas_are_one_sheet() {
+        let map = Map::from_rooms(vec![
+            room(1, &["area:cold-river", "mapname:the-hinterwilds"]),
+            room(2, &["area:hinterwilds", "mapname:the-hinterwilds"]),
+            room(3, &["area:icemule", "map:virtual room"]),
+        ])
+        .expect("unique ids");
+        let sheets = baked(&map);
+        assert_eq!(sheets.len(), 2);
+        assert_eq!(sheets["the-hinterwilds"], [RoomId(1), RoomId(2)]);
+        assert_eq!(sheets["icemule"], [RoomId(3)]);
+    }
 }
