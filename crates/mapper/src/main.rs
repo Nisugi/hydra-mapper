@@ -63,14 +63,19 @@ fn main() -> eframe::Result {
         return Ok(());
     }
     // `--quality [map]`: every area laid out, measured by the four rules
-    // and timed, into `<map>.quality.tsv`.
-    if flag.as_deref() == Some("--quality") {
+    // and timed, into `<map>.quality.tsv`. `--quality-check [map]`: the
+    // same, refused where an area is worse than that table.
+    if let Some(check) = match flag.as_deref() {
+        Some("--quality") => Some(false),
+        Some("--quality-check") => Some(true),
+        _ => None,
+    } {
         let path = std::env::args()
             .nth(2)
             .map(PathBuf::from)
             .or_else(|| std::env::var_os(MAP_ENV).map(PathBuf::from))
             .or_else(bundle::default_path);
-        match quality_report::quality_headless(path.as_deref()) {
+        match quality_report::quality_headless(path.as_deref(), check) {
             Ok(note) => println!("{note}"),
             Err(problem) => {
                 eprintln!("{problem}");
