@@ -321,6 +321,7 @@ fn moves_by(action: &Action) -> Moves<'_> {
 /// it along exits whose target is inside the selection, so one pass covers
 /// all later lookups (a performance cache only; semantics match resolving
 /// each edge on demand).
+#[derive(Clone)]
 pub struct DirectionMap {
     map: HashMap<(RoomId, RoomId), Dir>,
 }

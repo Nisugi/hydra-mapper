@@ -252,7 +252,7 @@ fn paths_cross(a: &[Point], b: &[Point]) -> bool {
 
 /// Whether segments `p1`-`p2` and `q1`-`q2` cross at a point inside both;
 /// touching at an end, or lying along each other, is not a crossing.
-fn segments_cross(p1: Point, p2: Point, q1: Point, q2: Point) -> bool {
+pub(crate) fn segments_cross(p1: Point, p2: Point, q1: Point, q2: Point) -> bool {
     let cross =
         |o: Point, a: Point, b: Point| (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
     let d1 = cross(q1, q2, p1);

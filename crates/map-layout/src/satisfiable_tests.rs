@@ -385,3 +385,49 @@ fn classes_ranked_onto_one_cell_are_pushed_apart() {
         room(8, vec![exit(7, "west")]),
     ]);
 }
+
+/// A loop that cannot be honoured is drawn the least wrong: one exit of it
+/// set aside, and every other exit then honoured where the rooms already
+/// were -- the loop's three east exits, and a fourth room's plain one.
+#[test]
+fn a_contradiction_is_drawn_with_one_exit_set_aside() {
+    use std::collections::HashMap;
+
+    use crate::positioner::Cell;
+    use crate::satisfiable::{place_near, relax};
+
+    let rooms = vec![
+        room(1, vec![exit(2, "east"), exit(4, "north")]),
+        room(2, vec![exit(3, "east")]),
+        room(3, vec![exit(1, "east")]),
+        room(4, vec![exit(1, "south")]),
+    ];
+    let ids: Vec<RoomId> = rooms.iter().map(|r| r.id).collect();
+    let map = Map::from_rooms(rooms).expect("no duplicate ids");
+    let dirs = DirectionMap::build(&map);
+    assert!(place_near(&ids, &HashMap::new(), &map, &dirs).is_none());
+
+    let (relaxed, aside) = relax(&ids, &map, &dirs).expect("a loop can be relaxed");
+    assert_eq!(
+        aside.len(),
+        1,
+        "one exit breaks a three-room loop: {aside:?}"
+    );
+    assert!(problems(&ids, &map, &relaxed).is_empty());
+
+    let start: HashMap<RoomId, Cell> = ids.iter().map(|&r| (r, Cell { x: 0, y: 0 })).collect();
+    let placed = place_near(&ids, &start, &map, &relaxed).expect("satisfiable once relaxed");
+    let at = |id: u32| placed[&RoomId(id)];
+    assert!(
+        at(4).y < at(1).y,
+        "the plain exit is honoured: 4 north of 1"
+    );
+    let wrong = [(1, 2), (2, 3), (3, 1)]
+        .iter()
+        .filter(|&&(a, b)| at(b).x <= at(a).x || at(b).y != at(a).y)
+        .count();
+    assert_eq!(
+        wrong, 1,
+        "only the exit set aside is drawn wrong: {placed:?}"
+    );
+}

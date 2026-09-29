@@ -1224,7 +1224,74 @@ fn repair_component(
             violations = fixed;
         }
     }
+    // A group whose bearings contradict: drawn with the fewest of them set
+    // aside, every other honoured (`satisfiable::relax`), on the same terms.
+    if !violations.is_empty()
+        && let Some((relaxed, _aside)) = crate::satisfiable::relax(room_order, map, dirs)
+        && let Some(mut placed) =
+            crate::satisfiable::place_near(room_order, positions, map, &relaxed)
+    {
+        optimize_component(room_order, &mut placed, map, dirs);
+        let fixed = validate_component(room_order, &placed, map, dirs);
+        // And its directionless lines crossing no more: freed of the exits
+        // set aside, a group can put its bearings right by folding its
+        // doorways across each other.
+        if fixed.len() < violations.len()
+            && stacked(&placed) == 0
+            && edge_length(room_order, &placed, map) * 100
+                <= edge_length(room_order, positions, map) * (100 + NEAR_STRETCH_PERCENT)
+            && doorways_crossing(room_order, &placed, map, dirs)
+                <= doorways_crossing(room_order, positions, map, dirs)
+        {
+            *positions = placed;
+            violations = fixed;
+        }
+    }
     violations
+}
+
+/// How many lines between rooms of the component joined only by exits with
+/// no direction cross another of its lines, by the quality measure's own
+/// test (`quality::segments_cross`).
+fn doorways_crossing(
+    room_order: &[RoomId],
+    positions: &HashMap<RoomId, Cell>,
+    map: &Map,
+    dirs: &DirectionMap,
+) -> usize {
+    let point = |c: Cell| crate::routing::point(c);
+    let mut seen: HashSet<(RoomId, RoomId)> = HashSet::new();
+    let mut lines: Vec<(RoomId, RoomId, bool)> = Vec::new();
+    for room in room_order.iter().filter_map(|&id| map.room(id)) {
+        for exit in &room.exits {
+            let (a, b) = (room.id, exit.to);
+            if a == b || !positions.contains_key(&b) {
+                continue;
+            }
+            let key = if a < b { (a, b) } else { (b, a) };
+            if seen.insert(key) {
+                let doorway = dirs.get(a, b).is_none() && dirs.get(b, a).is_none();
+                lines.push((key.0, key.1, doorway));
+            }
+        }
+    }
+    lines
+        .iter()
+        .filter(|(_, _, doorway)| *doorway)
+        .filter(|&&(a, b, _)| {
+            let (p1, p2) = (point(positions[&a]), point(positions[&b]));
+            lines.iter().any(|&(c, d, _)| {
+                ![c, d].contains(&a)
+                    && ![c, d].contains(&b)
+                    && crate::quality::segments_cross(
+                        p1,
+                        p2,
+                        point(positions[&c]),
+                        point(positions[&d]),
+                    )
+            })
+        })
+        .count()
 }
 
 /// Total Chebyshev length of every exit between rooms of the component:
