@@ -521,6 +521,7 @@ pub(crate) fn estimate_scale(
     packed: &[usize],
     anchors: &HashMap<usize, Vec<Anchor>>,
     primary_image: Option<&str>,
+    map: &Map,
 ) -> f64 {
     let Some(primary) = primary_image else {
         return DEFAULT_SCALE;
@@ -554,6 +555,28 @@ pub(crate) fn estimate_scale(
         }
     }
 
+    // No group has two pictured rooms to measure by (a waterway of
+    // single rooms, every exit a `go`): two pictured rooms an exit joins
+    // are a step apart.
+    if ratios.is_empty() {
+        let mut at: HashMap<RoomId, (f64, f64)> = HashMap::new();
+        for list in anchors.values() {
+            for a in list.iter().filter(|a| a.image == primary) {
+                at.insert(a.room_id, (a.px, a.py));
+            }
+        }
+        for (&id, &(x, y)) in &at {
+            let Some(room) = map.room(id) else { continue };
+            for exit in room.exits.iter().filter(|e| crate::regions::is_passage(e)) {
+                if let Some(&(ox, oy)) = at.get(&exit.to) {
+                    let d = (x - ox).abs().max((y - oy).abs());
+                    if d > 0.0 {
+                        ratios.push(d);
+                    }
+                }
+            }
+        }
+    }
     if ratios.is_empty() {
         return DEFAULT_SCALE;
     }

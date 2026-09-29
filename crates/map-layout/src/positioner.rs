@@ -293,7 +293,7 @@ fn directional_bfs(
                 // interior shelf exists to place. Following those too
                 // welds every shop onto the street and makes one
                 // 27,959-room group of the world.
-                if !is_building_entrance(map, air, room_id, target_id) {
+                if welds(map, air, room_id, target_id) {
                     pending.push((room_id, target_id));
                 }
                 continue;
@@ -327,6 +327,77 @@ fn directional_bfs(
                 unpositioned.remove(&target_id);
                 queue.push_back(target_id);
             }
+        }
+        follow_inbound(
+            map,
+            dirs,
+            room_id,
+            queue,
+            positions,
+            occupied,
+            room_order,
+            unpositioned,
+        );
+    }
+}
+
+/// The rooms with an arrow into `room_id` and none back, placed opposite
+/// their arrow, so a one-way exit keeps both its rooms in one group
+/// whichever way it is written. Once a line with no direction stopped
+/// joining groups outdoors ([`welds`]), a room whose only tie was an arrow
+/// into the group started a group of its own, and 37 arrows between two
+/// groups were drawn the wrong way round; with this, 0.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the BFS's working state, as directional_bfs"
+)]
+fn follow_inbound(
+    map: &Map,
+    dirs: &DirectionMap,
+    room_id: RoomId,
+    queue: &mut VecDeque<RoomId>,
+    positions: &mut HashMap<RoomId, Cell>,
+    occupied: &mut HashSet<Cell>,
+    room_order: &mut Vec<RoomId>,
+    unpositioned: &mut HashSet<RoomId>,
+) {
+    let inbound: Vec<(RoomId, (i32, i32))> = map
+        .rooms()
+        .iter()
+        .filter(|r| unpositioned.contains(&r.id))
+        .filter_map(|r| {
+            r.exits
+                .iter()
+                .filter(|e| e.to == room_id && crate::regions::is_passage(e))
+                .find_map(|_| dirs.get(r.id, room_id))
+                .filter(|d| d.is_compass())
+                .map(|d| (r.id, d.offset()))
+        })
+        .collect();
+    for (from_id, (dx, dy)) in inbound {
+        if !unpositioned.contains(&from_id) {
+            continue;
+        }
+        let pos = (*positions)[&room_id];
+        let mut cell = Cell {
+            x: pos.x - dx,
+            y: pos.y - dy,
+        };
+        if occupied.contains(&cell) {
+            rip_grid(positions, pos, (-dx, -dy));
+            *occupied = positions.values().copied().collect();
+            let fresh = (*positions)[&room_id];
+            cell = Cell {
+                x: fresh.x - dx,
+                y: fresh.y - dy,
+            };
+        }
+        if !occupied.contains(&cell) {
+            positions.insert(from_id, cell);
+            occupied.insert(cell);
+            room_order.push(from_id);
+            unpositioned.remove(&from_id);
+            queue.push_back(from_id);
         }
     }
 }
@@ -383,7 +454,7 @@ fn drain_connectors(
                         continue;
                     }
                     let Some(direction) = dirs.get(id, next) else {
-                        if !is_building_entrance(map, air, id, next) {
+                        if welds(map, air, id, next) {
                             still_pending.push((id, next));
                         }
                         continue;
@@ -1160,8 +1231,69 @@ fn reweld_violations(
 /// worse at any of them. The knee.
 const NEAR_STRETCH_PERCENT: i64 = 10;
 
+/// Whether a line with no direction joins its two rooms into one group:
+/// only a doorway between two indoor rooms, a building's own structure.
+/// Never a front door (`is_building_entrance`), and never a line with an
+/// outdoor room at either end (the author, 2026-09-29: *"yellow lines
+/// should delineate groups"*). Welding outdoors made Hinterwilds one group
+/// of 126 rooms and stretched every step between its two columns the
+/// height of the map; unwelded, 28 groups, the biggest 43.
+fn welds(map: &Map, air: &HashSet<RoomId>, from: RoomId, to: RoomId) -> bool {
+    use crate::classifier::{Sense, room_sense};
+    if is_building_entrance(map, air, from, to) {
+        return false;
+    }
+    let indoor = |id| map.room(id).is_some_and(|r| room_sense(r) == Sense::Indoor);
+    indoor(from) && indoor(to)
+}
+
+/// Whether a repair is no worse to read than the group as it was: no more
+/// of its lines crossing each other (the author, 2026-09-29: *"Compactness
+/// is not a rule"*). It was a length test, standing in for a tangle --
+/// taken on violations alone the ordering pass once swapped the Landing's
+/// wing columns and tangled Mist Harbor's streets, both in groups welded
+/// far larger than any is now. On gs.map, exits against their direction
+/// 262 -> 236 when it changed.
+fn no_worse(
+    room_order: &[RoomId],
+    placed: &HashMap<RoomId, Cell>,
+    was: &HashMap<RoomId, Cell>,
+    map: &Map,
+) -> bool {
+    tangles(room_order, placed, map) <= tangles(room_order, was, map)
+}
+
+/// Pairs of a group's lines that cross each other, drawn straight.
+fn tangles(room_order: &[RoomId], positions: &HashMap<RoomId, Cell>, map: &Map) -> usize {
+    let mut lines: Vec<(RoomId, RoomId, Cell, Cell)> = Vec::new();
+    for &id in room_order {
+        let Some(room) = map.room(id) else { continue };
+        for exit in room.exits.iter().filter(|e| crate::regions::is_passage(e)) {
+            if id < exit.to
+                && let (Some(&a), Some(&b)) = (positions.get(&id), positions.get(&exit.to))
+            {
+                lines.push((id, exit.to, a, b));
+            }
+        }
+    }
+    let point = crate::routing::point;
+    let mut n = 0;
+    for (i, &(a1, b1, p1, q1)) in lines.iter().enumerate() {
+        for &(a2, b2, p2, q2) in &lines[i + 1..] {
+            if [a2, b2].contains(&a1) || [a2, b2].contains(&b1) {
+                continue;
+            }
+            if crate::quality::segments_cross(point(p1), point(q1), point(p2), point(q2)) {
+                n += 1;
+            }
+        }
+    }
+    n
+}
+
 /// Put right what violations the solver left on satisfiable data, when an
-/// arrangement that does is a clean win; the violations that remain.
+/// arrangement that does is no worse to read ([`no_worse`]); the
+/// violations that remain.
 fn repair_component(
     room_order: &[RoomId],
     positions: &mut HashMap<RoomId, Cell>,
@@ -1185,15 +1317,12 @@ fn repair_component(
     {
         optimize_component(room_order, &mut placed, map, dirs);
         let fixed = validate_component(room_order, &placed, map, dirs);
-        // A little longer is allowed here, as it is not for the ordering
-        // pass below: this moves only what the bearings force, so it
-        // cannot redraw the group. On gs.map every satisfiable group it
-        // tried it put right entirely, and 37 were refused on length
-        // alone, 16 of them for under 2%.
+        // Taken when it puts more right and tangles the group no more; it
+        // was refused on length before (37 groups on gs.map, 16 of them for
+        // under 2%).
         if fixed.len() < violations.len()
             && stacked(&placed) == 0
-            && edge_length(room_order, &placed, map) * 100
-                <= edge_length(room_order, positions, map) * (100 + NEAR_STRETCH_PERCENT)
+            && no_worse(room_order, &placed, positions, map)
         {
             *positions = placed;
             violations = fixed;
@@ -1206,19 +1335,15 @@ fn repair_component(
         optimize_component(room_order, &mut placed, map, dirs);
         let fixed = validate_component(room_order, &placed, map, dirs);
         // **Only a clean win is taken**: fewer violations, no rooms
-        // stacked, and no longer in total edge length after its own
-        // hill climb. The ordering pass satisfies every direction it
-        // knows about, but `validate_component` reads exits it does
-        // not constrain, so fewer violations is checked, not assumed.
-        // And the length test is what keeps it honest: taken on
-        // violations alone it swapped the Landing's wing columns to
-        // fix one bearing (edges +30%) and tangled Mist Harbor's
-        // streets (a 1,063-room group, edges nearly doubled). A
+        // stacked, and no more tangled after its own hill climb
+        // ([`no_worse`]). The ordering pass satisfies every direction it
+        // knows about, but `validate_component` reads exits it does not
+        // constrain, so fewer violations is checked, not assumed. A
         // violation is drawn and can be corrected; a tangle cannot be
         // read.
         if fixed.len() < violations.len()
             && stacked(&placed) == 0
-            && edge_length(room_order, &placed, map) <= edge_length(room_order, positions, map)
+            && no_worse(room_order, &placed, positions, map)
         {
             *positions = placed;
             violations = fixed;

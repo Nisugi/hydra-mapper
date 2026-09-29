@@ -142,10 +142,13 @@ pub fn compare_headless(area: &str, path: Option<&Path>) -> Result<String, Strin
     }
     let subset = Map::from_rooms(areas::layout_rooms(&own, &map, &placeable))
         .map_err(|e| format!("{e:?}"))?;
+    // An area with no hand corrections is drawn by the engine twice: the
+    // pictures and the rules still say how it reads.
+    let none = overrides::LocationOverrides::default();
     let hand = store
         .location(&format!("curated:{area}"))
         .or_else(|| store.location(area))
-        .ok_or_else(|| format!("{area} has no hand corrections in {}", store_path.display()))?;
+        .unwrap_or(&none);
     let edges = hand.edge_overrides(&subset);
     let engine = Drawn::of(&subset, area, &edges, None);
     let yours = Drawn::of(&subset, area, &edges, Some(hand));

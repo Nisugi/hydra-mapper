@@ -958,7 +958,12 @@ mod tests {
     use crate::generate_layout;
     use crate::positioner::Cell;
 
+    /// A room; an indoor one with a terrain, so the shelf still has
+    /// buildings to place -- indoors with none is hidden (`hidden`).
     fn room(id: u32, title: &str, paths: &str, exits: Vec<Exit>) -> Room {
+        let terrain = paths
+            .contains("Obvious exits")
+            .then(|| "hard, flat".to_owned());
         Room {
             id: RoomId(id),
             uid: vec![],
@@ -970,7 +975,7 @@ mod tests {
             check_location: false,
             unique_loot: vec![],
             climate: None,
-            terrain: None,
+            terrain,
             tags: vec![],
             meta: vec![],
             image: None,
@@ -1237,8 +1242,7 @@ mod tests {
     /// hang beside, so it shelves in the rows below the town -- below the
     /// streets, not at the origin on top of them. ("A Hide and Leather
     /// Tent": its interior and a street room were both drawn at (0,0).)
-    /// Only its doorway is drawn; the two rooms behind it are hidden
-    /// (`hidden`).
+
     #[test]
     fn a_building_with_no_street_shelves_below_the_streets() {
         let mut rooms = Vec::new();
@@ -1280,21 +1284,17 @@ mod tests {
             })
             .max()
             .expect("five streets");
-        let placed = |id: u32| {
-            layout
+        for id in 100..=102u32 {
+            let g = layout
                 .groups
                 .iter()
-                .find(|g| g.room_ids.contains(&RoomId(id)))
-        };
-        let y = placed(100).expect("placed").final_cell(RoomId(100)).y;
-        assert!(
-            y > street_bottom,
-            "the tent's doorway at y={y} is not below the street"
-        );
-        assert!(
-            placed(101).is_none() && placed(102).is_none(),
-            "the rooms behind the doorway were drawn"
-        );
+                .find(|g| g.room_ids.contains(&RoomId(id)));
+            let y = g.expect("placed").final_cell(RoomId(id)).y;
+            assert!(
+                y > street_bottom,
+                "tent room {id} at y={y} is not below the street"
+            );
+        }
     }
 
     /// A shop entered from two street rooms, with no uids to say which is

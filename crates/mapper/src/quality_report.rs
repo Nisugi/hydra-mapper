@@ -40,12 +40,13 @@ struct Row {
 
 /// The columns the gate holds, by name and index among a row's counts (the
 /// area's name is not one of them): each may not grow.
-const GATED: [(&str, usize); 5] = [
+const GATED: [(&str, usize); 6] = [
     ("exits against their direction", 2),
     ("lines through rooms", 3),
     ("building rooms under a line not theirs", 4),
     ("directionless exits not drawn", 8),
     ("directionless lines crossing another", 9),
+    ("directionless lines lying along another", 12),
 ];
 
 /// An event area's name begins with this: never gated.
@@ -53,7 +54,7 @@ const EVENT: &str = "special-";
 
 const HEADER: &str = "area\trooms\tms\tagainst_bearing\tlines_through_rooms\t\
                       rooms_under_foreign_lines\tdirectionless\tlines\tstubs\tundrawn\t\
-                      crossing\tlen_median\tlen_p90\n";
+                      crossing\tlen_median\tlen_p90\talong\n";
 
 /// Measure every area of the map at `path`. With `check`, compare with the
 /// table beside the map and refuse a worse area; otherwise write the table.
@@ -187,7 +188,7 @@ fn summary(rows: &[Row], total: &Quality, laying: Duration, wall: Duration) -> S
          rule 1, exits against their direction: {} ({} between two groups)\n\
          rule 2, lines through rooms: {}\n\
          rule 3, building rooms under a line not theirs: {}\n\
-         rule 4, pairs joined only without a direction: {} -- {} lines ({} crossing another), \
+         rule 4, pairs joined only without a direction: {} -- {} lines ({} crossing another, {} lying along another), \
          {} stubs, {} not drawn; line length median {}, p90 {}",
         rows.len(),
         total.rooms,
@@ -206,6 +207,7 @@ fn summary(rows: &[Row], total: &Quality, laying: Duration, wall: Duration) -> S
         total.directionless,
         total.directionless_lines,
         total.directionless_crossing,
+        total.directionless_along,
         total.directionless_stubs,
         total.directionless_undrawn,
         cells(total.directionless_length(0.5)),
@@ -281,7 +283,7 @@ fn judge(old: &BTreeMap<String, Vec<u64>>, new: &BTreeMap<String, Vec<u64>>) -> 
 fn line(text: &mut String, name: &str, time: Duration, q: &Quality) {
     let _ = writeln!(
         text,
-        "{name}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+        "{name}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
         q.rooms,
         time.as_millis(),
         q.against_bearing,
@@ -294,6 +296,7 @@ fn line(text: &mut String, name: &str, time: Duration, q: &Quality) {
         q.directionless_crossing,
         cells(q.directionless_length(0.5)),
         cells(q.directionless_length(0.9)),
+        q.directionless_along,
     );
 }
 

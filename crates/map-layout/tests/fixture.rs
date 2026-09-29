@@ -144,45 +144,26 @@ fn hard_invariants_hold() {
     assert_eq!(layout, again, "same rooms in, same layout out");
 }
 
-/// The bank is a real building: two indoor rooms, reached by one doorway
-/// from the square. Its lobby is the doorway, drawn as a building of its
-/// own, not merged with the outdoor square; the vault behind it is hidden
-/// (`hidden`: indoors, no terrain, no door onto a street).
+/// The bank is a real building: two indoor rooms with no terrain, reached
+/// by one door from the square. It is on the indoor sheet, not this one
+/// (`hidden`), and the square is marked as its way in.
 #[test]
-fn the_bank_is_one_building_with_one_doorway() {
+fn the_bank_is_hidden_and_its_door_marked() {
     let map = town();
     let layout = generate_layout(&map);
 
-    let lobby_group = layout
-        .groups
-        .iter()
-        .find(|g| g.room_ids.contains(&RoomId(3)))
-        .expect("lobby was placed");
-
-    assert!(
-        layout
-            .classification
-            .interior_groups
-            .contains(&lobby_group.index),
-        "the bank lobby is interior, not left outdoors"
-    );
-
-    assert!(
-        !layout
-            .groups
-            .iter()
-            .any(|g| g.room_ids.contains(&RoomId(4))),
-        "the vault behind the lobby was drawn"
-    );
-
-    assert_eq!(
-        layout.classification.entrance_room_ids.len(),
-        1,
-        "exactly one outdoor room hosts the bank's doorway"
-    );
+    for id in [3, 4] {
+        assert!(
+            !layout
+                .groups
+                .iter()
+                .any(|g| g.room_ids.contains(&RoomId(id))),
+            "bank room {id} was drawn"
+        );
+    }
     assert!(
         layout.classification.entrance_room_ids.contains(&RoomId(1)),
-        "room 1's door is the bank's only entrance"
+        "the square is not marked as the bank's way in"
     );
 }
 
@@ -202,30 +183,27 @@ fn a_one_way_exit_with_no_return_still_places() {
     );
 }
 
-/// The generated scene draws every room but the hidden vault once, makes
-/// the bank a unit of its own, and gives it a name from its title's
-/// bracketed prefix.
+/// The generated scene draws every room but the bank's once, and marks
+/// the square where the bank is entered.
 #[test]
-fn the_scene_draws_every_room_and_names_the_bank() {
+fn the_scene_draws_the_town_and_marks_the_bank_door() {
     let map = town();
     let layout = generate_layout(&map);
     let scene = cena_map_layout::build_scene("Test Town", &layout, &map);
 
     assert_eq!(
         scene.sheet.rooms.len(),
-        6,
-        "every room in the fixture but the vault is drawn exactly once"
+        5,
+        "every room in the fixture but the bank's is drawn exactly once"
     );
-
-    let lobby = scene.room(RoomId(3)).expect("the lobby is in the scene");
-    let labels = scene.sheet.labels.clone();
     assert!(
-        labels.iter().any(|l| l.text == "Trader's Bank"),
-        "the bank's building name comes from its bracketed title prefix: {labels:?}"
+        scene.room(RoomId(3)).is_none(),
+        "the bank's lobby was drawn"
     );
-    assert_eq!(lobby.title, "[Trader's Bank, Lobby]");
-    assert_eq!(scene.units[lobby.unit].name, "Trader's Bank");
-    assert!(scene.units[lobby.unit].door_rooms.contains(&RoomId(3)));
+    assert!(
+        scene.room(RoomId(1)).expect("the square is drawn").entrance,
+        "the square is not marked as a way in"
+    );
 }
 
 /// A room with an `Image` anchor is not required by this fixture (no

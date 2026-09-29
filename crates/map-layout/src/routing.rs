@@ -51,76 +51,162 @@ pub fn route_edges(sheet: &mut SheetScene) {
     curve_connectors(sheet, &rooms);
 }
 
-/// Each connector that crosses another line, bent to cross fewer where a
-/// bend can without passing a room; the fewest crossings, then the
-/// shortest, wins. Taken in order, each seeing the bends made before it.
+/// Which lines run through or near each cell, by index, for the
+/// route-finder.
+type Lined = HashMap<(i32, i32), Vec<usize>>;
+
+/// A route's (lines crossed, lines lain along, cost), compared in that
+/// order.
+type Score = (usize, usize, f32);
+
+/// Each connector that crosses another line or lies along one, bent where
+/// a bend does better without passing a room ([`better_route`]). Taken in
+/// order, each seeing the bends made before it.
 fn curve_connectors(sheet: &mut SheetScene, rooms: &Obstacles) {
     let mut paths: Vec<Vec<Point>> = sheet.edges.iter().map(path_of).collect();
+    let room_cells: HashSet<(i32, i32)> =
+        sheet.rooms.iter().map(|r| (r.cell.x, r.cell.y)).collect();
+    let mut lined: Lined = HashMap::new();
+    for (j, path) in paths.iter().enumerate() {
+        if sheet.edges[j].kind != SceneEdgeKind::Stub {
+            for cell in crate::route_finder::cells_of(path) {
+                lined.entry(cell).or_default().push(j);
+            }
+        }
+    }
     for i in 0..sheet.edges.len() {
-        let edge = &sheet.edges[i];
-        if edge.kind != SceneEdgeKind::Connector {
+        if sheet.edges[i].kind != SceneEdgeKind::Connector {
             continue;
         }
-        let ends = [edge.a_room, edge.b_room];
-        let others: Vec<usize> = (0..sheet.edges.len())
-            .filter(|&j| {
-                let o = &sheet.edges[j];
-                j != i
-                    && o.kind != SceneEdgeKind::Stub
-                    && !ends.contains(&o.a_room)
-                    && !ends.contains(&o.b_room)
-            })
-            .collect();
-        let crossed_at = |path: &[Point]| -> Vec<Point> {
-            let mut at = Vec::new();
-            for &j in &others {
-                for s in path.windows(2) {
-                    for t in paths[j].windows(2) {
-                        if let Some(p) = crossing(s[0], s[1], t[0], t[1]) {
-                            at.push(p);
-                        }
+        let Some(via) = better_route(sheet, i, &paths, &lined, rooms, &room_cells) else {
+            continue;
+        };
+        for cell in crate::route_finder::cells_of(&paths[i]) {
+            if let Some(l) = lined.get_mut(&cell) {
+                l.retain(|&j| j != i);
+            }
+        }
+        sheet.edges[i].via = via;
+        paths[i] = path_of(&sheet.edges[i]);
+        for cell in crate::route_finder::cells_of(&paths[i]) {
+            lined.entry(cell).or_default().push(i);
+        }
+    }
+}
+
+/// A better way for line `i` than it is drawn, if one is found: its bends.
+///
+/// Better is fewer lines crossed -- lines, not crossing points: a line
+/// crossed is a line drawn tangled, however often -- or the very same lines
+/// crossed and fewer lain along (`quality::lies_along`), which reads as one
+/// line or one hidden under another. Among the better, the fewest crossed,
+/// then the fewest lain along, then the shortest. The router's own bends
+/// are tried first, then the route-finder's way round, any number of turns.
+fn better_route(
+    sheet: &SheetScene,
+    i: usize,
+    paths: &[Vec<Point>],
+    lined: &Lined,
+    rooms: &Obstacles,
+    room_cells: &HashSet<(i32, i32)>,
+) -> Option<Vec<Point>> {
+    let edge = &sheet.edges[i];
+    let ends = [edge.a_room, edge.b_room];
+    let others: Vec<usize> = (0..sheet.edges.len())
+        .filter(|&j| {
+            let o = &sheet.edges[j];
+            j != i
+                && o.kind != SceneEdgeKind::Stub
+                && !ends.contains(&o.a_room)
+                && !ends.contains(&o.b_room)
+        })
+        .collect();
+    let crossed_at = |path: &[Point]| -> Vec<Point> {
+        let mut at = Vec::new();
+        for &j in &others {
+            for s in path.windows(2) {
+                for t in paths[j].windows(2) {
+                    if let Some(p) = crossing(s[0], s[1], t[0], t[1]) {
+                        at.push(p);
                     }
                 }
             }
-            at
+        }
+        at
+    };
+    let crossed = |path: &[Point]| -> HashSet<usize> {
+        others
+            .iter()
+            .copied()
+            .filter(|&j| {
+                path.windows(2).any(|s| {
+                    paths[j]
+                        .windows(2)
+                        .any(|t| crossing(s[0], s[1], t[0], t[1]).is_some())
+                })
+            })
+            .collect()
+    };
+    let along = |path: &[Point]| -> usize {
+        (0..paths.len())
+            .filter(|&j| {
+                j != i
+                    && sheet.edges[j].kind != SceneEdgeKind::Stub
+                    && crate::quality::lies_along(path, &paths[j])
+            })
+            .count()
+    };
+    let crossed_now = crossed(&paths[i]);
+    let along_now = along(&paths[i]);
+    if crossed_now.is_empty() && along_now == 0 {
+        return None;
+    }
+    let score = |path: &[Point]| -> Option<Score> {
+        let hit = crossed(path);
+        let lying = along(path);
+        let better =
+            hit.len() < crossed_now.len() || (lying < along_now && hit.is_subset(&crossed_now));
+        (better && rooms.near(path, &ends).is_empty()).then(|| (hit.len(), lying, cost(path)))
+    };
+    let (a, b) = (point(edge.a), point(edge.b));
+    let mut best: Option<(Score, Vec<Point>)> = None;
+    let consider = |via: Vec<Point>, best: &mut Option<(Score, Vec<Point>)>| {
+        if via.iter().any(|p| same(*p, a) || same(*p, b)) {
+            return;
+        }
+        let mut path = vec![a];
+        path.extend_from_slice(&via);
+        path.push(b);
+        if let Some(s) = score(&path)
+            && best
+                .as_ref()
+                .is_none_or(|(bs, _)| s.partial_cmp(bs) == Some(std::cmp::Ordering::Less))
+        {
+            *best = Some((s, via));
+        }
+    };
+    let now = crossed_at(&paths[i]);
+    for via in bends(
+        a,
+        b,
+        &now,
+        &[1.0, 2.0, 3.0, 4.0, 6.0],
+        &[0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0],
+    ) {
+        consider(via, &mut best);
+    }
+    if best.as_ref().is_none_or(|((n, l, _), _)| n + l > 0) {
+        let other: HashSet<usize> = others.iter().copied().collect();
+        let through = |cell: (i32, i32)| {
+            lined
+                .get(&cell)
+                .is_some_and(|l| l.iter().any(|j| other.contains(j)))
         };
-        let now = crossed_at(&paths[i]);
-        if now.is_empty() {
-            continue;
-        }
-        let (a, b) = (point(edge.a), point(edge.b));
-        let mut best: Option<(usize, f32, Vec<Point>)> = None;
-        for via in bends(
-            a,
-            b,
-            &now,
-            &[1.0, 2.0, 3.0, 4.0, 6.0],
-            &[0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0],
-        ) {
-            if via.iter().any(|p| same(*p, a) || same(*p, b)) {
-                continue;
-            }
-            let mut path = vec![a];
-            path.extend_from_slice(&via);
-            path.push(b);
-            let n = crossed_at(&path).len();
-            let c = cost(&path);
-            if n >= now.len()
-                || best
-                    .as_ref()
-                    .is_some_and(|(bn, bc, _)| (*bn, *bc) <= (n, c))
-            {
-                continue;
-            }
-            if rooms.near(&path, &ends).is_empty() {
-                best = Some((n, c, via));
-            }
-        }
-        if let Some((_, _, via)) = best {
-            sheet.edges[i].via.clone_from(&via);
-            paths[i] = path_of(&sheet.edges[i]);
+        if let Some(via) = crate::route_finder::find(edge.a, edge.b, room_cells, through) {
+            consider(via, &mut best);
         }
     }
+    best.map(|(_, via)| via)
 }
 
 /// A drawn edge as the polyline it is drawn along.

@@ -13,10 +13,12 @@
 //! connectors are shortest wins. Where nothing within [`REACH`] is clear,
 //! the connector pass's own scoring decides, as it did before.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+
+use cena_map::{Map, RoomId};
 
 use crate::direction::DirectionMap;
-use crate::packer::{AnchorLine, Segment, chebyshev, for_ring};
+use crate::packer::{AnchorLine, Edge, Segment, chebyshev, for_ring};
 use crate::positioner::{Bounds, Cell, Group};
 
 /// How far out a group is moved looking for a clear spot, in cells.
@@ -24,6 +26,134 @@ pub(crate) const REACH: i32 = 60;
 
 /// Rings searched past the first with a clear spot, for a shorter one.
 const LOOK_FURTHER: i32 = 2;
+
+/// Rounds of [`shrink`]: each group picked up and put back, until a round
+/// moves nothing.
+const SHRINK_ROUNDS: usize = 3;
+
+/// The yellow lines shortened (the author, 2026-09-29: *"the next stage
+/// there would be to shrink the yellow lines without introducing overlap
+/// or crossing"*). Once everything is placed, each group but the biggest
+/// is picked up and put back as near the middle of its links as it is
+/// clear ([`find_clear_offset`]), where its links are shorter in total
+/// than where it was; round after round, so a group moved can make room
+/// for one placed before it.
+pub(crate) fn shrink(
+    groups: &mut [Group],
+    packed: &[usize],
+    edges: &HashMap<usize, Vec<Edge>>,
+    map: &Map,
+    dirs: &DirectionMap,
+    occupied: &mut HashSet<Cell>,
+    segments: &mut Vec<Segment>,
+) {
+    let Some(&biggest) = packed.iter().max_by_key(|&&i| groups[i].room_ids.len()) else {
+        return;
+    };
+    for _ in 0..SHRINK_ROUNDS {
+        let mut moved = false;
+        for &idx in packed {
+            let Some(was) = groups[idx].base_offset else {
+                continue;
+            };
+            if idx == biggest {
+                continue;
+            }
+            let anchors: Vec<AnchorLine> = edges
+                .get(&idx)
+                .map(|l| {
+                    l.iter()
+                        .filter(|e| groups[e.other_group].base_offset.is_some())
+                        .map(|e| AnchorLine {
+                            internal: groups[idx].positions[&e.room_id],
+                            target: groups[e.other_group].final_cell(e.other_room_id),
+                            room_id: e.room_id,
+                            other_room_id: e.other_room_id,
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            if anchors.is_empty() {
+                continue;
+            }
+            let length = |at: Cell| -> i32 {
+                anchors
+                    .iter()
+                    .map(|a| chebyshev(shift(a.internal, at), a.target))
+                    .sum()
+            };
+            // Picked up: its rooms and lines off the sheet.
+            let mine: HashSet<RoomId> = groups[idx].room_ids.iter().copied().collect();
+            for &r in &groups[idx].room_ids {
+                occupied.remove(&groups[idx].final_cell(r));
+            }
+            let others: Vec<Segment> = segments
+                .iter()
+                .filter(|s| !mine.contains(&s.ra) && !mine.contains(&s.rb))
+                .copied()
+                .collect();
+            let n = i32::try_from(anchors.len()).unwrap_or(1).max(1);
+            let middle = Cell {
+                x: anchors
+                    .iter()
+                    .map(|a| a.target.x - a.internal.x)
+                    .sum::<i32>()
+                    / n,
+                y: anchors
+                    .iter()
+                    .map(|a| a.target.y - a.internal.y)
+                    .sum::<i32>()
+                    / n,
+            };
+            let better = find_clear_offset(&groups[idx], middle, occupied, &anchors, &others, dirs)
+                .filter(|&at| length(at) < length(was));
+            let at = better.unwrap_or(was);
+            groups[idx].base_offset = Some(at);
+            for &r in &groups[idx].room_ids {
+                occupied.insert(groups[idx].final_cell(r));
+            }
+            if better.is_some() {
+                moved = true;
+                *segments = others;
+                lines_of(&groups[idx], &anchors, map, segments);
+            }
+        }
+        if !moved {
+            break;
+        }
+    }
+}
+
+/// A placed group's own lines and its links, as segments for what comes
+/// after to steer clear of.
+fn lines_of(group: &Group, anchors: &[AnchorLine], map: &Map, segments: &mut Vec<Segment>) {
+    let mut seen: HashSet<(RoomId, RoomId)> = HashSet::new();
+    for &room_id in &group.room_ids {
+        let Some(room) = map.room(room_id) else {
+            continue;
+        };
+        for exit in room.exits.iter().filter(|e| crate::regions::is_passage(e)) {
+            if group.positions.contains_key(&exit.to)
+                && seen.insert((room_id.min(exit.to), room_id.max(exit.to)))
+            {
+                segments.push(Segment {
+                    a: group.final_cell(room_id),
+                    b: group.final_cell(exit.to),
+                    ra: room_id,
+                    rb: exit.to,
+                });
+            }
+        }
+    }
+    for a in anchors {
+        segments.push(Segment {
+            a: group.final_cell(a.room_id),
+            b: a.target,
+            ra: a.room_id,
+            rb: a.other_room_id,
+        });
+    }
+}
 
 /// The nearest offset within [`REACH`] of `proposed` where `group` is
 /// clear of everything placed, or `None`.

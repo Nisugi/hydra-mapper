@@ -17,7 +17,9 @@
 //! 4. **Exits with no direction**: a pair of rooms joined only by exits
 //!    with no bearing either way (`go door`, `out`, a climb). How they are
 //!    drawn: as a line of some length, as a stub, or not at all; and how
-//!    many of those lines cross another line.
+//!    many of those lines cross another line, and how many lie along
+//!    one: near parallel and closer than [`ALONG_GAP`] for more than
+//!    [`ALONG_RUN`], which reads as one line, or one hidden under another.
 
 use std::collections::{HashMap, HashSet};
 
@@ -55,6 +57,8 @@ pub struct Quality {
     pub directionless_undrawn: usize,
     /// ... drawn as a line that crosses another line.
     pub directionless_crossing: usize,
+    /// ... drawn as a line that lies along another line ([`lies_along`]).
+    pub directionless_along: usize,
     /// The drawn lengths of the directionless lines, in sheet cells.
     #[serde(skip)]
     pub directionless_lengths: Vec<f32>,
@@ -89,6 +93,7 @@ impl Quality {
         self.directionless_stubs += other.directionless_stubs;
         self.directionless_undrawn += other.directionless_undrawn;
         self.directionless_crossing += other.directionless_crossing;
+        self.directionless_along += other.directionless_along;
         self.directionless_lengths
             .extend_from_slice(&other.directionless_lengths);
     }
@@ -190,7 +195,17 @@ pub fn measure(scene: &MapScene, layout: &Layout, map: &Map) -> Quality {
     quality.detail.under = under.iter().copied().collect();
     quality.detail.under.sort_unstable();
 
-    // Rule 4.
+    rule_four(&mut quality, sheet, &directionless);
+    quality
+}
+
+/// Rule 4 over the pairs joined only with no direction: how each is drawn,
+/// how long, and whether it crosses or lies along another line.
+fn rule_four(
+    quality: &mut Quality,
+    sheet: &crate::scene::SheetScene,
+    directionless: &HashSet<(RoomId, RoomId)>,
+) {
     let drawn: HashMap<(RoomId, RoomId), &SceneEdge> = sheet
         .edges
         .iter()
@@ -203,7 +218,7 @@ pub fn measure(scene: &MapScene, layout: &Layout, map: &Map) -> Quality {
         .map(|e| (path(e), [e.a_room, e.b_room]))
         .collect();
     quality.directionless = directionless.len();
-    for ends in &directionless {
+    for ends in directionless {
         match drawn.get(ends) {
             None => quality.directionless_undrawn += 1,
             Some(edge) if edge.kind == SceneEdgeKind::Stub => quality.directionless_stubs += 1,
@@ -219,10 +234,17 @@ pub fn measure(scene: &MapScene, layout: &Layout, map: &Map) -> Quality {
                 if crosses {
                     quality.directionless_crossing += 1;
                 }
+                let along = lines.iter().any(|(other, other_ends)| {
+                    *other_ends != [edge.a_room, edge.b_room]
+                        && *other_ends != [edge.b_room, edge.a_room]
+                        && lies_along(&own, other)
+                });
+                if along {
+                    quality.directionless_along += 1;
+                }
             }
         }
     }
-    quality
 }
 
 /// An unordered pair, smaller id first.
@@ -242,6 +264,45 @@ fn length(path: &[Point]) -> f32 {
     path.windows(2)
         .map(|s| (s[1].x - s[0].x).hypot(s[1].y - s[0].y))
         .sum()
+}
+
+/// How close, in sheet cells, two near-parallel lines run before they
+/// read as one.
+pub(crate) const ALONG_GAP: f32 = 1.0;
+
+/// How far, in sheet cells, two lines must run that close to lie along
+/// each other rather than meet.
+pub(crate) const ALONG_RUN: f32 = 1.5;
+
+/// Whether some segment of `a` lies along some segment of `b`: within
+/// about ten degrees of parallel, both of `b`'s ends of that stretch
+/// within [`ALONG_GAP`] of `a`'s line, and the two overlapping for more
+/// than [`ALONG_RUN`]. Two lines leaving one room the same way count: from
+/// a little way out they are drawn on top of each other.
+pub(crate) fn lies_along(a: &[Point], b: &[Point]) -> bool {
+    a.windows(2)
+        .any(|s| b.windows(2).any(|t| segments_along(s[0], s[1], t[0], t[1])))
+}
+
+fn segments_along(p1: Point, p2: Point, q1: Point, q2: Point) -> bool {
+    let (dx, dy) = (p2.x - p1.x, p2.y - p1.y);
+    let (ex, ey) = (q2.x - q1.x, q2.y - q1.y);
+    let (lp, lq) = (dx.hypot(dy), ex.hypot(ey));
+    if lp < f32::EPSILON || lq < f32::EPSILON {
+        return false;
+    }
+    // Near parallel: the sine of the angle between them under ten degrees.
+    if (dx * ey - dy * ex).abs() / (lp * lq) > 0.17 {
+        return false;
+    }
+    let (ux, uy) = (dx / lp, dy / lp);
+    let off = |q: Point| ((q.x - p1.x) * uy - (q.y - p1.y) * ux).abs();
+    if off(q1) > ALONG_GAP || off(q2) > ALONG_GAP {
+        return false;
+    }
+    let along = |q: Point| (q.x - p1.x) * ux + (q.y - p1.y) * uy;
+    let (a, b) = (along(q1).min(along(q2)), along(q1).max(along(q2)));
+    b.min(lp) - a.max(0.0) > ALONG_RUN
 }
 
 /// Whether any segment of `a` properly crosses any segment of `b`.

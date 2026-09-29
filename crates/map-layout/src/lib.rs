@@ -35,6 +35,7 @@
 #![allow(clippy::implicit_hasher)]
 
 pub mod classifier;
+mod cut;
 pub mod direction;
 pub mod hidden;
 pub mod interior_shelf;
@@ -45,6 +46,7 @@ pub mod pipeline;
 pub mod positioner;
 pub mod quality;
 pub mod regions;
+mod route_finder;
 pub mod routing;
 pub mod satisfiable;
 #[cfg(test)]

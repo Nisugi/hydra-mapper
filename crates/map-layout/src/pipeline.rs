@@ -33,6 +33,10 @@ pub struct Layout {
     /// ([`LayoutParams::town_scale`]), so the scene draws it at the same.
     #[serde(default = "default_town_scale")]
     pub town_scale: i32,
+    /// Outdoor groups cut to a sheet of their own (`cut`), their links
+    /// drawn as marks.
+    #[serde(default)]
+    pub cut: Vec<usize>,
 }
 
 /// The knobs a layout is built with.
@@ -122,7 +126,11 @@ fn generate_layout_impl(map: &Map, edges: &[EdgeOverride], params: LayoutParams)
     let map = if hidden.is_empty() { whole } else { &drawn };
 
     let mut groups = positioner::position_rooms(map, &dirs);
-    let classification = classifier::classify(&groups, map);
+    let mut classification = classifier::classify(&groups, map);
+    // A street room that leads into what is hidden is marked as a way in.
+    classification
+        .entrance_room_ids
+        .extend(hidden::entrances(whole, &hidden));
 
     let mut outdoor: Vec<usize> = groups
         .iter()
@@ -147,7 +155,28 @@ fn generate_layout_impl(map: &Map, edges: &[EdgeOverride], params: LayoutParams)
             groups.push(group);
         }
     }
-    let pack_info = outdoor_packing::pack_groups(&mut groups, &outdoor, whole, &dirs);
+    let mut pack_info = outdoor_packing::pack_groups(&mut groups, &outdoor, whole, &dirs);
+    // The islands go to their own sheet (`cut`), and the rest is packed
+    // again without them.
+    let mut cut: Vec<usize> = Vec::new();
+    let islands = crate::cut::islands(&groups, &outdoor, whole, &dirs, crate::cut::STEPS);
+    if !islands.is_empty() {
+        for group in &mut groups {
+            group.base_offset = None;
+            group.packing = None;
+        }
+        cut = islands.iter().copied().collect();
+        cut.sort_unstable();
+        let kept: Vec<usize> = outdoor
+            .iter()
+            .copied()
+            .filter(|i| !islands.contains(i))
+            .collect();
+        pack_info = outdoor_packing::pack_groups(&mut groups, &kept, whole, &dirs);
+        // Places, not shops: at the streets' scale, in a row of their own
+        // below everything, out of the way.
+        crate::cut::below(&mut groups, &kept, &cut);
+    }
     groups.truncate(shown);
     let clusters = classifier::interior_clusters(&groups, &classification.interior_groups, map);
 
@@ -178,5 +207,6 @@ fn generate_layout_impl(map: &Map, edges: &[EdgeOverride], params: LayoutParams)
         pack_info,
         edges: edges.to_vec(),
         town_scale,
+        cut,
     }
 }

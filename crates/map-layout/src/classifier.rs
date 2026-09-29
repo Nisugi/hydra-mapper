@@ -120,7 +120,7 @@ pub fn classify(groups: &[Group], map: &Map) -> Classification {
 /// Entrances: every walk from an outdoor room into an interior component.
 /// A routine or a teleport that lands in a building is not its door: it
 /// gets no door marker, and the building does not hang beside it.
-fn compute_entrances(
+pub(crate) fn compute_entrances(
     groups: &[Group],
     map: &Map,
     interior: &HashSet<usize>,

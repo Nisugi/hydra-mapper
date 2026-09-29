@@ -38,7 +38,7 @@ pub fn pack_groups(
 
     let anchors = collect_image_anchors(groups, packed, map);
     let primary_image = find_primary_image(groups, packed, &anchors);
-    let scale = estimate_scale(groups, packed, &anchors, primary_image.as_deref());
+    let scale = estimate_scale(groups, packed, &anchors, primary_image.as_deref(), map);
 
     let mut state = PackingState::default();
 
@@ -56,6 +56,15 @@ pub fn pack_groups(
     );
     pack_by_connectors(groups, packed, &edges, &packed_set, map, dirs, &mut state);
     pack_strip_fallback(groups, packed, &mut state);
+    crate::stretch::shrink(
+        groups,
+        packed,
+        &edges,
+        map,
+        dirs,
+        &mut state.occupied,
+        &mut state.placed_segments,
+    );
 
     let mut methods: BTreeMap<String, usize> = BTreeMap::new();
     for &idx in packed {
@@ -132,6 +141,9 @@ fn pack_image_anchored(
     // `packed`'s own order, not the set's: `sort_by` is stable, and exact
     // ties on (anchor_count, room_ids.len()) must break the same way the
     // reference's insertion order breaks them.
+    // A group nothing walks to (a boss's arena, reached by a teleport) is
+    // not seated by the picture: it goes in the strip below everything,
+    // out of the way (the author: "it can be anywhere not in the way").
     let mut anchored: Vec<usize> = packed
         .iter()
         .copied()
@@ -139,6 +151,7 @@ fn pack_image_anchored(
             anchors
                 .get(idx)
                 .is_some_and(|l| l.iter().any(|a| a.image == primary))
+                && (packed.len() == 1 || edges.get(idx).is_some_and(|l| !l.is_empty()))
         })
         .collect();
     let anchor_count = |idx: usize| {
@@ -170,7 +183,33 @@ fn pack_image_anchored(
             x: js_round(sum_x / n),
             y: js_round(sum_y / n),
         };
-        if let Some(offset) = find_free_offset(&groups[idx], proposed, &state.occupied) {
+        // From the picture's spot, stretched until clear of what is
+        // placed (`stretch`), as the connector pass places; the nearest
+        // free spot where nothing within reach is.
+        let anchors: Vec<AnchorLine> = edges
+            .get(&idx)
+            .map(|l| {
+                l.iter()
+                    .filter(|e| state.placed.contains(&e.other_group))
+                    .map(|e| AnchorLine {
+                        internal: groups[idx].positions[&e.room_id],
+                        target: groups[e.other_group].final_cell(e.other_room_id),
+                        room_id: e.room_id,
+                        other_room_id: e.other_room_id,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let offset = crate::stretch::find_clear_offset(
+            &groups[idx],
+            proposed,
+            &state.occupied,
+            &anchors,
+            &state.placed_segments,
+            dirs,
+        )
+        .or_else(|| find_free_offset(&groups[idx], proposed, &state.occupied));
+        if let Some(offset) = offset {
             place_group(
                 groups,
                 idx,

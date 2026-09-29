@@ -547,14 +547,20 @@ fn populate_edges(
                 if unit_a != STREETS && unit_b != STREETS && unit_a != unit_b {
                     continue;
                 }
-                if len > CONNECTOR_MAX_CELLS * layout.town_scale {
-                    continue;
-                }
                 let cmd = match &exit.crossing {
                     cena_map::Crossing::Command(cmd) => cmd.as_str(),
                     _ => "",
                 };
-                (SceneEdgeKind::Connector, connector_label(cmd))
+                // A link to a group cut to its own sheet (`cut`), or one
+                // absurdly long, is a mark at both ends: a link is never
+                // lost, only drawn short.
+                if layout.cut.contains(&room_group) != layout.cut.contains(&target_group)
+                    || len > CONNECTOR_MAX_CELLS * layout.town_scale
+                {
+                    (SceneEdgeKind::Stub, connector_label(cmd))
+                } else {
+                    (SceneEdgeKind::Connector, connector_label(cmd))
+                }
             };
             if !seen.insert(key) {
                 continue;
@@ -849,9 +855,10 @@ mod tests {
         );
     }
 
-    /// A walk with no bearing between two rooms of one group draws, as a
-    /// dashed connector with its command; a pair with a bearing either way
-    /// stays one solid line, whichever exit is met first.
+    /// A walk with no bearing between two rooms outdoors is a line between
+    /// two groups (`positioner::welds`), and draws as a dashed connector
+    /// with its command; a pair with a bearing either way stays one solid
+    /// line, whichever exit is met first.
     #[test]
     fn a_walk_with_no_bearing_draws_as_a_connector() {
         let map = Map::from_rooms(vec![
@@ -877,9 +884,10 @@ mod tests {
             found[0].clone()
         };
 
-        assert_eq!(
+        assert_ne!(
             scene.room(RoomId(3)).map(|r| r.group),
-            scene.room(RoomId(1)).map(|r| r.group)
+            scene.room(RoomId(1)).map(|r| r.group),
+            "a line with no direction joined two groups outdoors"
         );
         let path = edge(1, 3);
         assert_eq!(path.kind, SceneEdgeKind::Connector);
@@ -935,6 +943,13 @@ mod tests {
 
     /// Twelve street corners in a row, two shops behind doors at each.
     fn corner_town() -> Map {
+        corner_town_with(Some("hard, flat"))
+    }
+
+    /// Twelve street corners in a row, two shops off each; the shops'
+    /// terrain `terrain`. With one they are buildings on the sheet; with
+    /// none they are hidden (`hidden`).
+    fn corner_town_with(terrain: Option<&str>) -> Map {
         const CORNERS: u32 = 12;
         let shop = |id: u32, street: u32| Room {
             id: RoomId(id),
@@ -947,7 +962,7 @@ mod tests {
             check_location: false,
             unique_loot: vec![],
             climate: None,
-            terrain: None,
+            terrain: terrain.map(str::to_owned),
             tags: vec![],
             meta: vec![],
             image: None,
@@ -1015,6 +1030,18 @@ mod tests {
     /// street rooms at the outdoor scale, each shop beside its own
     /// corner, joined to it by a door edge; the shops are building units
     /// whose door rooms are the shops, and the corners are the streets.
+    #[test]
+    fn shops_with_no_terrain_leave_only_the_street_and_its_ways_in() {
+        let map = corner_town_with(None);
+        let layout = crate::generate_layout(&map);
+        let scene = build_scene("street", &layout, &map);
+        assert_eq!(scene.sheet.rooms.len(), 12, "only the corners are drawn");
+        assert!(
+            scene.sheet.rooms.iter().all(|r| r.entrance),
+            "a corner that leads into a shop is not marked as a way in"
+        );
+    }
+
     #[test]
     fn a_town_is_one_sheet_with_the_shops_beside_their_corners() {
         let map = corner_town();

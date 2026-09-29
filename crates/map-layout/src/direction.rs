@@ -259,8 +259,15 @@ fn movement_bearing(command: &str) -> Option<Dir> {
 /// - **Movements that disagree.** `[southwest, northwest, northwest]` is
 ///   a walk through several rooms, not a bearing. 10 edges of `gs.map`.
 /// - **Any movement with no bearing at all** -- `go door`, or a
-///   `KeepMoving`/`MoveUntilThere` that names a heading but no distance
-///   (rowing a boat, or fog that turns the walker round). 1,766 edges.
+///   `MoveUntilThere` that names a heading but no distance (fog that
+///   turns the walker round). 1,766 edges, before `KeepMoving` counted.
+///
+/// A `KeepMoving` is one heading repeated until the walker arrives:
+/// `pedal northeast` across the Eastern Waterway's swimming area, `swim`
+/// and `row` elsewhere. The room lies that way, however many strokes it
+/// takes, and a layout reads bearings, not distances (2026-09-29: 340
+/// edges of `gs.map`, the Waterway's whole grid among them, were drawn
+/// as lines with no direction).
 fn direction_from_steps(steps: &[Step]) -> Option<Dir> {
     let mut agreed: Option<Dir> = None;
     for step in steps {
@@ -297,9 +304,8 @@ enum Moves<'a> {
 /// The room-changing set mirrors `cena_map::step::moves_whatever_is_known`.
 fn moves_by(action: &Action) -> Moves<'_> {
     match action {
-        Action::Move(c) | Action::TryMove(c) => Moves::By(c),
-        Action::KeepMoving(_)
-        | Action::MoveUntilThere(_)
+        Action::Move(c) | Action::TryMove(c) | Action::KeepMoving(c) => Moves::By(c),
+        Action::MoveUntilThere(_)
         | Action::Moves(_)
         | Action::KeepMovingAny(_)
         | Action::CastAt(..)
@@ -527,10 +533,10 @@ mod tests {
         assert_eq!(
             direction_from_steps(&[
                 step(Action::Move("west".to_owned())),
-                step(Action::KeepMoving("west".to_owned())),
+                step(Action::KeepMoving("go boat".to_owned())),
             ]),
             None,
-            "a repeat names a heading but no distance"
+            "a repeated doorway names no bearing"
         );
     }
 
@@ -547,14 +553,15 @@ mod tests {
         );
     }
 
-    /// Steps that are not a plain move name a heading but no distance --
-    /// rowing a boat, or fog that turns the walker round -- so they place
-    /// nothing.
+    /// A heading repeated until the walker arrives is a bearing: the
+    /// Eastern Waterway's `pedal northeast` lies northeast however many
+    /// strokes it takes. Moving until somewhere is reached, through fog
+    /// that turns the walker round, still names none.
     #[test]
-    fn only_a_plain_move_counts() {
+    fn a_repeated_heading_is_a_bearing() {
         assert_eq!(
-            direction_from_steps(&[step(Action::KeepMoving("south".to_owned()))]),
-            None
+            direction_from_steps(&[step(Action::KeepMoving("pedal northeast".to_owned()))]),
+            Some(Dir::Northeast)
         );
         assert_eq!(
             direction_from_steps(&[step(Action::MoveUntilThere("west".to_owned()))]),
