@@ -152,6 +152,19 @@ pub struct SceneEdge {
     /// where a building's inside is drawn only when the building is.
     #[serde(default)]
     pub unit: Option<usize>,
+    /// Bends between `a` and `b`, in sheet cells, for a line routed around
+    /// a room it would otherwise cross. Empty for a straight line, which
+    /// is most of them. See [`crate::routing`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub via: Vec<Point>,
+}
+
+/// A point on the sheet, in cells, that need not be a cell's centre: a
+/// bend in a routed line sits between rooms.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Point {
+    pub x: f32,
+    pub y: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -171,6 +184,10 @@ pub struct SheetScene {
     pub rooms: Vec<SceneRoom>,
     pub edges: Vec<SceneEdge>,
     pub labels: Vec<GroupLabel>,
+    /// A dot beside a street room for each way into what is not drawn
+    /// (`doors`).
+    #[serde(default)]
+    pub doors: Vec<crate::doors::SceneDoor>,
     pub min: Cell,
     pub max: Cell,
 }
@@ -309,6 +326,8 @@ pub fn build_scene(location: &str, layout: &Layout, map: &Map) -> MapScene {
     let unit_of_group = populate_units(&mut scene, layout, map);
     populate_rooms(&mut scene, layout, map, &unit_of_group);
     populate_edges(&mut scene, layout, map, &dirs, &unit_of_group);
+    crate::routing::route_edges(&mut scene.sheet);
+    crate::doors::place(&mut scene.sheet, &layout.ways_in);
     populate_labels(&mut scene, layout, &unit_of_group);
     compute_sheet_bounds(&mut scene);
 
@@ -533,14 +552,23 @@ fn populate_edges(
                 if unit_a != STREETS && unit_b != STREETS && unit_a != unit_b {
                     continue;
                 }
-                if len > CONNECTOR_MAX_CELLS * layout.town_scale {
-                    continue;
-                }
                 let cmd = match &exit.crossing {
                     cena_map::Crossing::Command(cmd) => cmd.as_str(),
                     _ => "",
                 };
-                (SceneEdgeKind::Connector, connector_label(cmd))
+                // A link to a group cut to its own sheet (`cut`), or one
+                // absurdly long, is a mark at both ends: a link is never
+                // lost, only drawn short. Cut is judged where the rooms
+                // are drawn, a hand's move included: a cut group put back
+                // beside its link gets its line back.
+                let cut_off = layout.cut.contains(&room_group)
+                    != layout.cut.contains(&target_group)
+                    && len > crate::cut::STEPS * scene.scale_of(room_group);
+                if cut_off || len > CONNECTOR_MAX_CELLS * layout.town_scale {
+                    (SceneEdgeKind::Stub, connector_label(cmd))
+                } else {
+                    (SceneEdgeKind::Connector, connector_label(cmd))
+                }
             };
             if !seen.insert(key) {
                 continue;
@@ -554,6 +582,7 @@ fn populate_edges(
                 kind,
                 label,
                 unit: inside,
+                via: Vec::new(),
             });
         }
     }
@@ -743,9 +772,12 @@ mod tests {
     /// Birthing Sands; Teras had 42 doors that were routines.)
     #[test]
     fn a_teleport_is_neither_a_door_nor_a_wing() {
+        // With terrain, so a building with no door is still drawn rather
+        // than hidden (`hidden`).
         let indoor = |id: u32, exits: &[(u32, &str)]| {
             let mut r = room(id, i64::from(id), exits);
             r.paths = vec!["Obvious exits: out".to_owned()];
+            r.terrain = Some("hard, flat".to_owned());
             r
         };
         let mut rooms = vec![
@@ -831,9 +863,10 @@ mod tests {
         );
     }
 
-    /// A walk with no bearing between two rooms of one group draws, as a
-    /// dashed connector with its command; a pair with a bearing either way
-    /// stays one solid line, whichever exit is met first.
+    /// A walk with no bearing between two rooms outdoors is a line between
+    /// two groups (`positioner::welds`), and draws as a dashed connector
+    /// with its command; a pair with a bearing either way stays one solid
+    /// line, whichever exit is met first.
     #[test]
     fn a_walk_with_no_bearing_draws_as_a_connector() {
         let map = Map::from_rooms(vec![
@@ -859,9 +892,10 @@ mod tests {
             found[0].clone()
         };
 
-        assert_eq!(
+        assert_ne!(
             scene.room(RoomId(3)).map(|r| r.group),
-            scene.room(RoomId(1)).map(|r| r.group)
+            scene.room(RoomId(1)).map(|r| r.group),
+            "a line with no direction joined two groups outdoors"
         );
         let path = edge(1, 3);
         assert_eq!(path.kind, SceneEdgeKind::Connector);
@@ -917,6 +951,13 @@ mod tests {
 
     /// Twelve street corners in a row, two shops behind doors at each.
     fn corner_town() -> Map {
+        corner_town_with(Some("hard, flat"))
+    }
+
+    /// Twelve street corners in a row, two shops off each; the shops'
+    /// terrain `terrain`. With one they are buildings on the sheet; with
+    /// none they are hidden (`hidden`).
+    fn corner_town_with(terrain: Option<&str>) -> Map {
         const CORNERS: u32 = 12;
         let shop = |id: u32, street: u32| Room {
             id: RoomId(id),
@@ -929,7 +970,7 @@ mod tests {
             check_location: false,
             unique_loot: vec![],
             climate: None,
-            terrain: None,
+            terrain: terrain.map(str::to_owned),
             tags: vec![],
             meta: vec![],
             image: None,
@@ -997,6 +1038,18 @@ mod tests {
     /// street rooms at the outdoor scale, each shop beside its own
     /// corner, joined to it by a door edge; the shops are building units
     /// whose door rooms are the shops, and the corners are the streets.
+    #[test]
+    fn shops_with_no_terrain_leave_only_the_street_and_its_ways_in() {
+        let map = corner_town_with(None);
+        let layout = crate::generate_layout(&map);
+        let scene = build_scene("street", &layout, &map);
+        assert_eq!(scene.sheet.rooms.len(), 12, "only the corners are drawn");
+        assert!(
+            scene.sheet.rooms.iter().all(|r| r.entrance),
+            "a corner that leads into a shop is not marked as a way in"
+        );
+    }
+
     #[test]
     fn a_town_is_one_sheet_with_the_shops_beside_their_corners() {
         let map = corner_town();

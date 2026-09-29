@@ -305,6 +305,51 @@ pub struct Curation {
     pub regions: RegionFile,
     /// What counts as a region, and what folds into one.
     pub decisions: RegionDecisions,
+    /// Which area each room is in, and the regions a person assigned,
+    /// exported from the mapper.
+    pub assignments: AssignmentFile,
+}
+
+/// `assignments.toml`: the mapper's curation, exported so it can be baked
+/// into the map.
+///
+/// Written by the mapper, not by hand -- its "Export to curation" writes
+/// the whole file from the store every time, so an edit made here would
+/// be overwritten. It is tracked so a `gs.map` build can be reproduced
+/// from the repository and a change to it reviewed like any other.
+///
+/// Rooms are named by uid where they have one (the first, as the mapper
+/// keys them), and by id otherwise; ids do not survive a map rebuild.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct AssignmentFile {
+    /// One curated area and its rooms.
+    #[serde(default, rename = "area")]
+    pub areas: Vec<AreaAssignment>,
+    /// Rooms whose region a person said outright. These outrank the mapdb
+    /// join, the folds and the spread.
+    #[serde(default, rename = "assign")]
+    pub regions: Vec<RegionAssignment>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct AreaAssignment {
+    /// The mapper's key for it.
+    pub key: String,
+    /// What it is called; the value written to `meta:area:`.
+    pub name: String,
+    #[serde(default)]
+    pub uids: Vec<i64>,
+    #[serde(default)]
+    pub ids: Vec<u32>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RegionAssignment {
+    pub region: String,
+    #[serde(default)]
+    pub uids: Vec<i64>,
+    #[serde(default)]
+    pub ids: Vec<u32>,
 }
 
 /// `generated/regions.toml`: the official mapdb's `loc` field, keyed by
@@ -472,6 +517,7 @@ impl Curation {
         // of 345KB of uids someone decided by hand.
         let regions: RegionFile = read_toml(&dir.join("generated/regions.toml"))?;
         let decisions: RegionDecisions = read_toml(&dir.join("regions.toml"))?;
+        let assignments: AssignmentFile = read_toml(&dir.join("assignments.toml"))?;
 
         for (i, rule) in status.rules.iter().enumerate() {
             if rule.location.is_none() && rule.title.is_none() && rule.ids.is_none() {
@@ -496,6 +542,7 @@ impl Curation {
             lockers,
             regions,
             decisions,
+            assignments,
         })
     }
 

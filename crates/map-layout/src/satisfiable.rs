@@ -61,6 +61,11 @@ use cena_map::{Map, RoomId};
 use crate::direction::DirectionMap;
 use crate::positioner::Cell;
 
+mod near;
+mod relax;
+pub use near::place_near;
+pub use relax::relax;
+
 /// Which axis a constraint lies on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Axis {

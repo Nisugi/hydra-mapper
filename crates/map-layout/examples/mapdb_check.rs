@@ -89,10 +89,11 @@ fn main() {
             tot_unknown += 1;
         }
     }
+    let percent = |n: usize| n * 100 / tot.max(1);
     eprintln!(
-        "gs.map: {tot} rooms, {tot_nouid} with no uid ({:.0}%), {tot_unknown} with a uid mapdb does not know ({:.0}%)",
-        100.0 * tot_nouid as f64 / tot as f64,
-        100.0 * tot_unknown as f64 / tot as f64
+        "gs.map: {tot} rooms, {tot_nouid} with no uid ({}%), {tot_unknown} with a uid mapdb does not know ({}%)",
+        percent(tot_nouid),
+        percent(tot_unknown)
     );
 
     for g in &groups {

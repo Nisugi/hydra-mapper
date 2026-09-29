@@ -678,7 +678,7 @@ fn merge_cluster_members(
             local.insert(idx, c);
             place(idx, c, &mut occupied);
         }
-        reserve_roads(skeleton, &cells, &edges, &mut occupied, scale);
+        reserve_roads(skeleton, &cells, &edges, &mut occupied);
     }
 
     loop {
@@ -812,14 +812,20 @@ fn member_free_offset(
 /// Where a member can go, nearest a proposed offset, or nowhere.
 type FreeFor<'a> = dyn Fn(usize, Cell, &HashSet<Cell>) -> Option<Cell> + 'a;
 
-/// The road between two adjacent echoes is drawn as a line; keep the
-/// cells under it clear so no building sits on the street.
+/// Every road between two street rooms that the scene draws as a whole
+/// line: keep the cells under it clear, so no building sits on it.
+///
+/// It was only the road between two *adjacent* street rooms. A longer one
+/// -- two rooms a few cells apart, a road between two outdoor groups --
+/// still draws as a line, and buildings landed on it: on `gs.map`, 5,403
+/// building rooms sat under a line that was not theirs. Roads past
+/// [`crate::scene::LONG_EDGE_CELLS`] draw as stubs, so they reserve
+/// nothing.
 fn reserve_roads(
     skeleton: &[Cell],
     cells: &[Cell],
     edges: &HashMap<usize, Vec<Edge>>,
     occupied: &mut HashSet<Cell>,
-    scale: i32,
 ) {
     for (i, &a) in skeleton.iter().enumerate() {
         for e in edges
@@ -830,18 +836,38 @@ fn reserve_roads(
                 continue;
             };
             let b = skeleton[j];
-            if (a.x - b.x).abs().max((a.y - b.y).abs()) != 1 {
+            if (a.x - b.x).abs().max((a.y - b.y).abs()) > crate::scene::LONG_EDGE_CELLS {
                 continue;
             }
-            let (dx, dy) = ((b.x - a.x).signum(), (b.y - a.y).signum());
-            for step in 1..scale {
-                occupied.insert(Cell {
-                    x: cells[i].x + dx * step,
-                    y: cells[i].y + dy * step,
-                });
-            }
+            occupied.extend(cells_under(cells[i], cells[j]));
         }
     }
+}
+
+/// The cells a straight line from `a` to `b` passes through, ends
+/// excluded: Bresenham's walk, so a line at any angle leaves no gap a
+/// building could slip into.
+fn cells_under(a: Cell, b: Cell) -> Vec<Cell> {
+    let (dx, dy) = ((b.x - a.x).abs(), -(b.y - a.y).abs());
+    let (sx, sy) = ((b.x - a.x).signum(), (b.y - a.y).signum());
+    let mut err = dx + dy;
+    let mut at = a;
+    let mut out = Vec::new();
+    while at != b {
+        let twice = 2 * err;
+        if twice >= dy {
+            err += dy;
+            at.x += sx;
+        }
+        if twice <= dx {
+            err += dx;
+            at.y += sy;
+        }
+        if at != b {
+            out.push(at);
+        }
+    }
+    out
 }
 
 /// How many sheet cells one outdoor solver cell becomes, by default: the
@@ -932,7 +958,12 @@ mod tests {
     use crate::generate_layout;
     use crate::positioner::Cell;
 
+    /// A room; an indoor one with a terrain, so the shelf still has
+    /// buildings to place -- indoors with none is hidden (`hidden`).
     fn room(id: u32, title: &str, paths: &str, exits: Vec<Exit>) -> Room {
+        let terrain = paths
+            .contains("Obvious exits")
+            .then(|| "hard, flat".to_owned());
         Room {
             id: RoomId(id),
             uid: vec![],
@@ -944,7 +975,7 @@ mod tests {
             check_location: false,
             unique_loot: vec![],
             climate: None,
-            terrain: None,
+            terrain,
             tags: vec![],
             meta: vec![],
             image: None,
@@ -1211,6 +1242,7 @@ mod tests {
     /// hang beside, so it shelves in the rows below the town -- below the
     /// streets, not at the origin on top of them. ("A Hide and Leather
     /// Tent": its interior and a street room were both drawn at (0,0).)
+
     #[test]
     fn a_building_with_no_street_shelves_below_the_streets() {
         let mut rooms = Vec::new();
@@ -1351,5 +1383,25 @@ mod tests {
         }
         let map = Map::from_rooms(rooms).expect("no duplicate ids");
         assert_one_room_per_cell(&map);
+    }
+
+    /// A road's cells: every cell the line crosses, ends excluded, with no
+    /// gap at a shallow angle for a building to slip into.
+    #[test]
+    fn a_road_reserves_every_cell_it_crosses() {
+        let c = |x, y| Cell { x, y };
+        assert_eq!(
+            super::cells_under(c(0, 0), c(4, 0)),
+            vec![c(1, 0), c(2, 0), c(3, 0)]
+        );
+        assert_eq!(super::cells_under(c(0, 0), c(3, 3)), vec![c(1, 1), c(2, 2)]);
+        let shallow = super::cells_under(c(0, 0), c(8, 2));
+        assert_eq!(shallow.len(), 7, "one cell per column: {shallow:?}");
+        assert!(
+            shallow
+                .windows(2)
+                .all(|w| (w[1].x - w[0].x) == 1 && (w[1].y - w[0].y).abs() <= 1)
+        );
+        assert!(super::cells_under(c(0, 0), c(1, 1)).is_empty());
     }
 }

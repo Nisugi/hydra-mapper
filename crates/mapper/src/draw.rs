@@ -43,6 +43,9 @@ const SELECTED_STROKE: Color32 = Color32::from_rgb(250, 250, 250);
 /// because a hundred of them are on screen at once and the sheet still
 /// has to be readable underneath.
 const PICKED_FILL: Color32 = Color32::from_rgb(40, 66, 96);
+/// A room flagged for attention -- one whose region is not its area's.
+/// Loud on purpose: the point is to find them at any zoom.
+const FLAGGED_FILL: Color32 = Color32::from_rgb(255, 40, 40);
 /// The Ctrl-drag selection box, translucent so the rooms show through.
 const BOX_FILL: Color32 = Color32::from_rgba_premultiplied(30, 45, 65, 60);
 const HOVER_STROKE: Color32 = Color32::from_rgb(200, 220, 250);
@@ -61,16 +64,11 @@ pub struct Hit {
     /// Ctrl was held on that click: pick this ONE room rather than
     /// inspecting it.
     pub ctrl: bool,
-    /// Shift was held on that click: pick the room's whole group.
-    pub shift: bool,
-    /// A Ctrl-drag box just closed: every square inside it, to pick.
-    ///
-    /// Squares only -- rooms in focus. A dot is a room of some other
-    /// building drawn out of focus, and sweeping a box across a street
-    /// should not quietly take the doorway of every shop along it.
+    /// A Ctrl-drag box just closed: every room drawn inside it, to pick --
+    /// dots included, the same rooms a click can hit.
     pub boxed: Vec<RoomId>,
     /// In edit mode: the room a drag just started on, and whether Alt was
-    /// held (move one room rather than its whole group).
+    /// held (move one room rather than its whole group or the pick).
     pub drag_started: Option<(RoomId, bool)>,
     /// In edit mode: pixels dragged this frame, to accumulate.
     pub dragged_by: Option<egui::Vec2>,
@@ -80,6 +78,7 @@ pub struct Hit {
 
 /// How the canvas behaves and what it draws, beyond the sheet itself.
 #[derive(Clone, Copy, Debug)]
+#[allow(clippy::struct_excessive_bools)] // independent toggles, not a state machine
 pub struct View {
     /// Dragging moves rooms instead of panning.
     pub edit_mode: bool,
@@ -88,6 +87,8 @@ pub struct View {
     /// Every interior room out of focus is drawn as a dot, not only the
     /// door you enter its building by.
     pub interiors: bool,
+    /// The rooms whose region is not their area's are painted red.
+    pub off_region: bool,
 }
 
 /// What is in focus: the rooms drawn as squares. Everything else on the
@@ -102,9 +103,16 @@ pub struct Focus<'a> {
     /// rooms hosting a doorway: drawn as larger dots when out of focus,
     /// so the ways in are visible.
     pub doors: &'a HashSet<RoomId>,
+    /// Rooms painted red, drawn wherever they are so none hides inside a
+    /// building out of focus.
+    pub flagged: Option<&'a HashSet<RoomId>>,
 }
 
 impl Focus<'_> {
+    fn flagged(&self, id: RoomId) -> bool {
+        self.flagged.is_some_and(|f| f.contains(&id))
+    }
+
     fn has(&self, id: RoomId) -> bool {
         self.rooms.contains(&id)
     }
@@ -114,7 +122,11 @@ impl Focus<'_> {
     /// is one dot where you enter it, not its floor plan sprinkled beside
     /// the street.
     fn shows(&self, id: RoomId, interiors: bool) -> bool {
-        interiors || self.has(id) || self.streets.contains(&id) || self.doors.contains(&id)
+        interiors
+            || self.has(id)
+            || self.streets.contains(&id)
+            || self.doors.contains(&id)
+            || self.flagged(id)
     }
 }
 
@@ -134,12 +146,13 @@ pub fn scene(
     selected: Option<RoomId>,
     picked: &HashSet<RoomId>,
     view: View,
-    ghost: Option<(usize, Option<RoomId>, Cell)>,
+    ghost: &[Cell],
 ) -> Hit {
     let View {
         edit_mode,
         labels,
         interiors,
+        off_region: _,
     } = view;
     let sheet = &scene.sheet;
     if sheet.rooms.is_empty() {
@@ -173,7 +186,6 @@ pub fn scene(
     let mut hit = Hit {
         clicked: response.clicked().then_some(hovered).flatten(),
         ctrl: ui.input(|i| i.modifiers.command),
-        shift: ui.input(|i| i.modifiers.shift),
         ..Hit::default()
     };
     let box_rect = box_origin.and_then(|origin| {
@@ -182,10 +194,14 @@ pub fn scene(
     });
     if box_origin.is_some() && response.drag_stopped() {
         if let Some(rect) = box_rect {
+            // Everything drawn is boxable -- dots too, the same rooms a
+            // click can hit -- so a building's rooms can be picked without
+            // entering it. (It took only the rooms in focus, which from the
+            // streets is no interior at all.)
             hit.boxed = sheet
                 .rooms
                 .iter()
-                .filter(|r| focus.has(r.id))
+                .filter(|r| focus.shows(r.id, interiors))
                 .filter(|r| rect.contains(camera.to_screen(r.cell, canvas)))
                 .map(|r| r.id)
                 .collect();
@@ -207,12 +223,11 @@ pub fn scene(
     draw_rooms(
         &painter, sheet, focus, interiors, *camera, canvas, selected, picked, hovered,
     );
+    draw_ways_in(&painter, sheet, focus, interiors, *camera, canvas, labels);
     if labels && camera.scale >= LABEL_MIN_SCALE {
         draw_labels(&painter, scene, focus, *camera, canvas);
     }
-    if let Some((group, room, delta)) = ghost {
-        draw_ghost(&painter, sheet, *camera, canvas, group, room, delta);
-    }
+    draw_ghost(&painter, *camera, canvas, ghost);
     if let (Some(rect), false) = (box_rect, response.drag_stopped()) {
         painter.rect(
             rect,
@@ -229,31 +244,12 @@ pub fn scene(
 }
 
 /// Where a drag would land, previewed as outlines while the mouse is down,
-/// so a move is aimed rather than guessed and undone.
-#[allow(clippy::cast_precision_loss)] // a drag delta is a handful of cells
-fn draw_ghost(
-    painter: &egui::Painter,
-    sheet: &SheetScene,
-    camera: Camera,
-    canvas: Rect,
-    group: usize,
-    room: Option<RoomId>,
-    delta: Cell,
-) {
+/// so a move is aimed rather than guessed and undone. `landing` is the
+/// drawn cell each carried room would end up in.
+fn draw_ghost(painter: &egui::Painter, camera: Camera, canvas: Rect, landing: &[Cell]) {
     let side = (ROOM_PX * camera.scale).max(2.0);
-    let shift = Vec2::new(
-        delta.x as f32 * camera.cell_px(),
-        delta.y as f32 * camera.cell_px(),
-    );
-    for scene_room in &sheet.rooms {
-        let moving = match room {
-            Some(id) => scene_room.id == id,
-            None => scene_room.group == group,
-        };
-        if !moving {
-            continue;
-        }
-        let at = camera.to_screen(scene_room.cell, canvas) + shift;
+    for &cell in landing {
+        let at = camera.to_screen(cell, canvas);
         painter.rect_stroke(
             Rect::from_center_size(at, Vec2::splat(side)),
             2.0,
@@ -346,12 +342,20 @@ fn draw_edges(
         // Scaled so lines thin out as the view pulls back, but never to
         // nothing.
         let width = (camera.scale * 1.5).max(0.5);
+        // A routed line bends around the rooms it would have crossed.
+        let mut path = vec![a];
+        path.extend(
+            edge.via
+                .iter()
+                .map(|p| camera.point_to_screen(p.x, p.y, canvas)),
+        );
+        path.push(b);
         match edge.kind {
             SceneEdgeKind::Directional => {
-                painter.line_segment([a, b], Stroke::new(width, DIRECTIONAL_LINE));
+                painter.line(path, Stroke::new(width, DIRECTIONAL_LINE));
             }
             SceneEdgeKind::Connector => {
-                painter.line_segment([a, b], Stroke::new(width * 0.7, CONNECTOR_LINE));
+                painter.line(path, Stroke::new(width * 0.7, CONNECTOR_LINE));
             }
             // Stretched too far to draw whole: a short tick out of each
             // end toward the other, labelled with the room it leads to, so
@@ -421,13 +425,18 @@ fn draw_rooms(
         if picked.contains(&room.id) {
             painter.rect_filled(rect.expand(side * 0.35), 2.0, PICKED_FILL);
         }
+        let flagged = focus.flagged(room.id);
         if !focus.has(room.id) {
             let r = if focus.doors.contains(&room.id) {
                 (side * 0.3).max(2.5)
             } else {
                 (side * 0.18).max(1.5)
             };
-            painter.circle_filled(centre, r, ECHO_DOT);
+            if flagged {
+                painter.circle_filled(centre, r.max(side * 0.3).max(3.0), FLAGGED_FILL);
+            } else {
+                painter.circle_filled(centre, r, ECHO_DOT);
+            }
             if is_selected || hovered == Some(room.id) {
                 let color = if is_selected {
                     SELECTED_STROKE
@@ -450,7 +459,7 @@ fn draw_rooms(
         painter.rect(
             rect,
             2.0 * camera.scale,
-            ROOM_FILL,
+            if flagged { FLAGGED_FILL } else { ROOM_FILL },
             Stroke::new(width, stroke_color),
             StrokeKind::Outside,
         );
@@ -462,6 +471,40 @@ fn draw_rooms(
                 2.0,
                 Stroke::new(1.0, SELECTED_STROKE),
                 StrokeKind::Outside,
+            );
+        }
+    }
+}
+
+/// A dot beside a street room for each way into a place not drawn
+/// (`doors`), the big ones named.
+fn draw_ways_in(
+    painter: &egui::Painter,
+    sheet: &SheetScene,
+    focus: &Focus<'_>,
+    interiors: bool,
+    camera: Camera,
+    canvas: Rect,
+    labels: bool,
+) {
+    for door in sheet
+        .doors
+        .iter()
+        .filter(|d| focus.shows(d.street, interiors))
+    {
+        let at = camera.point_to_screen(door.at.x, door.at.y, canvas);
+        if !canvas.contains(at) {
+            continue;
+        }
+        let r = (ROOM_PX * camera.scale * if door.named() { 0.45 } else { 0.28 }).max(2.5);
+        painter.circle_filled(at, r, ENTRANCE_STROKE);
+        if door.named() && labels {
+            painter.text(
+                at + Vec2::new(r + 3.0, 0.0),
+                Align2::LEFT_CENTER,
+                &door.place,
+                FontId::proportional(12.0_f32.max(12.0 * camera.scale)),
+                ENTRANCE_STROKE,
             );
         }
     }

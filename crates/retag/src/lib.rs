@@ -125,7 +125,38 @@ fn tag_regions(plan: &mut Plan, rooms: &[Room], curation: &Curation) {
         }
     }
 
+    // A person's say-so outranks all of it: the mapdb join, the folds
+    // and the spread. Keyed the way the mapper keys a room -- its first
+    // uid, or its id when it has none.
+    let mut assigned: BTreeMap<RoomKey, &str> = BTreeMap::new();
+    for block in &curation.assignments.regions {
+        for uid in &block.uids {
+            assigned.insert(RoomKey::Uid(*uid), block.region.as_str());
+        }
+        for id in &block.ids {
+            assigned.insert(RoomKey::Id(*id), block.region.as_str());
+        }
+    }
+
     for room in rooms {
+        if let Some(region) = assigned.get(&RoomKey::of(room)) {
+            let meta = format!("region:{region}");
+            for old in room.meta.iter().filter(|m| {
+                (m.starts_with("region:") && **m != meta) || *m == "map:region-inferred"
+            }) {
+                plan.changes.push(Change::DropMeta {
+                    id: room.id.0,
+                    meta: old.clone(),
+                });
+            }
+            if !room.meta.contains(&meta) {
+                plan.changes.push(Change::AddMeta {
+                    id: room.id.0,
+                    meta,
+                });
+            }
+            continue;
+        }
         // A room the game numbers once belongs where that number says.
         // A room it numbers NINE times, once per town, is a plane the
         // towns each open onto -- and `find_map` would take whichever
@@ -176,6 +207,59 @@ fn tag_regions(plan: &mut Plan, rooms: &[Room], curation: &Curation) {
             id: room.id.0,
             meta,
         });
+    }
+}
+
+/// How the mapper names a room: its first uid, or its id when the game
+/// never numbered it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum RoomKey {
+    Uid(i64),
+    Id(u32),
+}
+
+impl RoomKey {
+    fn of(room: &Room) -> RoomKey {
+        room.uid
+            .first()
+            .map_or(RoomKey::Id(room.id.0), |u| RoomKey::Uid(u.0))
+    }
+}
+
+/// Write `meta:area:<name>` from the mapper's curated areas, and take it
+/// off any room no area holds any more, so unassigning in the mapper
+/// reaches the map too. One area per room: a room named in two blocks
+/// takes the later, as the store would.
+fn tag_areas(plan: &mut Plan, rooms: &[Room], curation: &Curation) {
+    let mut area_of: BTreeMap<RoomKey, &str> = BTreeMap::new();
+    for area in &curation.assignments.areas {
+        for uid in &area.uids {
+            area_of.insert(RoomKey::Uid(*uid), area.name.as_str());
+        }
+        for id in &area.ids {
+            area_of.insert(RoomKey::Id(*id), area.name.as_str());
+        }
+    }
+    for room in rooms {
+        let want = area_of
+            .get(&RoomKey::of(room))
+            .map(|name| format!("area:{name}"));
+        for old in room.meta.iter().filter(|m| m.starts_with("area:")) {
+            if want.as_ref() != Some(old) {
+                plan.changes.push(Change::DropMeta {
+                    id: room.id.0,
+                    meta: old.clone(),
+                });
+            }
+        }
+        if let Some(meta) = want
+            && !room.meta.contains(&meta)
+        {
+            plan.changes.push(Change::AddMeta {
+                id: room.id.0,
+                meta,
+            });
+        }
     }
 }
 
@@ -502,6 +586,45 @@ impl Plan {
     }
 }
 
+/// Each room's disposition as its marks: the verdict's and the event's
+/// meta added, and the tags they subsume dropped.
+fn apply_verdicts(
+    plan: &mut Plan,
+    rooms: &[Room],
+    assigned: &BTreeMap<u32, (Verdict, Option<String>)>,
+) {
+    let by_id: BTreeMap<u32, &Room> = rooms.iter().map(|r| (r.id.0, r)).collect();
+    for (id, (verdict, event)) in assigned {
+        *plan.verdicts.entry(*verdict).or_default() += 1;
+        let Some(room) = by_id.get(id) else { continue };
+        if let Some(meta) = verdict.meta()
+            && !room.meta.iter().any(|m| m == meta)
+        {
+            plan.changes.push(Change::AddMeta {
+                id: *id,
+                meta: meta.to_owned(),
+            });
+        }
+        if let Some(event) = event {
+            let meta = format!("event:{event}");
+            if !room.meta.contains(&meta) {
+                plan.changes.push(Change::AddMeta { id: *id, meta });
+            }
+        }
+        // The tags this subsumes. `rewritten` is deliberately not here:
+        // Cairnfang Manor is rewritten and live, so it is not a
+        // disposition and keeps its tag.
+        for tag in ["gone", "closed", "missing"] {
+            if room.tags.iter().any(|t| t == tag) {
+                plan.changes.push(Change::DropTag {
+                    id: *id,
+                    tag: tag.to_owned(),
+                });
+            }
+        }
+    }
+}
+
 /// Work out every change, without making any.
 ///
 /// `plan` and `apply` share this so the report cannot drift from the
@@ -567,36 +690,8 @@ pub fn plan(map: &Map, curation: &Curation) -> Plan {
         }
     }
 
+    apply_verdicts(&mut plan, rooms, &assigned);
     let by_id: BTreeMap<u32, &Room> = rooms.iter().map(|r| (r.id.0, r)).collect();
-    for (id, (verdict, event)) in &assigned {
-        *plan.verdicts.entry(*verdict).or_default() += 1;
-        let Some(room) = by_id.get(id) else { continue };
-        if let Some(meta) = verdict.meta()
-            && !room.meta.iter().any(|m| m == meta)
-        {
-            plan.changes.push(Change::AddMeta {
-                id: *id,
-                meta: meta.to_owned(),
-            });
-        }
-        if let Some(event) = event {
-            let meta = format!("event:{event}");
-            if !room.meta.contains(&meta) {
-                plan.changes.push(Change::AddMeta { id: *id, meta });
-            }
-        }
-        // The tags this subsumes. `rewritten` is deliberately not here:
-        // Cairnfang Manor is rewritten and live, so it is not a
-        // disposition and keeps its tag.
-        for tag in ["gone", "closed", "missing"] {
-            if room.tags.iter().any(|t| t == tag) {
-                plan.changes.push(Change::DropTag {
-                    id: *id,
-                    tag: tag.to_owned(),
-                });
-            }
-        }
-    }
 
     // Pass 2b: the disposition tags no area rule reached.
     convert_loose_tags(&mut plan, rooms, curation, &assigned, &reachable);
@@ -628,6 +723,9 @@ pub fn plan(map: &Map, curation: &Curation) -> Plan {
 
     // Pass 2f: regions spread into the ground between them.
     spread_regions(&mut plan, rooms, curation);
+
+    // Pass 2g: areas, as the mapper curated them.
+    tag_areas(&mut plan, rooms, curation);
 
     // Pass 3: rooms the game no longer has.
     for id in removed_rooms(rooms, &reachable) {

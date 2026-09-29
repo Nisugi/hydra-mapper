@@ -34,20 +34,29 @@
 // than per-site because the reasoning is the same at every occurrence.
 #![allow(clippy::implicit_hasher)]
 
+pub mod areas;
 pub mod classifier;
+mod cut;
 pub mod direction;
+pub mod doors;
+pub mod hidden;
+mod hole;
 pub mod interior_shelf;
 pub mod outdoor_packing;
 pub mod overrides;
 pub mod packer;
 pub mod pipeline;
 pub mod positioner;
+pub mod quality;
 pub mod regions;
+mod route_finder;
+pub mod routing;
 pub mod satisfiable;
 #[cfg(test)]
 mod satisfiable_tests;
 pub mod scene;
 pub mod stats;
+mod stretch;
 
 pub use classifier::Classification;
 pub use direction::{Dir, DirectionMap};
@@ -58,6 +67,7 @@ pub use pipeline::{
     generate_layout_with,
 };
 pub use positioner::{Cell, Group, PackMethod, Violation};
+pub use quality::Quality;
 pub use satisfiable::{Axis, Problem, is_satisfiable, place_by_order, problems};
 pub use scene::{MapScene, SheetScene, Unit, UnitKind, build_scene};
 pub use stats::LayoutStats;

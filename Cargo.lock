@@ -270,6 +270,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "cena-gs-map"
+version = "0.1.0"
+
+[[package]]
 name = "cena-map"
 version = "0.1.0"
 source = "git+https://github.com/Nisugi/cena?branch=main#caf5d42c1903a9931e4fd990ffbca401a31b322b"

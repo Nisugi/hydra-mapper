@@ -11,7 +11,7 @@ use crate::classifier::Classification;
 use crate::overrides::EdgeOverride;
 use crate::packer::PackInfo;
 use crate::positioner::Group;
-use crate::{classifier, direction, interior_shelf, outdoor_packing, positioner, regions};
+use crate::{classifier, direction, hidden, interior_shelf, outdoor_packing, positioner, regions};
 
 /// A generated layout: every component with internal positions and sheet
 /// offsets, plus the interior/outdoor split and packing debug info.
@@ -33,6 +33,14 @@ pub struct Layout {
     /// ([`LayoutParams::town_scale`]), so the scene draws it at the same.
     #[serde(default = "default_town_scale")]
     pub town_scale: i32,
+    /// Outdoor groups cut to a sheet of their own (`cut`), their links
+    /// drawn as marks.
+    #[serde(default)]
+    pub cut: Vec<usize>,
+    /// The ways into what is left off the sheet (`hidden`), each drawn as
+    /// a dot beside its street room.
+    #[serde(default)]
+    pub ways_in: Vec<hidden::WayIn>,
 }
 
 /// The knobs a layout is built with.
@@ -114,8 +122,19 @@ fn generate_layout_impl(map: &Map, edges: &[EdgeOverride], params: LayoutParams)
     dirs.apply_edge_overrides(map, edges);
     let dirs = dirs;
 
+    // The rooms left off the sheet (`hidden`): laid out apart, seen by the
+    // packer so what they join is packed together, then dropped.
+    let whole = map;
+    let hidden = hidden::hidden_rooms(whole);
+    let (drawn, behind) = hidden::split(whole, &hidden);
+    let map = if hidden.is_empty() { whole } else { &drawn };
+
     let mut groups = positioner::position_rooms(map, &dirs);
-    let classification = classifier::classify(&groups, map);
+    let mut classification = classifier::classify(&groups, map);
+    // A street room that leads into what is hidden is marked as a way in.
+    classification
+        .entrance_room_ids
+        .extend(hidden::entrances(whole, &hidden));
 
     let mut outdoor: Vec<usize> = groups
         .iter()
@@ -133,7 +152,39 @@ fn generate_layout_impl(map: &Map, edges: &[EdgeOverride], params: LayoutParams)
         interiors.clear();
     }
 
-    let pack_info = outdoor_packing::pack_groups(&mut groups, &outdoor, map, &dirs);
+    let shown = groups.len();
+    if !hidden.is_empty() {
+        for mut group in positioner::position_rooms(&behind, &dirs) {
+            group.index += shown;
+            groups.push(group);
+        }
+    }
+    // A ring too tight for what hangs inside it is spread out (`hole`).
+    crate::hole::make_room(&mut groups, &outdoor, whole, &dirs);
+    let mut pack_info = outdoor_packing::pack_groups(&mut groups, &outdoor, whole, &dirs);
+    // The islands go to their own sheet (`cut`), and the rest is packed
+    // again without them.
+    let mut cut: Vec<usize> = Vec::new();
+    crate::cut::pull_in(&mut groups, &outdoor, whole, &dirs, crate::cut::STEPS);
+    let islands = crate::cut::islands(&groups, &outdoor, whole, &dirs, crate::cut::STEPS);
+    if !islands.is_empty() {
+        for group in &mut groups {
+            group.base_offset = None;
+            group.packing = None;
+        }
+        cut = islands.iter().copied().collect();
+        cut.sort_unstable();
+        let kept: Vec<usize> = outdoor
+            .iter()
+            .copied()
+            .filter(|i| !islands.contains(i))
+            .collect();
+        pack_info = outdoor_packing::pack_groups(&mut groups, &kept, whole, &dirs);
+        // Places, not shops: at the streets' scale, in a row of their own
+        // below everything, out of the way.
+        crate::cut::below(&mut groups, &kept, &cut);
+    }
+    groups.truncate(shown);
     let clusters = classifier::interior_clusters(&groups, &classification.interior_groups, map);
 
     // After the outdoor pass, which is what gives the doorway rooms the
@@ -163,5 +214,7 @@ fn generate_layout_impl(map: &Map, edges: &[EdgeOverride], params: LayoutParams)
         pack_info,
         edges: edges.to_vec(),
         town_scale,
+        cut,
+        ways_in: hidden::ways_in(whole, &hidden),
     }
 }

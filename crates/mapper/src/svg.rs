@@ -17,7 +17,8 @@ use std::fmt::Write as _;
 use std::collections::HashSet;
 
 use cena_map::RoomId;
-use cena_map_layout::scene::{SceneEdgeKind, SheetScene};
+use cena_map_layout::Cell;
+use cena_map_layout::scene::{SceneEdge, SceneEdgeKind, SheetScene};
 
 /// Pixels per cell, and the room square inside one. The canvas's own
 /// `CELL_PX` and `ROOM_PX` at scale 1.0 -- an SVG has no zoom, so the
@@ -130,43 +131,12 @@ pub fn sheet(
         if edge.unit.is_some() && !(in_focus(edge.a_room) && in_focus(edge.b_room)) {
             continue;
         }
-        let (color, w) = match edge.kind {
-            SceneEdgeKind::Stub if edge.label.is_some() => (CONNECTOR_LINE, 1.5),
-            SceneEdgeKind::Directional | SceneEdgeKind::Stub => (DIRECTIONAL_LINE, 1.5),
-            SceneEdgeKind::Connector => (CONNECTOR_LINE, 1.05),
-        };
-        if edge.kind == SceneEdgeKind::Stub {
-            // A tick out of each end toward the other, labelled with the
-            // room it leads to -- the canvas's stub.
-            let (ax, ay, bx, by) = (px(edge.a.x), py(edge.a.y), px(edge.b.x), py(edge.b.y));
-            let len = (bx - ax).hypot(by - ay).max(1.0);
-            let reach = (CELL_PX * 1.5).min(len / 2.0);
-            let (ux, uy) = ((bx - ax) / len, (by - ay) / len);
-            for (x, y, sx, sy, partner) in [
-                (ax, ay, ux, uy, edge.b_room),
-                (bx, by, -ux, -uy, edge.a_room),
-            ] {
-                let (tx, ty) = (x + sx * reach, y + sy * reach);
-                let _ = writeln!(
-                    svg,
-                    r#"<line x1="{x:.1}" y1="{y:.1}" x2="{tx:.1}" y2="{ty:.1}" stroke="{color}" stroke-width="{w}"/><text x="{tx:.1}" y="{ty:.1}" fill="{color}" font-size="9" text-anchor="middle" dominant-baseline="middle">{}</text>"#,
-                    partner.0
-                );
-            }
-            continue;
-        }
-        let _ = writeln!(
-            svg,
-            r#"<line x1="{:.1}" y1="{:.1}" x2="{:.1}" y2="{:.1}" stroke="{color}" stroke-width="{w}"/>"#,
-            px(edge.a.x),
-            py(edge.a.y),
-            px(edge.b.x),
-            py(edge.b.y),
-        );
+        write_edge(&mut svg, edge, scene.min);
     }
     let _ = writeln!(svg, "</g>");
 
     write_rooms(&mut svg, scene, &in_focus, streets, doors, &px, &py);
+    write_ways_in(&mut svg, scene, &|id| in_focus(id) || streets.contains(&id));
 
     // Labels name what is in focus: a building's label draws when the
     // building does. A label's unit is looked up by whether its group's
@@ -257,6 +227,40 @@ fn write_rooms(
     let _ = writeln!(svg, "</g>");
 }
 
+/// A dot beside a street room for each way into a place not drawn, the
+/// big ones named.
+#[allow(clippy::cast_precision_loss)]
+fn write_ways_in(svg: &mut String, scene: &SheetScene, shown: &dyn Fn(RoomId) -> bool) {
+    let px = |x: f32| MARGIN + (x - scene.min.x as f32) * CELL_PX + CELL_PX / 2.0;
+    let py = |y: f32| MARGIN + (y - scene.min.y as f32) * CELL_PX + CELL_PX / 2.0;
+    let _ = writeln!(
+        svg,
+        r#"<g fill="{ENTRANCE_STROKE}" font-family="sans-serif" font-size="13">"#
+    );
+    for door in scene.doors.iter().filter(|d| shown(d.street)) {
+        let (x, y) = (px(door.at.x), py(door.at.y));
+        let r = if door.named() { 9.0 } else { 5.0 };
+        let _ = writeln!(
+            svg,
+            r#"<circle cx="{x:.1}" cy="{y:.1}" r="{r}"><title>{}</title></circle>"#,
+            escape(&format!(
+                "{} ({} rooms) from {}",
+                door.place, door.rooms, door.street.0
+            )),
+        );
+        if door.named() {
+            let _ = writeln!(
+                svg,
+                r#"<text x="{:.1}" y="{:.1}">{}</text>"#,
+                x + r + 3.0,
+                y + 4.0,
+                escape(&door.place),
+            );
+        }
+    }
+    let _ = writeln!(svg, "</g>");
+}
+
 /// The five characters that cannot appear as text in XML.
 fn escape(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
@@ -271,6 +275,52 @@ fn escape(s: &str) -> String {
         }
     }
     out
+}
+
+/// One edge: a polyline through its bends, or for a stub a tick out of
+/// each end toward the other, labelled with the room it leads to -- the
+/// canvas's own shapes.
+#[allow(clippy::cast_precision_loss)] // cell coordinates are a few hundred
+fn write_edge(svg: &mut String, edge: &SceneEdge, min: Cell) {
+    let fx = |x: f32| MARGIN + (x - min.x as f32) * CELL_PX + CELL_PX / 2.0;
+    let fy = |y: f32| MARGIN + (y - min.y as f32) * CELL_PX + CELL_PX / 2.0;
+    let (color, w) = match edge.kind {
+        SceneEdgeKind::Stub if edge.label.is_some() => (CONNECTOR_LINE, 1.5),
+        SceneEdgeKind::Directional | SceneEdgeKind::Stub => (DIRECTIONAL_LINE, 1.5),
+        SceneEdgeKind::Connector => (CONNECTOR_LINE, 1.05),
+    };
+    let (ax, ay) = (fx(edge.a.x as f32), fy(edge.a.y as f32));
+    let (bx, by) = (fx(edge.b.x as f32), fy(edge.b.y as f32));
+    if edge.kind == SceneEdgeKind::Stub {
+        let len = (bx - ax).hypot(by - ay).max(1.0);
+        let reach = (CELL_PX * 1.5).min(len / 2.0);
+        let (ux, uy) = ((bx - ax) / len, (by - ay) / len);
+        for (x, y, sx, sy, partner) in [
+            (ax, ay, ux, uy, edge.b_room),
+            (bx, by, -ux, -uy, edge.a_room),
+        ] {
+            let (tx, ty) = (x + sx * reach, y + sy * reach);
+            let _ = writeln!(
+                svg,
+                r#"<line x1="{x:.1}" y1="{y:.1}" x2="{tx:.1}" y2="{ty:.1}" stroke="{color}" stroke-width="{w}"/><text x="{tx:.1}" y="{ty:.1}" fill="{color}" font-size="9" text-anchor="middle" dominant-baseline="middle">{}</text>"#,
+                partner.0
+            );
+        }
+        return;
+    }
+    // A routed line bends around the rooms it would have crossed.
+    let mut points = vec![(ax, ay)];
+    points.extend(edge.via.iter().map(|p| (fx(p.x), fy(p.y))));
+    points.push((bx, by));
+    let list: Vec<String> = points
+        .iter()
+        .map(|(x, y)| format!("{x:.1},{y:.1}"))
+        .collect();
+    let _ = writeln!(
+        svg,
+        r#"<polyline points="{}" fill="none" stroke="{color}" stroke-width="{w}"/>"#,
+        list.join(" "),
+    );
 }
 
 #[cfg(test)]
@@ -337,7 +387,18 @@ mod tests {
         assert!(svg.starts_with("<svg xmlns=\"http://www.w3.org/2000/svg\""));
         assert!(svg.trim_end().ends_with("</svg>"));
         assert_eq!(svg.matches("<rect").count(), 1 + scene.sheet.rooms.len());
-        assert_eq!(svg.matches("<line").count(), scene.sheet.edges.len());
+        // One polyline per whole edge; a stub is two ticks instead.
+        let stubs = scene
+            .sheet
+            .edges
+            .iter()
+            .filter(|e| e.kind == SceneEdgeKind::Stub)
+            .count();
+        assert_eq!(
+            svg.matches("<polyline").count(),
+            scene.sheet.edges.len() - stubs
+        );
+        assert_eq!(svg.matches("<line").count(), stubs * 2);
     }
 
     /// With only one room in focus, the rest are dots and nothing inside

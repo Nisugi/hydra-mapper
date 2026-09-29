@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
+    "crates/gs-map",
     "crates/map-layout",
     "crates/mapper",
     "crates/retag",

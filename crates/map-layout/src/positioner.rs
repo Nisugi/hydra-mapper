@@ -219,41 +219,9 @@ pub fn position_rooms(map: &Map, dirs: &DirectionMap) -> Vec<Group> {
         );
 
         optimize_component(&room_order, &mut positions, map, dirs);
-        let mut violations = validate_component(&room_order, &positions, map, dirs);
+        let violations = validate_component(&room_order, &positions, map, dirs);
 
-        // A violation on satisfiable data is the solver's, not the map's,
-        // and both repair passes above are local: the hill climb moves one
-        // room among its neighbours, and the re-weld cascades outward but
-        // will not move the anchor, so neither can make the coordinated
-        // shift some arrangements need. An arrangement exists in that
-        // case -- but it is ranked, not drawn: it satisfies every bearing
-        // and can stretch the component out of shape doing it.
-        if !violations.is_empty()
-            && let Some(mut placed) = crate::satisfiable::place_by_order(&room_order, map, dirs)
-        {
-            compact_component(&mut placed);
-            optimize_component(&room_order, &mut placed, map, dirs);
-            let fixed = validate_component(&room_order, &placed, map, dirs);
-            // **Only a clean win is taken**: fewer violations, no rooms
-            // stacked, and no longer in total edge length after its own
-            // hill climb. The ordering pass satisfies every direction it
-            // knows about, but `validate_component` reads exits it does
-            // not constrain, so fewer violations is checked, not assumed.
-            // And the length test is what keeps it honest: taken on
-            // violations alone it swapped the Landing's wing columns to
-            // fix one bearing (edges +30%) and tangled Mist Harbor's
-            // streets (a 1,063-room group, edges nearly doubled). A
-            // violation is drawn and can be corrected; a tangle cannot be
-            // read.
-            if fixed.len() < violations.len()
-                && stacked(&placed) == 0
-                && edge_length(&room_order, &placed, map)
-                    <= edge_length(&room_order, &positions, map)
-            {
-                positions = placed;
-                violations = fixed;
-            }
-        }
+        let violations = repair_component(&room_order, &mut positions, violations, map, dirs);
 
         groups.push(Group {
             index: groups.len(),
@@ -296,7 +264,12 @@ fn directional_bfs(
         let Some(room) = map.room(room_id) else {
             continue;
         };
-        for exit in &room.exits {
+        // Up and down last: they only borrow a cell, and a room put on it
+        // first is pushed on by the grid rip when the compass exit that
+        // truly points there comes after (`free_side`).
+        let mut exits: Vec<&cena_map::Exit> = room.exits.iter().collect();
+        exits.sort_by_key(|e| dirs.get(room_id, e.to).is_some_and(|d| !d.is_compass()));
+        for exit in exits {
             let target_id = exit.to;
             if map.room(target_id).is_none() || !unpositioned.contains(&target_id) {
                 continue;
@@ -325,7 +298,7 @@ fn directional_bfs(
                 // interior shelf exists to place. Following those too
                 // welds every shop onto the street and makes one
                 // 27,959-room group of the world.
-                if !is_building_entrance(map, air, room_id, target_id) {
+                if welds(map, air, room_id, target_id) {
                     pending.push((room_id, target_id));
                 }
                 continue;
@@ -338,6 +311,12 @@ fn directional_bfs(
                 y: pos.y + dy,
             };
 
+            if !direction.is_compass()
+                && occupied.contains(&target)
+                && let Some(free) = free_side(pos, (dx, dy), occupied)
+            {
+                target = free;
+            }
             if occupied.contains(&target) {
                 // Grid rip: shift a half-plane one cell so the occupant
                 // slides off the target cell and the stated direction
@@ -359,6 +338,102 @@ fn directional_bfs(
                 unpositioned.remove(&target_id);
                 queue.push_back(target_id);
             }
+        }
+        follow_inbound(
+            map,
+            dirs,
+            room_id,
+            queue,
+            positions,
+            occupied,
+            room_order,
+            unpositioned,
+        );
+    }
+}
+
+/// For up or down, which only borrow north's and south's cells, a free
+/// cell beside `pos` when the borrowed one is taken: its own side's
+/// diagonals first, then east or west, then the far side. Ripping the grid
+/// instead put the Long Snow's Encampment a second step north, past the
+/// room already there, its line drawn back over that room's (the author,
+/// 2026-09-29: *"Why does the long snow go the wrong way and cross over
+/// it's own edge?"*).
+fn free_side(pos: Cell, (_, dy): (i32, i32), occupied: &HashSet<Cell>) -> Option<Cell> {
+    [
+        (1, dy),
+        (-1, dy),
+        (1, 0),
+        (-1, 0),
+        (1, -dy),
+        (-1, -dy),
+        (0, -dy),
+    ]
+    .into_iter()
+    .map(|(x, y)| Cell {
+        x: pos.x + x,
+        y: pos.y + y,
+    })
+    .find(|c| !occupied.contains(c))
+}
+
+/// The rooms with an arrow into `room_id` and none back, placed opposite
+/// their arrow, so a one-way exit keeps both its rooms in one group
+/// whichever way it is written. Once a line with no direction stopped
+/// joining groups outdoors ([`welds`]), a room whose only tie was an arrow
+/// into the group started a group of its own, and 37 arrows between two
+/// groups were drawn the wrong way round; with this, 0.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the BFS's working state, as directional_bfs"
+)]
+fn follow_inbound(
+    map: &Map,
+    dirs: &DirectionMap,
+    room_id: RoomId,
+    queue: &mut VecDeque<RoomId>,
+    positions: &mut HashMap<RoomId, Cell>,
+    occupied: &mut HashSet<Cell>,
+    room_order: &mut Vec<RoomId>,
+    unpositioned: &mut HashSet<RoomId>,
+) {
+    let inbound: Vec<(RoomId, (i32, i32))> = map
+        .rooms()
+        .iter()
+        .filter(|r| unpositioned.contains(&r.id))
+        .filter_map(|r| {
+            r.exits
+                .iter()
+                .filter(|e| e.to == room_id && crate::regions::is_passage(e))
+                .find_map(|_| dirs.get(r.id, room_id))
+                .filter(|d| d.is_compass())
+                .map(|d| (r.id, d.offset()))
+        })
+        .collect();
+    for (from_id, (dx, dy)) in inbound {
+        if !unpositioned.contains(&from_id) {
+            continue;
+        }
+        let pos = (*positions)[&room_id];
+        let mut cell = Cell {
+            x: pos.x - dx,
+            y: pos.y - dy,
+        };
+        if occupied.contains(&cell) {
+            rip_grid(positions, pos, (-dx, -dy));
+            *occupied = positions.values().copied().collect();
+            let fresh = (*positions)[&room_id];
+            cell = Cell {
+                x: fresh.x - dx,
+                y: fresh.y - dy,
+            };
+        }
+        if !occupied.contains(&cell) {
+            positions.insert(from_id, cell);
+            occupied.insert(cell);
+            room_order.push(from_id);
+            unpositioned.remove(&from_id);
+            queue.push_back(from_id);
         }
     }
 }
@@ -415,7 +490,7 @@ fn drain_connectors(
                         continue;
                     }
                     let Some(direction) = dirs.get(id, next) else {
-                        if !is_building_entrance(map, air, id, next) {
+                        if welds(map, air, id, next) {
                             still_pending.push((id, next));
                         }
                         continue;
@@ -682,6 +757,9 @@ fn optimize_component(
 
     let adjacency = build_compass_adjacency(room_order, positions, map, dirs);
     hill_climb(room_order, positions, &adjacency);
+    if move_lines(room_order, positions, &adjacency) {
+        hill_climb(room_order, positions, &adjacency);
+    }
     reweld_violations(room_order, positions, &adjacency);
     compact_component(positions);
 }
@@ -844,6 +922,208 @@ fn hill_climb(
     }
 }
 
+/// How far, in cells, a whole column or row is tried away from where it is.
+const LINE_REACH: i32 = 3;
+
+/// Move whole columns and rows, where the hill climb can only move rooms.
+///
+/// **A column is stuck where one room cannot move.** Rooms joined north
+/// and south must share an x, so neither can step sideways alone, and the
+/// climb never tries both at once. The Kraken's Fall atoll and a wing of
+/// the Landing came out with the column that belongs beside the middle
+/// placed outside the one that belongs on the rim: every bearing true,
+/// every diagonal crossing, and no single-room move out of it.
+///
+/// So here each alignment class -- the rooms bearings tie to one x (or one
+/// y) -- moves as one: swapped with a class on a nearby line, or shifted
+/// to a nearby free line. A move is taken only when nothing collides, no
+/// bearing that held breaks, and the edges it touches get strictly
+/// shorter in total, so this ends. Returns whether anything moved.
+fn move_lines(
+    room_order: &[RoomId],
+    positions: &mut HashMap<RoomId, Cell>,
+    adjacency: &HashMap<RoomId, Vec<EdgeSign>>,
+) -> bool {
+    let mut moved = false;
+    for _ in 0..6 {
+        let mut any = false;
+        for axis_x in [true, false] {
+            any |= move_lines_on(room_order, positions, adjacency, axis_x);
+        }
+        moved |= any;
+        if !any {
+            break;
+        }
+    }
+    moved
+}
+
+/// One axis of [`move_lines`]: columns when `axis_x`, rows otherwise.
+fn move_lines_on(
+    room_order: &[RoomId],
+    positions: &mut HashMap<RoomId, Cell>,
+    adjacency: &HashMap<RoomId, Vec<EdgeSign>>,
+    axis_x: bool,
+) -> bool {
+    let coord = move |c: Cell| if axis_x { c.x } else { c.y };
+    let with = move |c: Cell, v: i32| {
+        if axis_x {
+            Cell { x: v, y: c.y }
+        } else {
+            Cell { x: c.x, y: v }
+        }
+    };
+    let classes = line_classes(room_order, positions, adjacency, axis_x);
+    let class_of: HashMap<RoomId, usize> = classes
+        .iter()
+        .enumerate()
+        .flat_map(|(i, m)| m.iter().map(move |&r| (r, i)))
+        .collect();
+    let mut occupied: HashMap<Cell, RoomId> = positions.iter().map(|(&r, &c)| (c, r)).collect();
+
+    let mut changed = false;
+    for a in 0..classes.len() {
+        let Some(va) = line_of(&classes[a], positions, coord) else {
+            continue;
+        };
+        // Which classes sit on the lines within reach, read now: earlier
+        // moves in this pass may have shifted them.
+        let mut options: Vec<(i32, Option<usize>)> = Vec::new();
+        for delta in -LINE_REACH..=LINE_REACH {
+            if delta == 0 {
+                continue;
+            }
+            let target = va + delta;
+            let mut partners: Vec<usize> = classes[a]
+                .iter()
+                .filter_map(|r| occupied.get(&with(positions[r], target)))
+                .filter_map(|o| class_of.get(o).copied())
+                .collect();
+            partners.sort_unstable();
+            partners.dedup();
+            match partners.as_slice() {
+                [] => options.push((target, None)),
+                [b] if line_of(&classes[*b], positions, coord) == Some(target) => {
+                    options.push((target, Some(*b)));
+                }
+                _ => {}
+            }
+        }
+        let mut best: Option<(i64, HashMap<RoomId, Cell>)> = None;
+        for (target, partner) in options {
+            let mut proposal: HashMap<RoomId, Cell> = HashMap::new();
+            for r in &classes[a] {
+                proposal.insert(*r, with(positions[r], target));
+            }
+            if let Some(b) = partner {
+                for r in &classes[b] {
+                    proposal.insert(*r, with(positions[r], va));
+                }
+            }
+            let Some(gain) = line_move_gain(&proposal, positions, &occupied, adjacency) else {
+                continue;
+            };
+            if gain > 0 && best.as_ref().is_none_or(|(g, _)| gain > *g) {
+                best = Some((gain, proposal));
+            }
+        }
+        if let Some((_, proposal)) = best {
+            for r in proposal.keys() {
+                occupied.remove(&positions[r]);
+            }
+            for (r, c) in &proposal {
+                occupied.insert(*c, *r);
+            }
+            positions.extend(proposal);
+            changed = true;
+        }
+    }
+    changed
+}
+
+/// The alignment classes on one axis: rooms joined by an edge that takes
+/// no step along it (north/south for x, east/west for y).
+fn line_classes(
+    room_order: &[RoomId],
+    positions: &HashMap<RoomId, Cell>,
+    adjacency: &HashMap<RoomId, Vec<EdgeSign>>,
+    axis_x: bool,
+) -> Vec<Vec<RoomId>> {
+    let mut seen: HashSet<RoomId> = HashSet::new();
+    let mut classes: Vec<Vec<RoomId>> = Vec::new();
+    for &start in room_order {
+        if !positions.contains_key(&start) || !seen.insert(start) {
+            continue;
+        }
+        let mut members = vec![start];
+        let mut i = 0;
+        while i < members.len() {
+            let r = members[i];
+            i += 1;
+            for e in adjacency.get(&r).map_or(&[] as &[_], Vec::as_slice) {
+                let flat = if axis_x { e.sx == 0 } else { e.sy == 0 };
+                if flat && positions.contains_key(&e.other) && seen.insert(e.other) {
+                    members.push(e.other);
+                }
+            }
+        }
+        classes.push(members);
+    }
+    classes
+}
+
+/// The line a class sits on now, if all of it sits on one.
+fn line_of(
+    members: &[RoomId],
+    positions: &HashMap<RoomId, Cell>,
+    coord: impl Fn(Cell) -> i32,
+) -> Option<i32> {
+    let v = coord(positions[&members[0]]);
+    members
+        .iter()
+        .all(|r| coord(positions[r]) == v)
+        .then_some(v)
+}
+
+/// How much shorter the edges touching `proposal`'s rooms get if it is
+/// applied, or `None` if it lands on a room it does not move or breaks a
+/// bearing that held.
+fn line_move_gain(
+    proposal: &HashMap<RoomId, Cell>,
+    positions: &HashMap<RoomId, Cell>,
+    occupied: &HashMap<Cell, RoomId>,
+    adjacency: &HashMap<RoomId, Vec<EdgeSign>>,
+) -> Option<i64> {
+    let mut taken: HashSet<Cell> = HashSet::new();
+    for cell in proposal.values() {
+        if !taken.insert(*cell) {
+            return None;
+        }
+        if occupied
+            .get(cell)
+            .is_some_and(|holder| !proposal.contains_key(holder))
+        {
+            return None;
+        }
+    }
+    let at = |r: &RoomId| proposal.get(r).or_else(|| positions.get(r)).copied();
+    let (mut before, mut after) = (0i64, 0i64);
+    for (r, &p1) in proposal {
+        let p0 = positions[r];
+        for e in adjacency.get(r).map_or(&[] as &[_], Vec::as_slice) {
+            let (Some(o0), Some(o1)) = (positions.get(&e.other).copied(), at(&e.other)) else {
+                continue;
+            };
+            if !violated_at(p0, o0, e.sx, e.sy) && violated_at(p1, o1, e.sx, e.sy) {
+                return None;
+            }
+            before += i64::from((o0.x - p0.x).abs().max((o0.y - p0.y).abs()));
+            after += i64::from((o1.x - p1.x).abs().max((o1.y - p1.y).abs()));
+        }
+    }
+    Some(before - after)
+}
+
 fn violated_at(r: Cell, o: Cell, sx: i32, sy: i32) -> bool {
     (o.x - r.x).signum() != sx || (o.y - r.y).signum() != sy
 }
@@ -979,6 +1259,202 @@ fn reweld_violations(
     }
 }
 
+/// How much longer, in total edge length, a group put right by
+/// [`crate::satisfiable::place_near`] may be drawn. Measured on gs.map,
+/// events aside, exits against their direction from 649: at 5%, 521; at
+/// 10%, 505; at 15%, 499; at 20%, 488 -- and lines crossing another fewest
+/// at 10% (1,878, against 1,885, 1,880 and 1,882), every other rule no
+/// worse at any of them. The knee.
+const NEAR_STRETCH_PERCENT: i64 = 10;
+
+/// Whether a line with no direction joins its two rooms into one group:
+/// only a doorway between two indoor rooms, a building's own structure.
+/// Never a front door (`is_building_entrance`), and never a line with an
+/// outdoor room at either end (the author, 2026-09-29: *"yellow lines
+/// should delineate groups"*). Welding outdoors made Hinterwilds one group
+/// of 126 rooms and stretched every step between its two columns the
+/// height of the map; unwelded, 28 groups, the biggest 43.
+fn welds(map: &Map, air: &HashSet<RoomId>, from: RoomId, to: RoomId) -> bool {
+    use crate::classifier::{Sense, room_sense};
+    if is_building_entrance(map, air, from, to) {
+        return false;
+    }
+    let indoor = |id| map.room(id).is_some_and(|r| room_sense(r) == Sense::Indoor);
+    indoor(from) && indoor(to)
+}
+
+/// Whether a repair is no worse to read than the group as it was: no more
+/// of its lines crossing each other (the author, 2026-09-29: *"Compactness
+/// is not a rule"*). It was a length test, standing in for a tangle --
+/// taken on violations alone the ordering pass once swapped the Landing's
+/// wing columns and tangled Mist Harbor's streets, both in groups welded
+/// far larger than any is now. On gs.map, exits against their direction
+/// 262 -> 236 when it changed.
+fn no_worse(
+    room_order: &[RoomId],
+    placed: &HashMap<RoomId, Cell>,
+    was: &HashMap<RoomId, Cell>,
+    map: &Map,
+) -> bool {
+    tangles(room_order, placed, map) <= tangles(room_order, was, map)
+}
+
+/// Pairs of a group's lines that cross each other, drawn straight.
+fn tangles(room_order: &[RoomId], positions: &HashMap<RoomId, Cell>, map: &Map) -> usize {
+    let mut lines: Vec<(RoomId, RoomId, Cell, Cell)> = Vec::new();
+    for &id in room_order {
+        let Some(room) = map.room(id) else { continue };
+        for exit in room.exits.iter().filter(|e| crate::regions::is_passage(e)) {
+            if id < exit.to
+                && let (Some(&a), Some(&b)) = (positions.get(&id), positions.get(&exit.to))
+            {
+                lines.push((id, exit.to, a, b));
+            }
+        }
+    }
+    let point = crate::routing::point;
+    let mut n = 0;
+    for (i, &(a1, b1, p1, q1)) in lines.iter().enumerate() {
+        for &(a2, b2, p2, q2) in &lines[i + 1..] {
+            if [a2, b2].contains(&a1) || [a2, b2].contains(&b1) {
+                continue;
+            }
+            if crate::quality::segments_cross(point(p1), point(q1), point(p2), point(q2)) {
+                n += 1;
+            }
+        }
+    }
+    n
+}
+
+/// Put right what violations the solver left on satisfiable data, when an
+/// arrangement that does is no worse to read ([`no_worse`]); the
+/// violations that remain.
+fn repair_component(
+    room_order: &[RoomId],
+    positions: &mut HashMap<RoomId, Cell>,
+    mut violations: Vec<Violation>,
+    map: &Map,
+    dirs: &DirectionMap,
+) -> Vec<Violation> {
+    // A violation on satisfiable data is the solver's, not the map's,
+    // and both repair passes above are local: the hill climb moves one
+    // room among its neighbours, and the re-weld cascades outward but
+    // will not move the anchor, so neither can make the coordinated
+    // shift some arrangements need. An arrangement exists in that
+    // case -- but it is ranked, not drawn: it satisfies every bearing
+    // and can stretch the component out of shape doing it.
+    //
+    // Tried first: the arrangement nearest the solver's own, which moves
+    // only what the bearings force (`satisfiable::place_near`), so it
+    // keeps the component's shape where `place_by_order` redraws it.
+    if !violations.is_empty()
+        && let Some(mut placed) = crate::satisfiable::place_near(room_order, positions, map, dirs)
+    {
+        optimize_component(room_order, &mut placed, map, dirs);
+        let fixed = validate_component(room_order, &placed, map, dirs);
+        // Taken when it puts more right and tangles the group no more; it
+        // was refused on length before (37 groups on gs.map, 16 of them for
+        // under 2%).
+        if fixed.len() < violations.len()
+            && stacked(&placed) == 0
+            && no_worse(room_order, &placed, positions, map)
+        {
+            *positions = placed;
+            violations = fixed;
+        }
+    }
+    if !violations.is_empty()
+        && let Some(mut placed) = crate::satisfiable::place_by_order(room_order, map, dirs)
+    {
+        compact_component(&mut placed);
+        optimize_component(room_order, &mut placed, map, dirs);
+        let fixed = validate_component(room_order, &placed, map, dirs);
+        // **Only a clean win is taken**: fewer violations, no rooms
+        // stacked, and no more tangled after its own hill climb
+        // ([`no_worse`]). The ordering pass satisfies every direction it
+        // knows about, but `validate_component` reads exits it does not
+        // constrain, so fewer violations is checked, not assumed. A
+        // violation is drawn and can be corrected; a tangle cannot be
+        // read.
+        if fixed.len() < violations.len()
+            && stacked(&placed) == 0
+            && no_worse(room_order, &placed, positions, map)
+        {
+            *positions = placed;
+            violations = fixed;
+        }
+    }
+    // A group whose bearings contradict: drawn with the fewest of them set
+    // aside, every other honoured (`satisfiable::relax`), on the same terms.
+    if !violations.is_empty()
+        && let Some((relaxed, _aside)) = crate::satisfiable::relax(room_order, map, dirs)
+        && let Some(mut placed) =
+            crate::satisfiable::place_near(room_order, positions, map, &relaxed)
+    {
+        optimize_component(room_order, &mut placed, map, dirs);
+        let fixed = validate_component(room_order, &placed, map, dirs);
+        // And its directionless lines crossing no more: freed of the exits
+        // set aside, a group can put its bearings right by folding its
+        // doorways across each other.
+        if fixed.len() < violations.len()
+            && stacked(&placed) == 0
+            && edge_length(room_order, &placed, map) * 100
+                <= edge_length(room_order, positions, map) * (100 + NEAR_STRETCH_PERCENT)
+            && doorways_crossing(room_order, &placed, map, dirs)
+                <= doorways_crossing(room_order, positions, map, dirs)
+        {
+            *positions = placed;
+            violations = fixed;
+        }
+    }
+    violations
+}
+
+/// How many lines between rooms of the component joined only by exits with
+/// no direction cross another of its lines, by the quality measure's own
+/// test (`quality::segments_cross`).
+fn doorways_crossing(
+    room_order: &[RoomId],
+    positions: &HashMap<RoomId, Cell>,
+    map: &Map,
+    dirs: &DirectionMap,
+) -> usize {
+    let point = |c: Cell| crate::routing::point(c);
+    let mut seen: HashSet<(RoomId, RoomId)> = HashSet::new();
+    let mut lines: Vec<(RoomId, RoomId, bool)> = Vec::new();
+    for room in room_order.iter().filter_map(|&id| map.room(id)) {
+        for exit in &room.exits {
+            let (a, b) = (room.id, exit.to);
+            if a == b || !positions.contains_key(&b) {
+                continue;
+            }
+            let key = if a < b { (a, b) } else { (b, a) };
+            if seen.insert(key) {
+                let doorway = dirs.get(a, b).is_none() && dirs.get(b, a).is_none();
+                lines.push((key.0, key.1, doorway));
+            }
+        }
+    }
+    lines
+        .iter()
+        .filter(|(_, _, doorway)| *doorway)
+        .filter(|&&(a, b, _)| {
+            let (p1, p2) = (point(positions[&a]), point(positions[&b]));
+            lines.iter().any(|&(c, d, _)| {
+                ![c, d].contains(&a)
+                    && ![c, d].contains(&b)
+                    && crate::quality::segments_cross(
+                        p1,
+                        p2,
+                        point(positions[&c]),
+                        point(positions[&d]),
+                    )
+            })
+        })
+        .count()
+}
+
 /// Total Chebyshev length of every exit between rooms of the component:
 /// how stretched it is drawn.
 fn edge_length(room_order: &[RoomId], positions: &HashMap<RoomId, Cell>, map: &Map) -> i64 {
@@ -1077,4 +1553,95 @@ fn validate_component(
         }
     }
     violations
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use cena_map::{Cost, Crossing, Exit, ExitKind, Map, Room, RoomId};
+
+    use super::{Cell, optimize_component};
+    use crate::direction::DirectionMap;
+
+    fn room(id: u32, exits: &[(u32, &str)]) -> Room {
+        Room {
+            id: RoomId(id),
+            uid: vec![],
+            title: vec![format!("[R{id}]")],
+            description: vec![],
+            paths: vec![],
+            location: None,
+            location_unknowable: false,
+            check_location: false,
+            unique_loot: vec![],
+            climate: None,
+            terrain: None,
+            tags: vec![],
+            meta: vec![],
+            image: None,
+            exits: exits
+                .iter()
+                .map(|&(to, cmd)| Exit {
+                    to: RoomId(to),
+                    kind: ExitKind::Cardinal,
+                    crossing: Crossing::Command(cmd.to_owned()),
+                    cost: Some(Cost::Fixed(1.0)),
+                })
+                .collect(),
+        }
+    }
+
+    /// Two columns in each other's places: M belongs beside L and P beside
+    /// Q, but M sits where P should and P where M should. Every bearing
+    /// holds either way, and no one room can move -- each is held to its
+    /// column's x by the room north or south of it, and the cell it would
+    /// step to is taken. Swapping the two columns whole is the way out.
+    #[test]
+    fn two_columns_in_each_others_places_are_swapped() {
+        // Columns, top room then bottom: L = 1,2; M = 3,4; P = 5,6; Q = 7,8.
+        // Every link both ways, as the map records them.
+        let column = |top: u32, bottom: u32, east: Option<(u32, u32)>, west: Option<(u32, u32)>| {
+            let mut t = vec![(bottom, "south")];
+            let mut b = vec![(top, "north")];
+            if let Some((et, eb)) = east {
+                t.push((et, "east"));
+                b.push((eb, "east"));
+            }
+            if let Some((wt, wb)) = west {
+                t.push((wt, "west"));
+                b.push((wb, "west"));
+            }
+            vec![room(top, &t), room(bottom, &b)]
+        };
+        let mut rooms = Vec::new();
+        rooms.extend(column(1, 2, Some((3, 4)), None));
+        rooms.extend(column(3, 4, None, Some((1, 2))));
+        rooms.extend(column(5, 6, Some((7, 8)), None));
+        rooms.extend(column(7, 8, None, Some((5, 6))));
+        let map = Map::from_rooms(rooms).expect("no duplicate ids");
+        let dirs = DirectionMap::build(&map);
+        let at = |x: i32, y: i32| Cell { x, y };
+        // L at x=0, P at 1, M at 2, Q at 3: M and P swapped.
+        let mut positions: HashMap<RoomId, Cell> = [
+            (1, at(0, 0)),
+            (2, at(0, 1)),
+            (5, at(1, 0)),
+            (6, at(1, 1)),
+            (3, at(2, 0)),
+            (4, at(2, 1)),
+            (7, at(3, 0)),
+            (8, at(3, 1)),
+        ]
+        .into_iter()
+        .map(|(id, c)| (RoomId(id), c))
+        .collect();
+        let order: Vec<RoomId> = (1..=8).map(RoomId).collect();
+        optimize_component(&order, &mut positions, &map, &dirs);
+
+        let x = |id: u32| positions[&RoomId(id)].x;
+        assert_eq!(x(3) - x(1), 1, "M is not beside L: {positions:?}");
+        assert_eq!(x(7) - x(5), 1, "P is not beside Q: {positions:?}");
+        assert_eq!((x(1), x(3)), (x(2), x(4)), "a column came apart");
+    }
 }

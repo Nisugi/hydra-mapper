@@ -8,3 +8,6 @@
 
 # Data: tab-separated, LF, never "fixed" by a tool.
 *.tsv text eol=lf
+
+# The map Hydra embeds: bytes, never line-ended.
+*.map binary

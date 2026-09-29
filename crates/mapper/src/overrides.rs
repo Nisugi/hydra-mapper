@@ -294,6 +294,33 @@ pub struct MapOverrides {
 /// rooms span regions is a fact worth seeing rather than a conflict to
 /// resolve at creation time, and [`MapOverrides::area_region`] reports
 /// the split.
+/// What [`MapOverrides::merge`] took in.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct MergeReport {
+    pub area_moves: usize,
+    pub region_moves: usize,
+    pub new_areas: usize,
+    pub plate_moves: usize,
+    pub new_plates: usize,
+    pub layout: usize,
+}
+
+impl std::fmt::Display for MergeReport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} area and {} region assignment(s), {} new area(s), {} plate move(s), \
+             {} new plate(s), {} layout correction(s)",
+            self.area_moves,
+            self.region_moves,
+            self.new_areas,
+            self.plate_moves,
+            self.new_plates,
+            self.layout
+        )
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CuratedArea {
     /// What the picker shows.
@@ -518,25 +545,117 @@ impl MapOverrides {
         self.region_moves.get(&key).map(String::as_str)
     }
 
+    /// Take in another store's edits -- a contributor's "my changes" file.
+    ///
+    /// Theirs win where both say something about the same room, group,
+    /// pin or edge: they are the newer word, and a person reviews the
+    /// result before exporting it to curation. An area or plate they made
+    /// is added; one this store already has keeps its name. Returns what
+    /// was taken, for the note.
+    pub fn merge(&mut self, other: &MapOverrides) -> MergeReport {
+        let mut report = MergeReport::default();
+        for (key, theirs) in &other.locations {
+            let ours = self.locations.entry(key.clone()).or_default();
+            report.layout +=
+                theirs.group_offsets.len() + theirs.room_pins.len() + theirs.edges.len();
+            ours.group_offsets
+                .extend(theirs.group_offsets.iter().map(|(k, v)| (*k, *v)));
+            ours.room_pins
+                .extend(theirs.room_pins.iter().map(|(k, v)| (*k, *v)));
+            for edge in &theirs.edges {
+                ours.edges.retain(|e| (e.a, e.b) != (edge.a, edge.b));
+                ours.edges.push(*edge);
+            }
+        }
+        for (key, plate) in &other.custom_maps {
+            if !self.custom_maps.contains_key(key) {
+                self.custom_maps.insert(key.clone(), plate.clone());
+                report.new_plates += 1;
+            }
+        }
+        report.plate_moves = other.membership_moves.len();
+        self.membership_moves
+            .extend(other.membership_moves.iter().map(|(k, v)| (*k, v.clone())));
+        for (key, area) in &other.custom_areas {
+            if !self.custom_areas.contains_key(key) {
+                self.custom_areas.insert(key.clone(), area.clone());
+                report.new_areas += 1;
+            }
+        }
+        report.area_moves = other.area_moves.len();
+        self.area_moves
+            .extend(other.area_moves.iter().map(|(k, v)| (*k, v.clone())));
+        report.region_moves = other.region_moves.len();
+        self.region_moves
+            .extend(other.region_moves.iter().map(|(k, v)| (*k, v.clone())));
+        report
+    }
+
+    /// Put a room in a curated area, or (with `None`) take it out.
+    ///
+    /// **Taking out is recorded, not forgotten.** The map carries each
+    /// room's area (`meta:area:`); dropping the entry would put the room
+    /// straight back in whatever area the map says. An empty value is
+    /// "in no area", and outranks the map like any other.
     pub fn set_area(&mut self, key: RoomKey, area: Option<&str>) -> Option<String> {
-        match area {
-            Some(area) => self.area_moves.insert(key, area.to_owned()),
-            None => self.area_moves.remove(&key),
+        self.area_moves
+            .insert(key, area.unwrap_or_default().to_owned())
+    }
+
+    /// Delete a curated area, releasing its rooms -- including the rooms
+    /// the map puts in it, named by `baked`, which would otherwise stay.
+    pub fn delete_area(&mut self, area: &str, baked: impl IntoIterator<Item = RoomKey>) {
+        self.custom_areas.remove(area);
+        for to in self.area_moves.values_mut() {
+            if to == area {
+                to.clear();
+            }
+        }
+        for key in baked {
+            self.area_moves.entry(key).or_default();
         }
     }
 
-    /// Delete a curated area, releasing its rooms.
-    pub fn delete_area(&mut self, area: &str) {
-        self.custom_areas.remove(area);
-        self.area_moves.retain(|_, to| to != area);
+    /// The area a room is in: this store's word where it has one (an
+    /// empty word meaning none), else the one the map carries.
+    #[must_use]
+    pub fn area_of<'a>(&'a self, key: RoomKey, baseline: &'a Baseline) -> Option<&'a str> {
+        match self.area_moves.get(&key) {
+            Some(area) if area.is_empty() => None,
+            Some(area) => Some(area),
+            None => baseline.area.get(&key).map(String::as_str),
+        }
     }
 
-    /// A curated area's display name, falling back to its key.
+    /// The region a room is in: the region a person assigned where there
+    /// is one, else the one the map carries.
     #[must_use]
-    pub fn area_name<'a>(&'a self, key: &'a str) -> &'a str {
+    pub fn region_in<'a>(&'a self, key: RoomKey, baseline: &'a Baseline) -> Option<&'a str> {
+        self.region_moves
+            .get(&key)
+            .or_else(|| baseline.region.get(&key))
+            .map(String::as_str)
+    }
+
+    /// Every area a room can be put in: this store's, and the ones the
+    /// map carries, by key, with their names.
+    #[must_use]
+    pub fn known_areas(&self, baseline: &Baseline) -> BTreeMap<String, String> {
+        let mut out = baseline.areas.clone();
+        for (key, area) in &self.custom_areas {
+            out.insert(key.clone(), area.name.clone());
+        }
+        out
+    }
+
+    /// An area's name, from this store or else from the map.
+    #[must_use]
+    pub fn area_title<'a>(&'a self, key: &'a str, baseline: &'a Baseline) -> &'a str {
         self.custom_areas
             .get(key)
-            .map_or(key, |area| area.name.as_str())
+            .map(|a| a.name.as_str())
+            .or_else(|| baseline.areas.get(key).map(String::as_str))
+            .unwrap_or(key)
     }
 
     /// A plate's display name, falling back to its key for one that
@@ -668,6 +787,45 @@ fn ordered(a: RoomKey, b: RoomKey) -> (RoomKey, RoomKey) {
 /// either way: the dot is a naming convention that sorts related plates
 /// together in the picker, not a hierarchy the code understands.
 #[must_use]
+/// What the map itself says about each room's area and region: the
+/// baked answer that a store's edits sit on top of.
+///
+/// `gs.map` carries `meta:area:<name>` and `meta:region:<name>`, written
+/// by `retag` from `curation/`. A store holds only what a person changed
+/// since, so the mapper handed to someone with an empty store shows the
+/// whole curation, and what they send back is only their edits.
+#[derive(Debug, Clone, Default)]
+pub struct Baseline {
+    /// Room -> area key (the key a store would give that name).
+    pub area: std::collections::HashMap<RoomKey, String>,
+    /// Room -> region name.
+    pub region: std::collections::HashMap<RoomKey, String>,
+    /// Area key -> name, for every area the map carries.
+    pub areas: BTreeMap<String, String>,
+    /// Every region the map names.
+    pub regions: std::collections::BTreeSet<String>,
+}
+
+impl Baseline {
+    pub fn of(map: &Map) -> Baseline {
+        let mut out = Baseline::default();
+        for room in map.rooms() {
+            let key = RoomKey::of(room.id, map);
+            for meta in &room.meta {
+                if let Some(name) = meta.strip_prefix("area:") {
+                    let area = plate_key(name);
+                    out.areas.insert(area.clone(), name.to_owned());
+                    out.area.insert(key, area);
+                } else if let Some(name) = meta.strip_prefix("region:") {
+                    out.regions.insert(name.to_owned());
+                    out.region.insert(key, name.to_owned());
+                }
+            }
+        }
+        out
+    }
+}
+
 pub fn plate_key(name: &str) -> String {
     let mut key = String::new();
     let mut pending_dot = false;
@@ -704,6 +862,42 @@ pub fn store_path(map_path: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A contributor's changes, taken in: their word wins for the rooms
+    /// they touched, a room they took out stays out, an area they made
+    /// arrives, and an area both sides have keeps this side's name.
+    #[test]
+    fn a_changes_file_merges_into_a_store() {
+        let mut mine = MapOverrides::default();
+        let town = mine.create_area("landing-town");
+        mine.set_area(RoomKey::Uid(1), Some(&town));
+        mine.set_area(RoomKey::Uid(2), Some(&town));
+        mine.set_region(RoomKey::Uid(3), Some("Icemule Trace"));
+
+        let mut theirs = MapOverrides::default();
+        theirs.custom_areas.insert(
+            town.clone(),
+            CuratedArea {
+                name: "renamed by them".to_owned(),
+            },
+        );
+        let well = theirs.create_area("landing-well");
+        theirs.set_area(RoomKey::Uid(1), None);
+        theirs.set_area(RoomKey::Uid(4), Some(&well));
+        theirs.set_region(RoomKey::Uid(3), Some("Wehnimer's Landing"));
+
+        let report = mine.merge(&theirs);
+        assert_eq!(report.new_areas, 1);
+        assert_eq!(
+            mine.area_moves[&RoomKey::Uid(1)],
+            "",
+            "their removal was lost"
+        );
+        assert_eq!(mine.area_moves[&RoomKey::Uid(2)], town);
+        assert_eq!(mine.area_moves[&RoomKey::Uid(4)], well);
+        assert_eq!(mine.region_moves[&RoomKey::Uid(3)], "Wehnimer's Landing");
+        assert_eq!(mine.custom_areas[&town].name, "landing-town");
+    }
 
     #[test]
     fn plate_keys_are_dotted_and_stable() {
