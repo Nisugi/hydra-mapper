@@ -2,7 +2,7 @@
 //! what the mapper's window and gate use, and what Hydra lays out at launch
 //! (`plan/53` §7). An area is the one baked into the map as `meta:area:`
 //! by the mapper's `retag`, and a map a group of them laid out as one sheet
-//! (`meta:mapname:`): Cold River and the Hinterwilds are one map, each an area
+//! (`meta:hydramap:`): Cold River and the Hinterwilds are one map, each an area
 //! of it.
 
 use std::collections::{BTreeMap, HashSet};
@@ -17,7 +17,7 @@ pub fn baked(map: &Map) -> BTreeMap<String, Vec<RoomId>> {
     for room in map.rooms() {
         let find = |prefix: &str| room.meta.iter().find_map(|m| m.strip_prefix(prefix));
         if let Some(area) = find("area:") {
-            let sheet = find("mapname:").unwrap_or(area);
+            let sheet = find("hydramap:").unwrap_or(area);
             by_sheet.entry(sheet.to_owned()).or_default().push(room.id);
         }
     }
@@ -135,13 +135,17 @@ mod tests {
     }
 
     /// A map's areas are one sheet under the map's name; an area on no
-    /// map is its own; the mapper's `map:` flags name no map.
+    /// map is its own; the mapper's `map:` flags and Simutronics' own
+    /// `mapname:` (228 rooms of gs.map carry one) name no map.
     #[test]
     fn a_maps_areas_are_one_sheet() {
         let map = Map::from_rooms(vec![
-            room(1, &["area:cold-river", "mapname:the-hinterwilds"]),
-            room(2, &["area:hinterwilds", "mapname:the-hinterwilds"]),
-            room(3, &["area:icemule", "map:virtual room"]),
+            room(1, &["area:cold-river", "hydramap:the-hinterwilds"]),
+            room(2, &["area:hinterwilds", "hydramap:the-hinterwilds"]),
+            room(
+                3,
+                &["area:icemule", "map:virtual room", "mapname:Icemule Trace"],
+            ),
         ])
         .expect("unique ids");
         let sheets = baked(&map);

@@ -338,7 +338,7 @@ pub struct AreaAssignment {
     /// What it is called; the value written to `meta:area:`.
     pub name: String,
     /// The map it is drawn on, with the other areas naming it; the value
-    /// written to `meta:mapname:`. A map is laid out as one sheet, its areas
+    /// written to `meta:hydramap:`. A map is laid out as one sheet, its areas
     /// its sub-areas.
     #[serde(default)]
     pub map: Option<String>,

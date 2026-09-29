@@ -840,7 +840,7 @@ pub struct Baseline {
     pub areas: BTreeMap<String, String>,
     /// Every region the map names.
     pub regions: std::collections::BTreeSet<String>,
-    /// Area key -> the map its rooms carry (`meta:mapname:`).
+    /// Area key -> the map its rooms carry (`meta:hydramap:`).
     pub area_map: BTreeMap<String, String>,
 }
 
@@ -859,7 +859,7 @@ impl Baseline {
                 } else if let Some(name) = meta.strip_prefix("region:") {
                     out.regions.insert(name.to_owned());
                     out.region.insert(key, name.to_owned());
-                } else if let Some(name) = meta.strip_prefix("mapname:") {
+                } else if let Some(name) = meta.strip_prefix("hydramap:") {
                     on = Some(name.to_owned());
                 }
             }

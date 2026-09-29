@@ -94,7 +94,7 @@ pub fn assignments_toml(map: &Map, store: &MapOverrides, baseline: &Baseline) ->
 # the next export replaces this file from the store.
 #
 # `retag` bakes it into gs.map: each room here gets `meta:area:<name>`,
-# and `meta:mapname:<map>` when its area is on a map; each [[assign]]
+# and `meta:hydramap:<map>` when its area is on a map; each [[assign]]
 # region outranks the mapdb join, the folds and the spread. Rooms are named by uid, or by id where the game never
 # numbered them; ids do not survive a map rebuild.
 

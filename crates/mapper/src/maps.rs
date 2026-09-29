@@ -3,7 +3,7 @@
 //! hinterwilds area, and not be a separate area. Areas have sub areas
 //! hmm?"*). The areas are Simutronics' own splits and stay as they are,
 //! the map's sub-areas; a map is only a name each of its areas carries
-//! ([`MapOverrides::area_maps`]), baked into `gs.map` as `meta:mapname:` by
+//! ([`MapOverrides::area_maps`]), baked into `gs.map` as `meta:hydramap:` by
 //! `retag`, and read back by [`cena_map_layout::areas::baked`].
 //!
 //! No field in the data says which areas make one map. The region spans
@@ -272,6 +272,17 @@ mod tests {
         assert_eq!(maps[0].name, "the-hinterwilds");
         assert_eq!(maps[0].rooms, vec![RoomId(1), RoomId(2)]);
         assert!(suggest(&map, &store, &baseline).is_empty());
+    }
+
+    /// Simutronics' own `mapname:`, on 228 rooms of gs.map, is not a map
+    /// of ours: an area whose rooms carry it is on no map.
+    #[test]
+    fn simutronics_mapname_is_not_a_map() {
+        let mut r = room(1, "icemule", "the town of Icemule Trace", &[]);
+        r.meta.push("mapname:Icemule Trace".to_owned());
+        let map = Map::from_rooms(vec![r]).expect("unique ids");
+        let baseline = Baseline::of(&map);
+        assert!(map_areas(&map, &MapOverrides::default(), &baseline).is_empty());
     }
 
     #[test]

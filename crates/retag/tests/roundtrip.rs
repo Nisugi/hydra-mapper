@@ -830,7 +830,7 @@ fn assignments_are_baked_into_the_map() {
     stale.meta = vec!["area:gone-away".to_owned()];
     let unnumbered = room(3, "[Back Room]", vec![]);
     let mut river = room(4, "[Cold River, Dock]", vec![]);
-    river.meta = vec!["map:virtual room".to_owned(), "mapname:gone".to_owned()];
+    river.meta = vec!["map:virtual room".to_owned(), "hydramap:gone".to_owned()];
     let map = Map::from_rooms(vec![town, stale, unnumbered, river]).expect("no duplicate ids");
 
     let curation = Curation {
@@ -880,8 +880,8 @@ fn assignments_are_baked_into_the_map() {
         meta(4),
         [
             "area:icemule-trace-cold-river-town",
-            "map:virtual room",
-            "mapname:the-hinterwilds"
+            "hydramap:the-hinterwilds",
+            "map:virtual room"
         ]
     );
 }

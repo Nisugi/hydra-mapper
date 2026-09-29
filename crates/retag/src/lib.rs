@@ -227,7 +227,7 @@ impl RoomKey {
 }
 
 /// Write `meta:area:<name>` from the mapper's curated areas, and
-/// `meta:mapname:<map>` where the area is on a map, and take either off any
+/// `meta:hydramap:<map>` where the area is on a map, and take either off any
 /// room that no longer has it, so unassigning in the mapper reaches the
 /// map too. One area per room: a room named in two blocks takes the
 /// later, as the store would.
@@ -246,9 +246,9 @@ fn tag_areas(plan: &mut Plan, rooms: &[Room], curation: &Curation) {
         let want = [
             ("area:", area.map(|a| format!("area:{}", a.name))),
             (
-                "mapname:",
+                "hydramap:",
                 area.and_then(|a| a.map.as_ref())
-                    .map(|m| format!("mapname:{m}")),
+                    .map(|m| format!("hydramap:{m}")),
             ),
         ];
         for (prefix, want) in want {
