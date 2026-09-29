@@ -5,12 +5,18 @@
 //! leave most free, so a building reads as a building and a grotto as a
 //! grotto without its rooms among the streets. A big place (Angargreft's
 //! 56 rooms under the Hinterwilds) carries its name.
+//!
+//! A room laid out whose lines with no direction reach far across the
+//! sheet is folded the same way ([`fold_fans`]): the Issenflow's current,
+//! entered by `go river` from six rooms along the banks, drew six lines up
+//! to 85 cells long to wherever it sat. It becomes a dot at each bank
+//! (the author, 2026-09-29: *"I can accept dots"*).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
-use cena_map::RoomId;
+use cena_map::{Map, RoomId};
 
 use crate::hidden::WayIn;
 use crate::scene::{Point, SheetScene};
@@ -41,6 +47,73 @@ impl SceneDoor {
     pub const fn named(&self) -> bool {
         self.rooms >= NAMED_ROOMS
     }
+}
+
+/// A room with this many lines with no direction longer than
+/// [`FAN_STEPS`] is folded to dots.
+pub const FAN_LINES: usize = 3;
+
+/// How long a line with no direction may run, in steps between street
+/// rooms, before it counts toward [`FAN_LINES`]. Measured over gs.map, laid
+/// out whole: the Miasmal Forest's paths run to 30 cells (7 steps) and
+/// stay lines; the Issenflow's current (four over 35 cells, the longest
+/// 85) and Black Swan Castle's drawbridge (three over 100) fold.
+pub const FAN_STEPS: i32 = 10;
+
+/// Take off `sheet` each room with [`FAN_LINES`] lines with no direction
+/// longer than [`FAN_STEPS`] street steps (`scale` cells each), with every
+/// line it had, and give back a way into it from each room those lines
+/// reached, for [`place`] to dot.
+pub(crate) fn fold_fans(sheet: &mut SheetScene, map: &Map, scale: i32) -> Vec<WayIn> {
+    #[allow(clippy::cast_precision_loss)]
+    let far = (FAN_STEPS * scale) as f32;
+    let mut long: HashMap<RoomId, usize> = HashMap::new();
+    for edge in &sheet.edges {
+        if edge.kind != crate::scene::SceneEdgeKind::Connector {
+            continue;
+        }
+        let path = crate::routing::path_of(edge);
+        let length: f32 = path
+            .windows(2)
+            .map(|w| (w[1].x - w[0].x).hypot(w[1].y - w[0].y))
+            .sum();
+        if length > far {
+            *long.entry(edge.a_room).or_default() += 1;
+            *long.entry(edge.b_room).or_default() += 1;
+        }
+    }
+    let folded: HashSet<RoomId> = long
+        .into_iter()
+        .filter(|&(_, n)| n >= FAN_LINES)
+        .map(|(room, _)| room)
+        .collect();
+    if folded.is_empty() {
+        return Vec::new();
+    }
+    let mut ways: Vec<WayIn> = Vec::new();
+    for edge in &sheet.edges {
+        for (inside, street) in [(edge.a_room, edge.b_room), (edge.b_room, edge.a_room)] {
+            if folded.contains(&inside)
+                && !folded.contains(&street)
+                && !ways
+                    .iter()
+                    .any(|w| w.street == street && w.inside == inside)
+            {
+                ways.push(WayIn {
+                    street,
+                    inside,
+                    place: crate::hidden::place_name(map, &[inside]),
+                    rooms: 1,
+                });
+            }
+        }
+    }
+    sheet
+        .edges
+        .retain(|e| !folded.contains(&e.a_room) && !folded.contains(&e.b_room));
+    sheet.rooms.retain(|r| !folded.contains(&r.id));
+    ways.sort_by_key(|w| (w.street, w.inside));
+    ways
 }
 
 /// The eight sides a dot may sit on, as unit steps: straight ones first.
@@ -137,5 +210,81 @@ mod tests {
         assert_eq!(open_side(&[e, w, n]), (0.0, 1.0));
         // A room whose one line runs north puts the dot south.
         assert_eq!(open_side(&[n]), (0.0, 1.0));
+    }
+
+    fn room(id: u32, x: i32, y: i32, title: &str) -> crate::scene::SceneRoom {
+        crate::scene::SceneRoom {
+            id: RoomId(id),
+            uid: None,
+            cell: crate::positioner::Cell { x, y },
+            group: 0,
+            unit: 0,
+            entrance: false,
+            title: title.to_owned(),
+            terrain: None,
+            service_tags: Vec::new(),
+        }
+    }
+
+    fn line(a: &crate::scene::SceneRoom, b: &crate::scene::SceneRoom) -> crate::scene::SceneEdge {
+        crate::scene::SceneEdge {
+            a: a.cell,
+            b: b.cell,
+            a_room: a.id,
+            b_room: b.id,
+            group: 0,
+            kind: crate::scene::SceneEdgeKind::Connector,
+            label: None,
+            unit: None,
+            via: Vec::new(),
+        }
+    }
+
+    /// The Issenflow's current, entered by `go river` from banks far
+    /// apart, is folded to a dot at each bank; a room
+    /// with the same three lines, short, stays drawn.
+    #[test]
+    fn a_room_whose_lines_run_far_is_a_dot_at_each_end() {
+        let current = room(1, 0, 0, "[The Issenflow, Currents]");
+        let banks = [
+            room(2, 60, 0, "[Bank]"),
+            room(3, 0, 60, "[Bank]"),
+            room(4, -60, 0, "[Bank]"),
+        ];
+        let hut = room(5, 100, 100, "[Hut]");
+        let yards = [
+            room(6, 104, 100, "[Yard]"),
+            room(7, 100, 104, "[Yard]"),
+            room(8, 96, 100, "[Yard]"),
+        ];
+        let mut sheet = SheetScene::default();
+        sheet.rooms.push(current.clone());
+        sheet.rooms.push(hut.clone());
+        for bank in &banks {
+            sheet.edges.push(line(&current, bank));
+            sheet.rooms.push(bank.clone());
+        }
+        for yard in &yards {
+            sheet.edges.push(line(&hut, yard));
+            sheet.rooms.push(yard.clone());
+        }
+        let map = Map::from_rooms(Vec::new()).expect("empty");
+        let ways = fold_fans(&mut sheet, &map, 4);
+        assert_eq!(
+            ways.iter()
+                .map(|w| (w.street.0, w.inside.0))
+                .collect::<Vec<_>>(),
+            [(2, 1), (3, 1), (4, 1)]
+        );
+        assert!(sheet.rooms.iter().all(|r| r.id != RoomId(1)));
+        assert!(
+            sheet.rooms.iter().any(|r| r.id == RoomId(5)),
+            "the hut stays"
+        );
+        assert_eq!(
+            sheet.edges.len(),
+            3,
+            "the hut's lines stay, the current's go"
+        );
     }
 }

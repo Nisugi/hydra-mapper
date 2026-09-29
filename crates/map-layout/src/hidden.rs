@@ -156,7 +156,7 @@ fn places(map: &Map, hidden: &HashSet<RoomId>) -> (HashMap<RoomId, usize>, Vec<V
 }
 
 /// The part before the comma that most of `rooms`' titles share.
-fn place_name(map: &Map, rooms: &[RoomId]) -> String {
+pub(crate) fn place_name(map: &Map, rooms: &[RoomId]) -> String {
     let mut votes: HashMap<&str, usize> = HashMap::new();
     for title in rooms
         .iter()
