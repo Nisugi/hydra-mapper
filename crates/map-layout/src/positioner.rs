@@ -219,41 +219,9 @@ pub fn position_rooms(map: &Map, dirs: &DirectionMap) -> Vec<Group> {
         );
 
         optimize_component(&room_order, &mut positions, map, dirs);
-        let mut violations = validate_component(&room_order, &positions, map, dirs);
+        let violations = validate_component(&room_order, &positions, map, dirs);
 
-        // A violation on satisfiable data is the solver's, not the map's,
-        // and both repair passes above are local: the hill climb moves one
-        // room among its neighbours, and the re-weld cascades outward but
-        // will not move the anchor, so neither can make the coordinated
-        // shift some arrangements need. An arrangement exists in that
-        // case -- but it is ranked, not drawn: it satisfies every bearing
-        // and can stretch the component out of shape doing it.
-        if !violations.is_empty()
-            && let Some(mut placed) = crate::satisfiable::place_by_order(&room_order, map, dirs)
-        {
-            compact_component(&mut placed);
-            optimize_component(&room_order, &mut placed, map, dirs);
-            let fixed = validate_component(&room_order, &placed, map, dirs);
-            // **Only a clean win is taken**: fewer violations, no rooms
-            // stacked, and no longer in total edge length after its own
-            // hill climb. The ordering pass satisfies every direction it
-            // knows about, but `validate_component` reads exits it does
-            // not constrain, so fewer violations is checked, not assumed.
-            // And the length test is what keeps it honest: taken on
-            // violations alone it swapped the Landing's wing columns to
-            // fix one bearing (edges +30%) and tangled Mist Harbor's
-            // streets (a 1,063-room group, edges nearly doubled). A
-            // violation is drawn and can be corrected; a tangle cannot be
-            // read.
-            if fixed.len() < violations.len()
-                && stacked(&placed) == 0
-                && edge_length(&room_order, &placed, map)
-                    <= edge_length(&room_order, &positions, map)
-            {
-                positions = placed;
-                violations = fixed;
-            }
-        }
+        let violations = repair_component(&room_order, &mut positions, violations, map, dirs);
 
         groups.push(Group {
             index: groups.len(),
@@ -1182,6 +1150,67 @@ fn reweld_violations(
             }
         }
     }
+}
+
+/// Put right what violations the solver left on satisfiable data, when an
+/// arrangement that does is a clean win; the violations that remain.
+fn repair_component(
+    room_order: &[RoomId],
+    positions: &mut HashMap<RoomId, Cell>,
+    mut violations: Vec<Violation>,
+    map: &Map,
+    dirs: &DirectionMap,
+) -> Vec<Violation> {
+    // A violation on satisfiable data is the solver's, not the map's,
+    // and both repair passes above are local: the hill climb moves one
+    // room among its neighbours, and the re-weld cascades outward but
+    // will not move the anchor, so neither can make the coordinated
+    // shift some arrangements need. An arrangement exists in that
+    // case -- but it is ranked, not drawn: it satisfies every bearing
+    // and can stretch the component out of shape doing it.
+    //
+    // Tried first: the arrangement nearest the solver's own, which moves
+    // only what the bearings force (`satisfiable::place_near`), so it
+    // keeps the component's shape where `place_by_order` redraws it.
+    if !violations.is_empty()
+        && let Some(mut placed) = crate::satisfiable::place_near(room_order, positions, map, dirs)
+    {
+        optimize_component(room_order, &mut placed, map, dirs);
+        let fixed = validate_component(room_order, &placed, map, dirs);
+        if fixed.len() < violations.len()
+            && stacked(&placed) == 0
+            && edge_length(room_order, &placed, map) <= edge_length(room_order, positions, map)
+        {
+            *positions = placed;
+            violations = fixed;
+        }
+    }
+    if !violations.is_empty()
+        && let Some(mut placed) = crate::satisfiable::place_by_order(room_order, map, dirs)
+    {
+        compact_component(&mut placed);
+        optimize_component(room_order, &mut placed, map, dirs);
+        let fixed = validate_component(room_order, &placed, map, dirs);
+        // **Only a clean win is taken**: fewer violations, no rooms
+        // stacked, and no longer in total edge length after its own
+        // hill climb. The ordering pass satisfies every direction it
+        // knows about, but `validate_component` reads exits it does
+        // not constrain, so fewer violations is checked, not assumed.
+        // And the length test is what keeps it honest: taken on
+        // violations alone it swapped the Landing's wing columns to
+        // fix one bearing (edges +30%) and tangled Mist Harbor's
+        // streets (a 1,063-room group, edges nearly doubled). A
+        // violation is drawn and can be corrected; a tangle cannot be
+        // read.
+        if fixed.len() < violations.len()
+            && stacked(&placed) == 0
+            && edge_length(room_order, &placed, map) <= edge_length(room_order, positions, map)
+        {
+            *positions = placed;
+            violations = fixed;
+        }
+    }
+    violations
 }
 
 /// Total Chebyshev length of every exit between rooms of the component:
