@@ -10,6 +10,12 @@
 //! **A link is never hidden for want of a clean route.** Where no bend
 //! clears, the straight line stays: a line through a room is a worse
 //! drawing, a missing line is a wrong map.
+//!
+//! Then a line with no direction that crosses another is curved round the
+//! crossing (the author, 2026-09-29: *"yellow connectors should also curve
+//! around to find empty space"*), where a bend crosses fewer lines and
+//! passes no room. A compass line keeps its straight run: its angle is its
+//! direction.
 
 use std::collections::{HashMap, HashSet};
 
@@ -42,6 +48,114 @@ pub fn route_edges(sheet: &mut SheetScene) {
             edge.via = via;
         }
     }
+    curve_connectors(sheet, &rooms);
+}
+
+/// Each connector that crosses another line, bent to cross fewer where a
+/// bend can without passing a room; the fewest crossings, then the
+/// shortest, wins. Taken in order, each seeing the bends made before it.
+fn curve_connectors(sheet: &mut SheetScene, rooms: &Obstacles) {
+    let mut paths: Vec<Vec<Point>> = sheet.edges.iter().map(path_of).collect();
+    for i in 0..sheet.edges.len() {
+        let edge = &sheet.edges[i];
+        if edge.kind != SceneEdgeKind::Connector {
+            continue;
+        }
+        let ends = [edge.a_room, edge.b_room];
+        let others: Vec<usize> = (0..sheet.edges.len())
+            .filter(|&j| {
+                let o = &sheet.edges[j];
+                j != i
+                    && o.kind != SceneEdgeKind::Stub
+                    && !ends.contains(&o.a_room)
+                    && !ends.contains(&o.b_room)
+            })
+            .collect();
+        let crossed_at = |path: &[Point]| -> Vec<Point> {
+            let mut at = Vec::new();
+            for &j in &others {
+                for s in path.windows(2) {
+                    for t in paths[j].windows(2) {
+                        if let Some(p) = crossing(s[0], s[1], t[0], t[1]) {
+                            at.push(p);
+                        }
+                    }
+                }
+            }
+            at
+        };
+        let now = crossed_at(&paths[i]);
+        if now.is_empty() {
+            continue;
+        }
+        let (a, b) = (point(edge.a), point(edge.b));
+        let mut best: Option<(usize, f32, Vec<Point>)> = None;
+        for via in bends(
+            a,
+            b,
+            &now,
+            &[1.0, 2.0, 3.0, 4.0, 6.0],
+            &[0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0],
+        ) {
+            if via.iter().any(|p| same(*p, a) || same(*p, b)) {
+                continue;
+            }
+            let mut path = vec![a];
+            path.extend_from_slice(&via);
+            path.push(b);
+            let n = crossed_at(&path).len();
+            let c = cost(&path);
+            if n >= now.len()
+                || best
+                    .as_ref()
+                    .is_some_and(|(bn, bc, _)| (*bn, *bc) <= (n, c))
+            {
+                continue;
+            }
+            if rooms.near(&path, &ends).is_empty() {
+                best = Some((n, c, via));
+            }
+        }
+        if let Some((_, _, via)) = best {
+            sheet.edges[i].via.clone_from(&via);
+            paths[i] = path_of(&sheet.edges[i]);
+        }
+    }
+}
+
+/// A drawn edge as the polyline it is drawn along.
+fn path_of(edge: &crate::scene::SceneEdge) -> Vec<Point> {
+    let mut path = vec![point(edge.a)];
+    path.extend(edge.via.iter().copied());
+    path.push(point(edge.b));
+    path
+}
+
+/// Where segments `p1`-`p2` and `q1`-`q2` cross, if they cross inside both.
+fn crossing(p1: Point, p2: Point, q1: Point, q2: Point) -> Option<Point> {
+    if !crate::quality::segments_cross(p1, p2, q1, q2) {
+        return None;
+    }
+    let (rx, ry) = (p2.x - p1.x, p2.y - p1.y);
+    let (sx, sy) = (q2.x - q1.x, q2.y - q1.y);
+    let denom = rx.mul_add(sy, -(ry * sx));
+    let t = (q1.x - p1.x).mul_add(sy, -((q1.y - p1.y) * sx)) / denom;
+    Some(Point {
+        x: t.mul_add(rx, p1.x),
+        y: t.mul_add(ry, p1.y),
+    })
+}
+
+/// A path's length, and half a cell for each bend, so a straighter route
+/// wins a near tie.
+fn cost(path: &[Point]) -> f32 {
+    const BEND_COST: f32 = 0.5;
+    #[allow(clippy::cast_precision_loss)]
+    let bends = path.len().saturating_sub(2) as f32;
+    path.windows(2)
+        .map(|s| (s[1].x - s[0].x).hypot(s[1].y - s[0].y))
+        .sum::<f32>()
+        + bends * BEND_COST
 }
 
 /// Room centres on the sheet, by cell, for asking what a line passes near.
@@ -145,14 +259,44 @@ fn best_detour(
     rooms: &Obstacles,
     ends: &[RoomId],
 ) -> Option<Vec<Point>> {
-    const BEND_COST: f32 = 0.5;
+    let candidates = bends(a, b, blockers, &[0.6, 1.0], &[0.5, 1.0, 1.5, 2.0, 3.0]);
+    let price = |via: &[Point]| {
+        let mut path = vec![a];
+        path.extend_from_slice(via);
+        path.push(b);
+        cost(&path)
+    };
+    let mut best: Option<(f32, Vec<Point>)> = None;
+    for via in candidates {
+        // A corner on an end is no bend at all.
+        if via.iter().any(|p| same(*p, a) || same(*p, b)) {
+            continue;
+        }
+        let c = price(&via);
+        if best.as_ref().is_some_and(|(bc, _)| *bc <= c) {
+            continue;
+        }
+        let mut path = vec![a];
+        path.extend_from_slice(&via);
+        path.push(b);
+        if rooms.near(&path, ends).is_empty() {
+            best = Some((c, via));
+        }
+    }
+    best.map(|(_, via)| via)
+}
+
+/// The bends tried for a line from `a` to `b`: an L either way round, a
+/// side-step to either side at each of `steps`, and a bow past each of
+/// `around` at each of `reaches`, either side.
+fn bends(a: Point, b: Point, around: &[Point], reaches: &[f32], steps: &[f32]) -> Vec<Vec<Point>> {
     let mut candidates: Vec<Vec<Point>> = vec![
         vec![Point { x: a.x, y: b.y }],
         vec![Point { x: b.x, y: a.y }],
     ];
     // Side-steps perpendicular to the line's main axis.
     let along_x = (b.x - a.x).abs() >= (b.y - a.y).abs();
-    for k in [0.5_f32, 1.0, 1.5, 2.0, 3.0] {
+    for &k in steps {
         for sign in [1.0_f32, -1.0] {
             let (ox, oy) = if along_x {
                 (0.0, k * sign)
@@ -171,12 +315,12 @@ fn best_detour(
             ]);
         }
     }
-    // A bow past each blocker, either side, at a clear distance.
+    // A bow past each point in the way, either side.
     let (dx, dy) = (b.x - a.x, b.y - a.y);
     let length = dx.hypot(dy).max(f32::EPSILON);
     let (nx, ny) = (-dy / length, dx / length);
-    for p in blockers {
-        for reach in [0.6_f32, 1.0] {
+    for p in around {
+        for &reach in reaches {
             for sign in [1.0_f32, -1.0] {
                 candidates.push(vec![Point {
                     x: p.x + nx * reach * sign,
@@ -185,36 +329,7 @@ fn best_detour(
             }
         }
     }
-
-    let cost = |via: &[Point]| -> f32 {
-        let mut path = vec![a];
-        path.extend_from_slice(via);
-        path.push(b);
-        #[allow(clippy::cast_precision_loss)]
-        let bends = via.len() as f32;
-        path.windows(2)
-            .map(|s| (s[1].x - s[0].x).hypot(s[1].y - s[0].y))
-            .sum::<f32>()
-            + bends * BEND_COST
-    };
-    let mut best: Option<(f32, Vec<Point>)> = None;
-    for via in candidates {
-        // A corner on an end is no bend at all.
-        if via.iter().any(|p| same(*p, a) || same(*p, b)) {
-            continue;
-        }
-        let c = cost(&via);
-        if best.as_ref().is_some_and(|(bc, _)| *bc <= c) {
-            continue;
-        }
-        let mut path = vec![a];
-        path.extend_from_slice(&via);
-        path.push(b);
-        if rooms.near(&path, ends).is_empty() {
-            best = Some((c, via));
-        }
-    }
-    best.map(|(_, via)| via)
+    candidates
 }
 
 fn same(p: Point, q: Point) -> bool {
@@ -245,7 +360,7 @@ fn segment_distance(p: Point, a: Point, b: Point) -> f32 {
 mod tests {
     use cena_map::{Cost, Crossing, Exit, ExitKind, Map, Room, RoomId};
 
-    use super::{CLEARANCE, Point, segment_distance};
+    use super::{CLEARANCE, Point, path_of, segment_distance};
     use crate::scene::SceneEdgeKind;
 
     fn room(id: u32, exits: &[(u32, &str)]) -> Room {
@@ -325,5 +440,48 @@ mod tests {
             .find(|e| e.a_room.0 + e.b_room.0 == 3)
             .expect("the road is drawn");
         assert!(road.via.is_empty(), "a clear road was bent");
+    }
+
+    /// A square of four rooms, joined round by compass exits, a compass
+    /// line across one diagonal and a `go path` across the other. Drawn
+    /// straight, the path crosses the diagonal; it curves round outside the
+    /// square instead, past no room.
+    #[test]
+    fn a_connector_curves_round_a_line_it_would_cross() {
+        let map = Map::from_rooms(vec![
+            room(1, &[(2, "east"), (4, "south"), (3, "go path")]),
+            room(2, &[(1, "west"), (3, "south"), (4, "southwest")]),
+            room(3, &[(2, "north"), (4, "west"), (1, "go path")]),
+            room(4, &[(3, "east"), (1, "north"), (2, "northeast")]),
+        ])
+        .expect("no duplicate ids");
+        let layout = crate::generate_layout(&map);
+        let scene = crate::build_scene("Test", &layout, &map);
+        let edge = |a: u32, b: u32| {
+            scene
+                .sheet
+                .edges
+                .iter()
+                .find(|e| {
+                    (e.a_room, e.b_room) == (RoomId(a), RoomId(b))
+                        || (e.a_room, e.b_room) == (RoomId(b), RoomId(a))
+                })
+                .expect("drawn")
+        };
+        let (path, diagonal) = (path_of(edge(1, 3)), path_of(edge(2, 4)));
+        assert!(
+            !path.windows(2).any(|s| diagonal
+                .windows(2)
+                .any(|d| crate::quality::segments_cross(s[0], s[1], d[0], d[1]))),
+            "the path still crosses the diagonal: {path:?}"
+        );
+        for id in [2, 4] {
+            let at = super::point(scene.room(RoomId(id)).expect("drawn").cell);
+            assert!(
+                path.windows(2)
+                    .all(|s| segment_distance(at, s[0], s[1]) >= CLEARANCE),
+                "the curved path runs over room {id}: {path:?}"
+            );
+        }
     }
 }

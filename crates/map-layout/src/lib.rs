@@ -51,6 +51,7 @@ pub mod satisfiable;
 mod satisfiable_tests;
 pub mod scene;
 pub mod stats;
+mod stretch;
 
 pub use classifier::Classification;
 pub use direction::{Dir, DirectionMap};

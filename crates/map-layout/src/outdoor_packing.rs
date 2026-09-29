@@ -331,8 +331,8 @@ fn pack_by_connectors(
                 largest = idx;
             }
         }
-        // The initial seed does NOT commit its segments (reference
-        // behavior).
+        // The reference did not commit the initial seed's lines; they are
+        // what a stretched group (`stretch`) must steer clear of most.
         place_group(
             groups,
             largest,
@@ -340,6 +340,17 @@ fn pack_by_connectors(
             PackMethod::Seed,
             &mut state.occupied,
             &mut state.placed,
+        );
+        commit_segments(
+            groups,
+            largest,
+            edges,
+            packed_set,
+            &state.placed,
+            map,
+            dirs,
+            &mut state.placed_segments,
+            &mut state.placed_boxes,
         );
     }
 
@@ -363,37 +374,7 @@ fn pack_by_connectors(
             break;
         };
 
-        let edge = *best
-            .placed_edges
-            .iter()
-            .min_by_key(|e| e.uid_delta)
-            .unwrap_or_else(|| unreachable!("placed_edges is non-empty"));
-        let neighbor_cell = groups[edge.other_group].final_cell(edge.other_room_id);
-        let internal = groups[best.idx].positions[&edge.room_id];
-
-        let anchor_lines: Vec<AnchorLine> = best
-            .placed_edges
-            .iter()
-            .map(|e| AnchorLine {
-                internal: groups[best.idx].positions[&e.room_id],
-                target: groups[e.other_group].final_cell(e.other_room_id),
-                room_id: e.room_id,
-                other_room_id: e.other_room_id,
-            })
-            .collect();
-
-        let proposed = Cell {
-            x: neighbor_cell.x - internal.x,
-            y: neighbor_cell.y - internal.y,
-        };
-        if let Some((offset, _)) = find_best_connector_offset(
-            &groups[best.idx],
-            proposed,
-            &state.occupied,
-            &anchor_lines,
-            &state.placed_segments,
-            &state.placed_boxes,
-        ) {
+        if let Some(offset) = connector_offset(groups, &best, dirs, state) {
             place_group(
                 groups,
                 best.idx,
@@ -418,6 +399,59 @@ fn pack_by_connectors(
             deferred.insert(best.idx);
         }
     }
+}
+
+/// Where [`pack_by_connectors`] lands `best`: beside the placed neighbour
+/// most likely to be physically adjacent, stretched from there until the
+/// group is clear (`stretch`), or else the least tangled spot nearby.
+fn connector_offset(
+    groups: &[Group],
+    best: &BestConnected,
+    dirs: &DirectionMap,
+    state: &PackingState,
+) -> Option<Cell> {
+    let edge = *best
+        .placed_edges
+        .iter()
+        .min_by_key(|e| e.uid_delta)
+        .unwrap_or_else(|| unreachable!("placed_edges is non-empty"));
+    let neighbor_cell = groups[edge.other_group].final_cell(edge.other_room_id);
+    let internal = groups[best.idx].positions[&edge.room_id];
+
+    let anchor_lines: Vec<AnchorLine> = best
+        .placed_edges
+        .iter()
+        .map(|e| AnchorLine {
+            internal: groups[best.idx].positions[&e.room_id],
+            target: groups[e.other_group].final_cell(e.other_room_id),
+            room_id: e.room_id,
+            other_room_id: e.other_room_id,
+        })
+        .collect();
+
+    let proposed = Cell {
+        x: neighbor_cell.x - internal.x,
+        y: neighbor_cell.y - internal.y,
+    };
+    crate::stretch::find_clear_offset(
+        &groups[best.idx],
+        proposed,
+        &state.occupied,
+        &anchor_lines,
+        &state.placed_segments,
+        dirs,
+    )
+    .or_else(|| {
+        find_best_connector_offset(
+            &groups[best.idx],
+            proposed,
+            &state.occupied,
+            &anchor_lines,
+            &state.placed_segments,
+            &state.placed_boxes,
+        )
+        .map(|(offset, _)| offset)
+    })
 }
 
 /// Pass 3: whatever is still unplaced lines up in a strip below everything
