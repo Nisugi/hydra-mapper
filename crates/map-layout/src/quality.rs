@@ -37,6 +37,9 @@ pub struct Quality {
     pub rooms: usize,
     /// Rule 1: exits drawn against their compass direction.
     pub against_bearing: usize,
+    /// ... of those, between two rooms the solver placed in different
+    /// groups: where the groups were put, not how a group was solved.
+    pub against_bearing_across: usize,
     /// Rule 2: drawn lines that pass over a room they do not join.
     pub lines_through_rooms: usize,
     /// Rule 3: building rooms under a line whose ends are both outside the
@@ -55,6 +58,22 @@ pub struct Quality {
     /// The drawn lengths of the directionless lines, in sheet cells.
     #[serde(skip)]
     pub directionless_lengths: Vec<f32>,
+    /// What each rule counted, to look at: the exits against their
+    /// direction, the lines through rooms with the rooms they cross, and the
+    /// building rooms under a foreign line.
+    #[serde(skip)]
+    pub detail: Detail,
+}
+
+/// What a [`Quality`] counted, by room.
+#[derive(Debug, Clone, Default)]
+pub struct Detail {
+    /// Exits drawn against their direction: from, to.
+    pub against: Vec<(RoomId, RoomId)>,
+    /// Lines through rooms: its two ends, and the rooms it crosses.
+    pub through: Vec<(RoomId, RoomId, Vec<RoomId>)>,
+    /// Building rooms under a line not theirs.
+    pub under: Vec<RoomId>,
 }
 
 impl Quality {
@@ -62,6 +81,7 @@ impl Quality {
     pub fn add(&mut self, other: &Quality) {
         self.rooms += other.rooms;
         self.against_bearing += other.against_bearing;
+        self.against_bearing_across += other.against_bearing_across;
         self.lines_through_rooms += other.lines_through_rooms;
         self.rooms_under_foreign_lines += other.rooms_under_foreign_lines;
         self.directionless += other.directionless;
@@ -99,10 +119,10 @@ pub fn measure(scene: &MapScene, layout: &Layout, map: &Map) -> Quality {
     let mut dirs = DirectionMap::build(map);
     dirs.apply_edge_overrides(map, &layout.edges);
     let sheet = &scene.sheet;
-    let cell_of: HashMap<RoomId, (i32, i32)> = sheet
+    let cell_of: HashMap<RoomId, (i32, i32, usize)> = sheet
         .rooms
         .iter()
-        .map(|room| (room.id, (room.cell.x, room.cell.y)))
+        .map(|room| (room.id, (room.cell.x, room.cell.y, room.group)))
         .collect();
     let mut quality = Quality {
         rooms: sheet.rooms.len(),
@@ -112,11 +132,11 @@ pub fn measure(scene: &MapScene, layout: &Layout, map: &Map) -> Quality {
     // Rule 1, and the pairs rule 4 is about.
     let mut directionless: HashSet<(RoomId, RoomId)> = HashSet::new();
     for room in map.rooms() {
-        let Some(&(ax, ay)) = cell_of.get(&room.id) else {
+        let Some(&(ax, ay, ag)) = cell_of.get(&room.id) else {
             continue;
         };
         for exit in &room.exits {
-            let Some(&(bx, by)) = cell_of.get(&exit.to) else {
+            let Some(&(bx, by, bg)) = cell_of.get(&exit.to) else {
                 continue;
             };
             match dirs.get(room.id, exit.to) {
@@ -124,6 +144,10 @@ pub fn measure(scene: &MapScene, layout: &Layout, map: &Map) -> Quality {
                     let (ex, ey) = dir.offset();
                     if (bx - ax).signum() != ex.signum() || (by - ay).signum() != ey.signum() {
                         quality.against_bearing += 1;
+                        quality.detail.against.push((room.id, exit.to));
+                        if ag != bg {
+                            quality.against_bearing_across += 1;
+                        }
                     }
                 }
                 None if dirs.get(exit.to, room.id).is_none()
@@ -148,6 +172,10 @@ pub fn measure(scene: &MapScene, layout: &Layout, map: &Map) -> Quality {
             continue;
         }
         quality.lines_through_rooms += 1;
+        quality
+            .detail
+            .through
+            .push((edge.a_room, edge.b_room, crossed.clone()));
         let end_units = [scene.unit_of(edge.a_room), scene.unit_of(edge.b_room)];
         for room in crossed {
             match scene.unit_of(room) {
@@ -159,6 +187,8 @@ pub fn measure(scene: &MapScene, layout: &Layout, map: &Map) -> Quality {
         }
     }
     quality.rooms_under_foreign_lines = under.len();
+    quality.detail.under = under.iter().copied().collect();
+    quality.detail.under.sort_unstable();
 
     // Rule 4.
     let drawn: HashMap<(RoomId, RoomId), &SceneEdge> = sheet

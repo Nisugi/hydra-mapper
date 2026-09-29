@@ -54,11 +54,14 @@ pub(crate) struct Obstacles {
 impl Obstacles {
     /// The room centres of `rooms`.
     pub(crate) fn of(rooms: &[SceneRoom]) -> Obstacles {
+        Obstacles::of_cells(rooms.iter().map(|room| (room.id, room.cell)))
+    }
+
+    /// The room centres at `cells`.
+    pub(crate) fn of_cells(cells: impl IntoIterator<Item = (RoomId, Cell)>) -> Obstacles {
         let mut at: HashMap<(i32, i32), Vec<RoomId>> = HashMap::new();
-        for room in rooms {
-            at.entry((room.cell.x, room.cell.y))
-                .or_default()
-                .push(room.id);
+        for (id, cell) in cells {
+            at.entry((cell.x, cell.y)).or_default().push(id);
         }
         Obstacles { at }
     }

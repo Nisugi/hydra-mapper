@@ -5,11 +5,15 @@
 //! standard output: the baseline Hydra's `plan/53` Stage 1 tunes against.
 //!
 //! `cena-mapper --quality-check [map]` is the gate: the same measure,
-//! compared with that table, area by area, and refused when any area is
-//! worse on any rule; the table is left as it is, and the new one written
-//! beside it as `<map>.quality.new.tsv`. `--quality` again accepts it.
-//! `gs.map` is not in the repository, so the gate is this command rather
-//! than a `cargo test`.
+//! compared with that table, and refused when any rule is worse **in
+//! total**, over every area but the events; an area worse on one rule while
+//! the totals improve is a **trade**, listed for review and not refused (the
+//! author, 2026-09-29: *"I agree totals, trades listed. But also ignore event
+//! areas"*). An event area is one named `special-...` (Duskruin, Naidem,
+//! Rumor Woods...): measured and written, never gated. The table is left as
+//! it is, and the new one written beside it as `<map>.quality.new.tsv`;
+//! `--quality` again accepts it. `gs.map` is not in the repository, so the
+//! gate is this command rather than a `cargo test`.
 //!
 //! An area is the one baked into the map (`meta:area:<name>`, by `retag`),
 //! the unit Hydra lays out by. Each is laid out with the rooms the window
@@ -44,6 +48,9 @@ const GATED: [(&str, usize); 5] = [
     ("directionless lines crossing another", 9),
 ];
 
+/// An event area's name begins with this: never gated.
+const EVENT: &str = "special-";
+
 const HEADER: &str = "area\trooms\tms\tagainst_bearing\tlines_through_rooms\t\
                       rooms_under_foreign_lines\tdirectionless\tlines\tstubs\tundrawn\t\
                       crossing\tlen_median\tlen_p90\n";
@@ -66,6 +73,13 @@ pub fn quality_headless(path: Option<&Path>, check: bool) -> Result<String, Stri
         total.add(&row.quality);
         laying += row.time;
     }
+    // `QUALITY_AREA=<name>`: what that area's counts are made of.
+    if let Some(area) = std::env::var_os("QUALITY_AREA") {
+        let area = area.to_string_lossy();
+        for row in rows.iter().filter(|r| r.name == area) {
+            eprintln!("{area}: {:#?}", row.quality.detail);
+        }
+    }
     let text = table(&rows, laying, &total);
     let summary = summary(&rows, &total, laying, wall);
     let baseline = path.with_extension("quality.tsv");
@@ -81,19 +95,29 @@ pub fn quality_headless(path: Option<&Path>, check: bool) -> Result<String, Stri
     })?;
     let new_table = path.with_extension("quality.new.tsv");
     std::fs::write(&new_table, &text).map_err(|e| format!("{} {e}", new_table.display()))?;
-    let (worse, better) = compare(&parse(&old), &parse(&text));
-    let mut out = format!("{summary}\nwritten to {}\n", new_table.display());
-    for (rule, index) in GATED {
-        let was = parse(&old).get("TOTAL").map_or(0, |c| c[index]);
-        let now = parse(&text).get("TOTAL").map_or(0, |c| c[index]);
+    let verdict = judge(&parse(&old), &parse(&text));
+    let mut out = format!(
+        "{summary}\nwritten to {}\nin total, events aside:\n",
+        new_table.display()
+    );
+    for (rule, was, now) in &verdict.totals {
         let _ = writeln!(out, "  {rule}: {was} -> {now}");
     }
-    if worse.is_empty() {
-        let _ = write!(out, "no area worse on any rule; better in {better} places");
+    let _ = writeln!(
+        out,
+        "better in {} places; {} trades:",
+        verdict.better,
+        verdict.traded.len()
+    );
+    for line in &verdict.traded {
+        let _ = writeln!(out, "  {line}");
+    }
+    if verdict.worse.is_empty() {
+        let _ = write!(out, "no rule worse in total");
         Ok(out)
     } else {
-        let _ = writeln!(out, "WORSE, in {} places:", worse.len());
-        for line in worse {
+        let _ = writeln!(out, "WORSE IN TOTAL:");
+        for line in &verdict.worse {
             let _ = writeln!(out, "  {line}");
         }
         Err(out)
@@ -160,7 +184,7 @@ fn summary(rows: &[Row], total: &Quality, laying: Duration, wall: Duration) -> S
     let slowest = rows.iter().max_by_key(|row| row.time);
     format!(
         "{} areas, {} rooms, laid out in {:.1} s ({:.1} s with measuring); slowest {}\n\
-         rule 1, exits against their direction: {}\n\
+         rule 1, exits against their direction: {} ({} between two groups)\n\
          rule 2, lines through rooms: {}\n\
          rule 3, building rooms under a line not theirs: {}\n\
          rule 4, pairs joined only without a direction: {} -- {} lines ({} crossing another), \
@@ -176,6 +200,7 @@ fn summary(rows: &[Row], total: &Quality, laying: Duration, wall: Duration) -> S
             row.quality.rooms
         )),
         total.against_bearing,
+        total.against_bearing_across,
         total.lines_through_rooms,
         total.rooms_under_foreign_lines,
         total.directionless,
@@ -202,31 +227,55 @@ fn parse(text: &str) -> BTreeMap<String, Vec<u64>> {
         .collect()
 }
 
-/// Where `new` is worse than `old` on a gated rule, as lines to show, and
-/// how many places it is better. An area only one of them has is neither.
-fn compare(
-    old: &BTreeMap<String, Vec<u64>>,
-    new: &BTreeMap<String, Vec<u64>>,
-) -> (Vec<String>, usize) {
-    let mut worse = Vec::new();
-    let mut better = 0;
+/// What the gate makes of two tables.
+#[derive(Debug, Default)]
+struct Verdict {
+    /// Each gated rule's total over every area but the events: was, now.
+    totals: Vec<(&'static str, u64, u64)>,
+    /// The rules worse in that total: refused.
+    worse: Vec<String>,
+    /// An area worse on a rule, events aside: listed, not refused.
+    traded: Vec<String>,
+    /// Places, area and rule, that are better.
+    better: usize,
+}
+
+/// `new` against `old`: the totals over every area both have, events aside,
+/// may not grow; an area that grows on a rule is a trade. An area only one
+/// table has counts in neither.
+fn judge(old: &BTreeMap<String, Vec<u64>>, new: &BTreeMap<String, Vec<u64>>) -> Verdict {
+    let mut verdict = Verdict::default();
+    let mut sums = [(0u64, 0u64); GATED.len()];
     for (area, now) in new {
+        if area == "TOTAL" || area.starts_with(EVENT) {
+            continue;
+        }
         let Some(was) = old.get(area) else {
             continue;
         };
-        for (rule, index) in GATED {
+        for (i, (rule, index)) in GATED.iter().enumerate() {
             let (was, now) = (
-                was.get(index).copied().unwrap_or(0),
-                now.get(index).copied().unwrap_or(0),
+                was.get(*index).copied().unwrap_or(0),
+                now.get(*index).copied().unwrap_or(0),
             );
+            sums[i].0 += was;
+            sums[i].1 += now;
             if now > was {
-                worse.push(format!("{area}: {rule} {was} -> {now}"));
+                verdict
+                    .traded
+                    .push(format!("{area}: {rule} {was} -> {now}"));
             } else if now < was {
-                better += 1;
+                verdict.better += 1;
             }
         }
     }
-    (worse, better)
+    for ((rule, _), (was, now)) in GATED.iter().zip(sums) {
+        verdict.totals.push((rule, was, now));
+        if now > was {
+            verdict.worse.push(format!("{rule}: {was} -> {now}"));
+        }
+    }
+    verdict
 }
 
 fn line(text: &mut String, name: &str, time: Duration, q: &Quality) {
@@ -254,24 +303,34 @@ fn cells(length: Option<f32>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{compare, parse};
+    use super::{judge, parse};
 
     const OLD: &str = "area\trooms\tms\tagainst\tthrough\tunder\td\tl\ts\tundrawn\tcrossing\tm\tp\n\
                        a\t10\t5\t3\t2\t1\t4\t4\t0\t0\t1\t1.4\t2.0\n\
-                       b\t10\t5\t0\t0\t0\t0\t0\t0\t0\t0\t-\t-\n";
+                       b\t10\t5\t0\t0\t0\t0\t0\t0\t0\t0\t-\t-\n\
+                       special-x\t10\t5\t0\t0\t0\t0\t0\t0\t0\t0\t-\t-\n";
 
-    /// A rule that grows in an area is worse, whatever the others did;
-    /// one that shrinks is better; a new area is neither.
+    /// A rule worse in one area while its total holds or falls is a trade,
+    /// not refused; worse in total is refused; an event area is neither.
     #[test]
-    fn an_area_worse_on_one_rule_is_refused() {
-        let new = OLD
-            .replace("a\t10\t5\t3\t2\t1", "a\t10\t9\t2\t2\t1")
+    fn the_gate_holds_totals_and_lists_trades() {
+        // a: against 3 -> 1 and through 2 -> 1; b: through 0 -> 1, so the
+        // through total holds at 2; the event: everything up.
+        let traded = OLD
+            .replace("a\t10\t5\t3\t2\t1", "a\t10\t9\t1\t1\t1")
             .replace("b\t10\t5\t0\t0\t0", "b\t10\t5\t0\t1\t0")
-            + "c\t5\t1\t9\t9\t9\t0\t0\t0\t0\t0\t-\t-\n";
-        let (worse, better) = compare(&parse(OLD), &parse(&new));
-        assert_eq!(worse, ["b: lines through rooms 0 -> 1"]);
-        assert_eq!(better, 1, "a's exits against their direction, 3 -> 2");
-        let (worse, better) = compare(&parse(OLD), &parse(OLD));
-        assert!(worse.is_empty() && better == 0, "the same table passes");
+            .replace("special-x\t10\t5\t0\t0\t0", "special-x\t10\t5\t9\t0\t9");
+        let verdict = judge(&parse(OLD), &parse(&traded));
+        assert!(verdict.worse.is_empty(), "{:?}", verdict.worse);
+        assert_eq!(verdict.traded, ["b: lines through rooms 0 -> 1"]);
+        assert_eq!(verdict.better, 2);
+
+        // b: through 0 -> 1 with nothing better: worse in total.
+        let worse = OLD.replace("b\t10\t5\t0\t0\t0", "b\t10\t5\t0\t1\t0");
+        let verdict = judge(&parse(OLD), &parse(&worse));
+        assert_eq!(verdict.worse, ["lines through rooms: 2 -> 3"]);
+
+        let same = judge(&parse(OLD), &parse(OLD));
+        assert!(same.worse.is_empty() && same.traded.is_empty() && same.better == 0);
     }
 }
