@@ -14,6 +14,7 @@ mod area_fill;
 mod areas;
 mod bundle;
 mod camera;
+mod compare;
 mod draw;
 mod export;
 mod focus;
@@ -62,6 +63,16 @@ fn main() -> eframe::Result {
         }
         return Ok(());
     }
+    // `--compare <area> [map]`: the area as the engine draws it, against
+    // the same with the store's hand corrections, and what each did.
+    if flag.as_deref() == Some("--compare") {
+        let Some(area) = std::env::args().nth(2) else {
+            eprintln!("usage: cena-mapper --compare <area> [map]");
+            std::process::exit(2);
+        };
+        finish(compare::compare_headless(&area, map_at(3).as_deref()));
+        return Ok(());
+    }
     // `--quality [map]`: every area laid out, measured by the four rules
     // and timed, into `<map>.quality.tsv`. `--quality-check [map]`: the
     // same, refused where an area is worse than that table.
@@ -70,18 +81,10 @@ fn main() -> eframe::Result {
         Some("--quality-check") => Some(true),
         _ => None,
     } {
-        let path = std::env::args()
-            .nth(2)
-            .map(PathBuf::from)
-            .or_else(|| std::env::var_os(MAP_ENV).map(PathBuf::from))
-            .or_else(bundle::default_path);
-        match quality_report::quality_headless(path.as_deref(), check) {
-            Ok(note) => println!("{note}"),
-            Err(problem) => {
-                eprintln!("{problem}");
-                std::process::exit(1);
-            }
-        }
+        finish(quality_report::quality_headless(
+            map_at(2).as_deref(),
+            check,
+        ));
         return Ok(());
     }
     // `--plan-areas [map]`: say where the rooms with no area would go.
@@ -132,6 +135,27 @@ fn main() -> eframe::Result {
         options,
         Box::new(move |_cc| Ok(Box::new(MapperApp::load(path.as_deref())))),
     )
+}
+
+/// The map named by the `n`th argument, or `CENA_MAP`, or the bundled one.
+fn map_at(n: usize) -> Option<PathBuf> {
+    std::env::args()
+        .nth(n)
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os(MAP_ENV).map(PathBuf::from))
+        .or_else(bundle::default_path)
+}
+
+/// A headless mode's answer on standard output, or its problem on standard
+/// error and exit 1.
+fn finish(result: Result<String, String>) {
+    match result {
+        Ok(note) => println!("{note}"),
+        Err(problem) => {
+            eprintln!("{problem}");
+            std::process::exit(1);
+        }
+    }
 }
 
 /// The map file to open: `CENA_MAP`, or the first command-line argument, so
