@@ -145,7 +145,8 @@ fn measure_all(path: &Path) -> Result<Vec<Row>, String> {
             continue;
         };
         let location = store
-            .location(&format!("curated:{name}"))
+            .location(&format!("map:{name}"))
+            .or_else(|| store.location(&format!("curated:{name}")))
             .or_else(|| store.location(name));
         let edges = location
             .map(|l| l.edge_overrides(&subset))

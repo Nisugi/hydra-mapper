@@ -175,6 +175,11 @@ enum EditAction {
         keys: Vec<RoomKey>,
         to: Option<String>,
     },
+    /// Put areas on a map, or (with `None`) take them off it.
+    MapAreas {
+        areas: Vec<String>,
+        map: Option<String>,
+    },
 }
 
 pub struct MapperApp {
@@ -315,6 +320,7 @@ impl MapperApp {
                 location: Vec::new(),
                 derived: Vec::new(),
                 plates: Vec::new(),
+                maps: Vec::new(),
                 placeable: HashSet::new(),
                 baseline: crate::overrides::Baseline::default(),
             },
@@ -391,6 +397,7 @@ impl MapperApp {
         for kind in [
             AreaKind::Official,
             AreaKind::Region,
+            AreaKind::Maps,
             AreaKind::Location,
             AreaKind::Plates,
         ] {
@@ -659,6 +666,7 @@ impl MapperApp {
     fn show_named(&mut self, name: &str) {
         for kind in [
             AreaKind::Plates,
+            AreaKind::Maps,
             AreaKind::Official,
             AreaKind::Location,
             AreaKind::Derived,
@@ -1291,6 +1299,12 @@ impl MapperApp {
                 self.store.delete_area(&area, baked);
                 membership_changed = true;
             }
+            EditAction::MapAreas { areas, map } => {
+                for area in areas {
+                    self.store.set_area_map(&area, map.as_deref());
+                }
+                membership_changed = true;
+            }
         }
         self.save_store();
         if membership_changed {
@@ -1495,6 +1509,45 @@ impl MapperApp {
         edit
     }
 
+    /// Under the Maps tab: the areas worth putting on one map
+    /// ([`crate::maps::suggest`]), each with Accept, which puts them on it.
+    fn map_suggestions(&self, ui: &mut egui::Ui) -> Option<EditAction> {
+        let map = self.map.as_ref().ok()?;
+        let offered = crate::maps::suggest(map, &self.store, &self.areas.baseline);
+        if offered.is_empty() {
+            return None;
+        }
+        ui.separator();
+        ui.strong(format!("Suggested ({})", offered.len()))
+            .on_hover_text("Areas a walk joins whose rooms mostly name one location");
+        let mut edit = None;
+        egui::ScrollArea::vertical()
+            .id_salt("map_suggestions")
+            .max_height(240.0)
+            .show(ui, |ui| {
+                for suggestion in offered {
+                    let titles: Vec<&str> = suggestion
+                        .areas
+                        .iter()
+                        .map(|a| self.store.area_title(a, &self.areas.baseline))
+                        .collect();
+                    ui.horizontal_top(|ui| {
+                        if ui.button("Accept").clicked() {
+                            edit = Some(EditAction::MapAreas {
+                                areas: suggestion.areas.clone(),
+                                map: Some(suggestion.name.clone()),
+                            });
+                        }
+                        ui.add(
+                            egui::Label::new(format!("{}: {}", suggestion.name, titles.join(", ")))
+                                .wrap(),
+                        );
+                    });
+                }
+            });
+        edit
+    }
+
     /// The left panel: the two list tabs, a filter box, and the list.
     fn picker(&mut self, ui: &mut egui::Ui, picking: bool) -> bool {
         let mut changed = false;
@@ -1611,6 +1664,12 @@ impl MapperApp {
                 });
             }
         });
+        if self.tab == AreaKind::Maps
+            && let Some(edit) = self.map_suggestions(ui)
+        {
+            self.commit(edit);
+            changed = true;
+        }
         if let Some(name) = toggle
             && !self.collapsed.remove(&name)
         {
@@ -2766,6 +2825,9 @@ fn canvas_header(
             if let Some(action) = delete_area_button(ui, store, baseline, tab, &shown.name) {
                 *edit_out = Some(action);
             }
+            if let Some(action) = map_controls(ui, store, baseline, tab, &shown.name) {
+                *edit_out = Some(action);
+            }
             if tab == AreaKind::Plates
                 && let Some(plate) = plate_key_of(store, &shown.name)
             {
@@ -2877,6 +2939,67 @@ fn area_label(
         format!("{}  ({}, {plated} on plates)", area.name, area.rooms.len())
     } else {
         format!("{}  ({})", area.name, area.rooms.len())
+    }
+}
+
+/// A map's and an area's choices, in edit mode: a map shown can be taken
+/// apart, its areas back on no map; a curated area shown can be put on
+/// any map there is, or taken off its own.
+fn map_controls(
+    ui: &mut egui::Ui,
+    store: &MapOverrides,
+    baseline: &Baseline,
+    tab: AreaKind,
+    shown: &str,
+) -> Option<EditAction> {
+    let areas = store.known_areas(baseline);
+    match tab {
+        AreaKind::Maps => {
+            let on: Vec<String> = areas
+                .keys()
+                .filter(|a| store.map_of_area(a, baseline) == Some(shown))
+                .cloned()
+                .collect();
+            ui.button("Take apart")
+                .on_hover_text("Take every area off this map: each is its own sheet again")
+                .clicked()
+                .then_some(EditAction::MapAreas {
+                    areas: on,
+                    map: None,
+                })
+        }
+        AreaKind::Region => {
+            let (key, _) = areas.iter().find(|(_, name)| name.as_str() == shown)?;
+            let now = store.map_of_area(key, baseline);
+            let mut maps: Vec<&str> = areas
+                .keys()
+                .filter_map(|a| store.map_of_area(a, baseline))
+                .collect();
+            maps.sort_unstable();
+            maps.dedup();
+            let mut edit = None;
+            egui::ComboBox::from_id_salt("area_map")
+                .selected_text(format!("Map: {}", now.unwrap_or("none")))
+                .show_ui(ui, |ui| {
+                    if ui.selectable_label(now.is_none(), "none").clicked() && now.is_some() {
+                        edit = Some(EditAction::MapAreas {
+                            areas: vec![key.clone()],
+                            map: None,
+                        });
+                    }
+                    for map in maps {
+                        if ui.selectable_label(now == Some(map), map).clicked() && now != Some(map)
+                        {
+                            edit = Some(EditAction::MapAreas {
+                                areas: vec![key.clone()],
+                                map: Some(map.to_owned()),
+                            });
+                        }
+                    }
+                });
+            edit
+        }
+        _ => None,
     }
 }
 

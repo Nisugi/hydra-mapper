@@ -327,7 +327,16 @@ pub fn build_scene(location: &str, layout: &Layout, map: &Map) -> MapScene {
     populate_rooms(&mut scene, layout, map, &unit_of_group);
     populate_edges(&mut scene, layout, map, &dirs, &unit_of_group);
     crate::routing::route_edges(&mut scene.sheet);
-    crate::doors::place(&mut scene.sheet, &layout.ways_in);
+    let folded = crate::doors::fold_fans(&mut scene.sheet, map, layout.town_scale);
+    for unit in &mut scene.units {
+        unit.rooms
+            .retain(|r| !folded.iter().any(|w| w.inside == *r));
+        unit.door_rooms
+            .retain(|r| !folded.iter().any(|w| w.inside == *r));
+    }
+    let mut ways = layout.ways_in.clone();
+    ways.extend(folded);
+    crate::doors::place(&mut scene.sheet, &ways);
     populate_labels(&mut scene, layout, &unit_of_group);
     compute_sheet_bounds(&mut scene);
 

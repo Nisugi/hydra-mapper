@@ -126,7 +126,7 @@ pub fn compare_headless(area: &str, path: Option<&Path>) -> Result<String, Strin
     let own: Vec<RoomId> = areas::AreaKind::ALL
         .iter()
         .flat_map(|&kind| built.list(kind))
-        .find(|a| a.name == area && a.parent.is_some())
+        .find(|a| a.name == area && (a.parent.is_some() || a.kind == areas::AreaKind::Maps))
         .map_or_else(
             || {
                 map.rooms()
@@ -146,7 +146,8 @@ pub fn compare_headless(area: &str, path: Option<&Path>) -> Result<String, Strin
     // pictures and the rules still say how it reads.
     let none = overrides::LocationOverrides::default();
     let hand = store
-        .location(&format!("curated:{area}"))
+        .location(&format!("map:{area}"))
+        .or_else(|| store.location(&format!("curated:{area}")))
         .or_else(|| store.location(area))
         .unwrap_or(&none);
     let edges = hand.edge_overrides(&subset);

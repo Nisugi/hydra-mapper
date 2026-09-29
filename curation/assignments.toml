@@ -2,8 +2,8 @@
 # the next export replaces this file from the store.
 #
 # `retag` bakes it into gs.map: each room here gets `meta:area:<name>`,
-# and each [[assign]] region outranks the mapdb join, the folds and
-# the spread. Rooms are named by uid, or by id where the game never
+# and `meta:hydramap:<map>` when its area is on a map; each [[assign]]
+# region outranks the mapdb join, the folds and the spread. Rooms are named by uid, or by id where the game never
 # numbered them; ids do not survive a map rebuild.
 
 [[area]]
@@ -774,6 +774,7 @@ ids = [
 [[area]]
 key = "icemule.trace.cold.river.town"
 name = "icemule-trace-cold-river-town"
+map = "the-hinterwilds"
 # 42 rooms
 uids = [
   2002101, 2002102, 2002103, 2002104, 2002105, 7503001, 7503002, 7503003, 7503004, 7503005, 7503006, 7503051,
@@ -815,6 +816,7 @@ ids = [
 [[area]]
 key = "icemule.trace.hinterwilds"
 name = "icemule-trace-hinterwilds"
+map = "the-hinterwilds"
 # 207 rooms
 uids = [
   7503101, 7503102, 7503103, 7503107, 7503108, 7503109, 7503110, 7503111, 7503113, 7503114, 7503115, 7503116,

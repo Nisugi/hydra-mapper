@@ -284,6 +284,17 @@ pub struct MapOverrides {
     /// assignment survives a map rebuild renumbering the ids.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub region_moves: BTreeMap<RoomKey, String>,
+    /// Area key -> the map it is drawn on (an empty name: none, over what
+    /// the map carries).
+    ///
+    /// **A map is a group of areas laid out as one sheet** (the author,
+    /// 2026-09-29, of Cold River beside the Hinterwilds: *"I think the
+    /// solution is for cold river to end up in the hinterwilds area, and
+    /// not be a separate area. Areas have sub areas hmm?"*). The areas
+    /// stay what they are, Simutronics' own splits, and become the map's
+    /// sub-areas. Keyed by area, not room: a map is made of whole areas.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub area_maps: BTreeMap<String, String>,
 }
 
 /// A curated area: a named place, its rooms assigned by hand.
@@ -303,6 +314,7 @@ pub struct MergeReport {
     pub plate_moves: usize,
     pub new_plates: usize,
     pub layout: usize,
+    pub area_maps: usize,
 }
 
 impl std::fmt::Display for MergeReport {
@@ -310,13 +322,14 @@ impl std::fmt::Display for MergeReport {
         write!(
             f,
             "{} area and {} region assignment(s), {} new area(s), {} plate move(s), \
-             {} new plate(s), {} layout correction(s)",
+             {} new plate(s), {} layout correction(s), {} area(s) put on a map",
             self.area_moves,
             self.region_moves,
             self.new_areas,
             self.plate_moves,
             self.new_plates,
-            self.layout
+            self.layout,
+            self.area_maps
         )
     }
 }
@@ -588,7 +601,30 @@ impl MapOverrides {
         report.region_moves = other.region_moves.len();
         self.region_moves
             .extend(other.region_moves.iter().map(|(k, v)| (*k, v.clone())));
+        report.area_maps = other.area_maps.len();
+        self.area_maps
+            .extend(other.area_maps.iter().map(|(k, v)| (k.clone(), v.clone())));
         report
+    }
+
+    /// Put an area on a map, or (with `None`) take it off, over what the
+    /// map carries.
+    pub fn set_area_map(&mut self, area: &str, map: Option<&str>) {
+        self.area_maps.insert(
+            area.to_owned(),
+            map.map(str::trim).unwrap_or_default().to_owned(),
+        );
+    }
+
+    /// The map an area is drawn on: this store's word where it has one,
+    /// else the one the map carries.
+    #[must_use]
+    pub fn map_of_area<'a>(&'a self, area: &str, baseline: &'a Baseline) -> Option<&'a str> {
+        match self.area_maps.get(area) {
+            Some(map) if map.is_empty() => None,
+            Some(map) => Some(map),
+            None => baseline.area_map.get(area).map(String::as_str),
+        }
     }
 
     /// Put a room in a curated area, or (with `None`) take it out.
@@ -804,6 +840,8 @@ pub struct Baseline {
     pub areas: BTreeMap<String, String>,
     /// Every region the map names.
     pub regions: std::collections::BTreeSet<String>,
+    /// Area key -> the map its rooms carry (`meta:hydramap:`).
+    pub area_map: BTreeMap<String, String>,
 }
 
 impl Baseline {
@@ -811,15 +849,25 @@ impl Baseline {
         let mut out = Baseline::default();
         for room in map.rooms() {
             let key = RoomKey::of(room.id, map);
+            let mut area = None;
+            let mut on = None;
             for meta in &room.meta {
                 if let Some(name) = meta.strip_prefix("area:") {
-                    let area = plate_key(name);
-                    out.areas.insert(area.clone(), name.to_owned());
-                    out.area.insert(key, area);
+                    let key = plate_key(name);
+                    out.areas.insert(key.clone(), name.to_owned());
+                    area = Some(key);
                 } else if let Some(name) = meta.strip_prefix("region:") {
                     out.regions.insert(name.to_owned());
                     out.region.insert(key, name.to_owned());
+                } else if let Some(name) = meta.strip_prefix("hydramap:") {
+                    on = Some(name.to_owned());
                 }
+            }
+            if let Some(area) = area {
+                if let Some(on) = on {
+                    out.area_map.insert(area.clone(), on);
+                }
+                out.area.insert(key, area);
             }
         }
         out
