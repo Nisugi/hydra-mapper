@@ -209,8 +209,6 @@ mod tests {
         assert!((before.y - after.y).abs() < 0.001);
     }
 
-    /// Zoom stays inside its bounds no matter how hard the wheel is spun.
-    #[test]
     /// The whole map fits on an ordinary screen.
     ///
     /// Not a style preference: the open-air world is one group of 1,363
@@ -233,6 +231,8 @@ mod tests {
         assert!(camera.scale > MIN_SCALE, "fit is pinned at the bound");
     }
 
+    /// Zoom stays inside its bounds no matter how hard the wheel is spun.
+    #[test]
     fn zoom_is_clamped_both_ways() {
         let mut camera = Camera::default();
         let anchor = canvas().center();
