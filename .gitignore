@@ -7,6 +7,9 @@
 # before 2,629 rooms went -- which are worth keeping beside a person's
 # own map and worthless to anybody else.
 *.map
+# But the one map Hydra embeds is the repository's (the author, 2026-09-29:
+# "Hydra is going to embed the gs.map from the mapper"): `crates/gs-map`.
+!/gs.map
 
 # Local editing state and its export: these belong beside a person's
 # own map file, not in the repository.

@@ -25,7 +25,7 @@ use std::fmt::Write as _;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use cena_map::{Map, RoomId};
+use cena_map::Map;
 use cena_map_layout::{LayoutParams, Quality, build_scene, generate_layout_tuned, quality};
 
 use crate::areas::{self, Areas};
@@ -136,12 +136,7 @@ fn measure_all(path: &Path) -> Result<Vec<Row>, String> {
     };
     let placeable = Areas::build(&map, &store).placeable;
 
-    let mut by_area: BTreeMap<String, Vec<RoomId>> = BTreeMap::new();
-    for room in map.rooms() {
-        if let Some(area) = room.meta.iter().find_map(|m| m.strip_prefix("area:")) {
-            by_area.entry(area.to_owned()).or_default().push(room.id);
-        }
-    }
+    let by_area = cena_map_layout::areas::baked(&map);
 
     let mut rows = Vec::new();
     for (name, rooms) in &by_area {

@@ -34,6 +34,7 @@
 // than per-site because the reasoning is the same at every occurrence.
 #![allow(clippy::implicit_hasher)]
 
+pub mod areas;
 pub mod classifier;
 mod cut;
 pub mod direction;
