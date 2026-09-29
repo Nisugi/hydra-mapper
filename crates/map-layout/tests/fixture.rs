@@ -145,8 +145,9 @@ fn hard_invariants_hold() {
 }
 
 /// The bank is a real building: two indoor rooms, reached by one doorway
-/// from the square, forming one cluster -- not two, and not merged with
-/// the outdoor square.
+/// from the square. Its lobby is the doorway, drawn as a building of its
+/// own, not merged with the outdoor square; the vault behind it is hidden
+/// (`hidden`: indoors, no terrain, no door onto a street).
 #[test]
 fn the_bank_is_one_building_with_one_doorway() {
     let map = town();
@@ -157,11 +158,6 @@ fn the_bank_is_one_building_with_one_doorway() {
         .iter()
         .find(|g| g.room_ids.contains(&RoomId(3)))
         .expect("lobby was placed");
-    let vault_group = layout
-        .groups
-        .iter()
-        .find(|g| g.room_ids.contains(&RoomId(4)))
-        .expect("vault was placed");
 
     assert!(
         layout
@@ -171,11 +167,12 @@ fn the_bank_is_one_building_with_one_doorway() {
         "the bank lobby is interior, not left outdoors"
     );
 
-    // Room 3 and room 4 share a directional edge (up/down), so BFS places
-    // them in the same component; the bank is one group, one cluster.
-    assert_eq!(
-        lobby_group.index, vault_group.index,
-        "up/down keeps the lobby and vault in one component"
+    assert!(
+        !layout
+            .groups
+            .iter()
+            .any(|g| g.room_ids.contains(&RoomId(4))),
+        "the vault behind the lobby was drawn"
     );
 
     assert_eq!(
@@ -205,8 +202,9 @@ fn a_one_way_exit_with_no_return_still_places() {
     );
 }
 
-/// The generated scene draws every room once, makes the bank a unit of
-/// its own, and gives it a name from its title's bracketed prefix.
+/// The generated scene draws every room but the hidden vault once, makes
+/// the bank a unit of its own, and gives it a name from its title's
+/// bracketed prefix.
 #[test]
 fn the_scene_draws_every_room_and_names_the_bank() {
     let map = town();
@@ -215,8 +213,8 @@ fn the_scene_draws_every_room_and_names_the_bank() {
 
     assert_eq!(
         scene.sheet.rooms.len(),
-        7,
-        "every room in the fixture is drawn exactly once"
+        6,
+        "every room in the fixture but the vault is drawn exactly once"
     );
 
     let lobby = scene.room(RoomId(3)).expect("the lobby is in the scene");

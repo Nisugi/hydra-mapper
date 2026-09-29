@@ -36,6 +36,7 @@
 
 pub mod classifier;
 pub mod direction;
+pub mod hidden;
 pub mod interior_shelf;
 pub mod outdoor_packing;
 pub mod overrides;

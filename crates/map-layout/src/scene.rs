@@ -758,9 +758,12 @@ mod tests {
     /// Birthing Sands; Teras had 42 doors that were routines.)
     #[test]
     fn a_teleport_is_neither_a_door_nor_a_wing() {
+        // With terrain, so a building with no door is still drawn rather
+        // than hidden (`hidden`).
         let indoor = |id: u32, exits: &[(u32, &str)]| {
             let mut r = room(id, i64::from(id), exits);
             r.paths = vec!["Obvious exits: out".to_owned()];
+            r.terrain = Some("hard, flat".to_owned());
             r
         };
         let mut rooms = vec![

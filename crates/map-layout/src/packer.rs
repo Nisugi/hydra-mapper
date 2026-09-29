@@ -322,8 +322,11 @@ struct Contact {
     room_id: RoomId,
 }
 
-/// Virtual edges between packed groups whose only link runs through an
-/// excluded (interior) component -- e.g. two shores of a ferry interior.
+/// Virtual edges between packed groups whose only link runs through
+/// excluded (interior or hidden) components -- e.g. two shores of a ferry
+/// interior. Excluded components joined to each other count as one: a
+/// street, a doorway, the rooms hidden behind it, another doorway and
+/// another street are two streets a building joins.
 pub(crate) fn add_bridged_edges(
     edges: &mut HashMap<usize, Vec<Edge>>,
     groups: &[Group],
@@ -336,6 +339,8 @@ pub(crate) fn add_bridged_edges(
             component_of_all.insert(id, group.index);
         }
     }
+
+    let mut joined = join_excluded(groups, packed_set, map, &component_of_all);
 
     // Excluded component -> packed-side contacts, in first-encounter order.
     let mut contact_order: Vec<usize> = Vec::new();
@@ -375,7 +380,7 @@ pub(crate) fn add_bridged_edges(
                 let target_packed = packed_set.contains(&target_group);
                 if group_packed && !target_packed {
                     add_contact(
-                        target_group,
+                        root(&mut joined, target_group),
                         group.index,
                         room_id,
                         &mut contact_order,
@@ -383,7 +388,7 @@ pub(crate) fn add_bridged_edges(
                     );
                 } else if !group_packed && target_packed {
                     add_contact(
-                        group.index,
+                        root(&mut joined, group.index),
                         target_group,
                         target_id,
                         &mut contact_order,
@@ -418,6 +423,54 @@ pub(crate) fn add_bridged_edges(
             }
         }
     }
+}
+
+/// Excluded components joined by a walk are one, for
+/// [`add_bridged_edges`]: each maps (through [`root`]) to the smallest
+/// index among them.
+fn join_excluded(
+    groups: &[Group],
+    packed_set: &HashSet<usize>,
+    map: &Map,
+    component_of_all: &HashMap<RoomId, usize>,
+) -> HashMap<usize, usize> {
+    let mut joined: HashMap<usize, usize> = HashMap::new();
+    for group in groups.iter().filter(|g| !packed_set.contains(&g.index)) {
+        for &room_id in &group.room_ids {
+            let Some(room) = map.room(room_id) else {
+                continue;
+            };
+            for exit in room.exits.iter().filter(|e| crate::regions::is_passage(e)) {
+                if let Some(&other) = component_of_all.get(&exit.to)
+                    && other != group.index
+                    && !packed_set.contains(&other)
+                {
+                    let a = root(&mut joined, group.index);
+                    let b = root(&mut joined, other);
+                    if a != b {
+                        joined.insert(a.max(b), a.min(b));
+                    }
+                }
+            }
+        }
+    }
+
+    joined
+}
+
+/// The component `g` is joined into, with path compression; a component
+/// joined to nothing is its own.
+fn root(joined: &mut HashMap<usize, usize>, mut g: usize) -> usize {
+    while let Some(&up) = joined.get(&g) {
+        if up == g {
+            break;
+        }
+        if let Some(&upper) = joined.get(&up) {
+            joined.insert(g, upper);
+        }
+        g = up;
+    }
+    g
 }
 
 /// The geographic base map is whatever image anchors the largest component.

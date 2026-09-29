@@ -11,7 +11,7 @@ use crate::classifier::Classification;
 use crate::overrides::EdgeOverride;
 use crate::packer::PackInfo;
 use crate::positioner::Group;
-use crate::{classifier, direction, interior_shelf, outdoor_packing, positioner, regions};
+use crate::{classifier, direction, hidden, interior_shelf, outdoor_packing, positioner, regions};
 
 /// A generated layout: every component with internal positions and sheet
 /// offsets, plus the interior/outdoor split and packing debug info.
@@ -114,6 +114,13 @@ fn generate_layout_impl(map: &Map, edges: &[EdgeOverride], params: LayoutParams)
     dirs.apply_edge_overrides(map, edges);
     let dirs = dirs;
 
+    // The rooms left off the sheet (`hidden`): laid out apart, seen by the
+    // packer so what they join is packed together, then dropped.
+    let whole = map;
+    let hidden = hidden::hidden_rooms(whole);
+    let (drawn, behind) = hidden::split(whole, &hidden);
+    let map = if hidden.is_empty() { whole } else { &drawn };
+
     let mut groups = positioner::position_rooms(map, &dirs);
     let classification = classifier::classify(&groups, map);
 
@@ -133,7 +140,15 @@ fn generate_layout_impl(map: &Map, edges: &[EdgeOverride], params: LayoutParams)
         interiors.clear();
     }
 
-    let pack_info = outdoor_packing::pack_groups(&mut groups, &outdoor, map, &dirs);
+    let shown = groups.len();
+    if !hidden.is_empty() {
+        for mut group in positioner::position_rooms(&behind, &dirs) {
+            group.index += shown;
+            groups.push(group);
+        }
+    }
+    let pack_info = outdoor_packing::pack_groups(&mut groups, &outdoor, whole, &dirs);
+    groups.truncate(shown);
     let clusters = classifier::interior_clusters(&groups, &classification.interior_groups, map);
 
     // After the outdoor pass, which is what gives the doorway rooms the
