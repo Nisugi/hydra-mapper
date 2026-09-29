@@ -184,6 +184,10 @@ pub struct SheetScene {
     pub rooms: Vec<SceneRoom>,
     pub edges: Vec<SceneEdge>,
     pub labels: Vec<GroupLabel>,
+    /// A dot beside a street room for each way into what is not drawn
+    /// (`doors`).
+    #[serde(default)]
+    pub doors: Vec<crate::doors::SceneDoor>,
     pub min: Cell,
     pub max: Cell,
 }
@@ -323,6 +327,7 @@ pub fn build_scene(location: &str, layout: &Layout, map: &Map) -> MapScene {
     populate_rooms(&mut scene, layout, map, &unit_of_group);
     populate_edges(&mut scene, layout, map, &dirs, &unit_of_group);
     crate::routing::route_edges(&mut scene.sheet);
+    crate::doors::place(&mut scene.sheet, &layout.ways_in);
     populate_labels(&mut scene, layout, &unit_of_group);
     compute_sheet_bounds(&mut scene);
 
@@ -553,10 +558,13 @@ fn populate_edges(
                 };
                 // A link to a group cut to its own sheet (`cut`), or one
                 // absurdly long, is a mark at both ends: a link is never
-                // lost, only drawn short.
-                if layout.cut.contains(&room_group) != layout.cut.contains(&target_group)
-                    || len > CONNECTOR_MAX_CELLS * layout.town_scale
-                {
+                // lost, only drawn short. Cut is judged where the rooms
+                // are drawn, a hand's move included: a cut group put back
+                // beside its link gets its line back.
+                let cut_off = layout.cut.contains(&room_group)
+                    != layout.cut.contains(&target_group)
+                    && len > crate::cut::STEPS * scene.scale_of(room_group);
+                if cut_off || len > CONNECTOR_MAX_CELLS * layout.town_scale {
                     (SceneEdgeKind::Stub, connector_label(cmd))
                 } else {
                     (SceneEdgeKind::Connector, connector_label(cmd))

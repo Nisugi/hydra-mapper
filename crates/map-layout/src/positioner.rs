@@ -264,7 +264,12 @@ fn directional_bfs(
         let Some(room) = map.room(room_id) else {
             continue;
         };
-        for exit in &room.exits {
+        // Up and down last: they only borrow a cell, and a room put on it
+        // first is pushed on by the grid rip when the compass exit that
+        // truly points there comes after (`free_side`).
+        let mut exits: Vec<&cena_map::Exit> = room.exits.iter().collect();
+        exits.sort_by_key(|e| dirs.get(room_id, e.to).is_some_and(|d| !d.is_compass()));
+        for exit in exits {
             let target_id = exit.to;
             if map.room(target_id).is_none() || !unpositioned.contains(&target_id) {
                 continue;
@@ -306,6 +311,12 @@ fn directional_bfs(
                 y: pos.y + dy,
             };
 
+            if !direction.is_compass()
+                && occupied.contains(&target)
+                && let Some(free) = free_side(pos, (dx, dy), occupied)
+            {
+                target = free;
+            }
             if occupied.contains(&target) {
                 // Grid rip: shift a half-plane one cell so the occupant
                 // slides off the target cell and the stated direction
@@ -339,6 +350,31 @@ fn directional_bfs(
             unpositioned,
         );
     }
+}
+
+/// For up or down, which only borrow north's and south's cells, a free
+/// cell beside `pos` when the borrowed one is taken: its own side's
+/// diagonals first, then east or west, then the far side. Ripping the grid
+/// instead put the Long Snow's Encampment a second step north, past the
+/// room already there, its line drawn back over that room's (the author,
+/// 2026-09-29: *"Why does the long snow go the wrong way and cross over
+/// it's own edge?"*).
+fn free_side(pos: Cell, (_, dy): (i32, i32), occupied: &HashSet<Cell>) -> Option<Cell> {
+    [
+        (1, dy),
+        (-1, dy),
+        (1, 0),
+        (-1, 0),
+        (1, -dy),
+        (-1, -dy),
+        (0, -dy),
+    ]
+    .into_iter()
+    .map(|(x, y)| Cell {
+        x: pos.x + x,
+        y: pos.y + y,
+    })
+    .find(|c| !occupied.contains(c))
 }
 
 /// The rooms with an arrow into `room_id` and none back, placed opposite

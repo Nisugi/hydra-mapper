@@ -20,9 +20,10 @@
 //! 48, building rooms under a line not theirs 291 -> 32, directionless
 //! lines crossing another 1,876 -> 674 (18% of them -> 12%).
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use cena_map::{Map, Room, RoomId};
+use serde::{Deserialize, Serialize};
 
 use crate::classifier::{Sense, room_sense};
 use crate::regions::is_passage;
@@ -67,6 +68,116 @@ pub fn entrances(map: &Map, hidden: &HashSet<RoomId>) -> HashSet<RoomId> {
         .collect()
 }
 
+/// One way into a hidden place: the street room it is entered from, the
+/// hidden room a walk leads to, and the place behind it -- the hidden
+/// rooms joined to that one, their count and their commonest name. Drawn
+/// as a dot beside the street (the author, 2026-09-29: *"their room that
+/// leads to an outside room, shows up on the map as a dot"*), named when
+/// the place is big.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WayIn {
+    pub street: RoomId,
+    pub inside: RoomId,
+    /// The place's name: the part of its rooms' titles before the comma
+    /// that most of them share (`Angargreft`).
+    pub place: String,
+    /// How many hidden rooms the place holds.
+    pub rooms: usize,
+}
+
+/// Every way into what is hidden, one per street room and place behind it.
+#[must_use]
+pub fn ways_in(map: &Map, hidden: &HashSet<RoomId>) -> Vec<WayIn> {
+    let (place_of, places) = places(map, hidden);
+    let mut out: Vec<WayIn> = Vec::new();
+    for room in map.rooms().iter().filter(|r| !hidden.contains(&r.id)) {
+        let mut doors: Vec<RoomId> = room
+            .exits
+            .iter()
+            .filter(|e| is_passage(e) && hidden.contains(&e.to))
+            .map(|e| e.to)
+            .collect();
+        doors.sort_unstable();
+        let mut seen: HashSet<usize> = HashSet::new();
+        for inside in doors {
+            let Some(&p) = place_of.get(&inside) else {
+                continue;
+            };
+            if seen.insert(p) {
+                out.push(WayIn {
+                    street: room.id,
+                    inside,
+                    place: place_name(map, &places[p]),
+                    rooms: places[p].len(),
+                });
+            }
+        }
+    }
+    out
+}
+
+/// The hidden places: hidden rooms joined by walks, either way round. Each
+/// room's place, and each place's rooms.
+fn places(map: &Map, hidden: &HashSet<RoomId>) -> (HashMap<RoomId, usize>, Vec<Vec<RoomId>>) {
+    let mut next: HashMap<RoomId, Vec<RoomId>> = HashMap::new();
+    for room in map.rooms().iter().filter(|r| hidden.contains(&r.id)) {
+        for exit in room
+            .exits
+            .iter()
+            .filter(|e| is_passage(e) && hidden.contains(&e.to))
+        {
+            next.entry(room.id).or_default().push(exit.to);
+            next.entry(exit.to).or_default().push(room.id);
+        }
+    }
+    let mut place_of: HashMap<RoomId, usize> = HashMap::new();
+    let mut places: Vec<Vec<RoomId>> = Vec::new();
+    let mut ids: Vec<RoomId> = hidden.iter().copied().collect();
+    ids.sort_unstable();
+    for start in ids {
+        if place_of.contains_key(&start) {
+            continue;
+        }
+        place_of.insert(start, places.len());
+        let mut place = vec![start];
+        let mut i = 0;
+        while i < place.len() {
+            for &n in next.get(&place[i]).into_iter().flatten() {
+                if let std::collections::hash_map::Entry::Vacant(slot) = place_of.entry(n) {
+                    slot.insert(places.len());
+                    place.push(n);
+                }
+            }
+            i += 1;
+        }
+        places.push(place);
+    }
+    (place_of, places)
+}
+
+/// The part before the comma that most of `rooms`' titles share.
+fn place_name(map: &Map, rooms: &[RoomId]) -> String {
+    let mut votes: HashMap<&str, usize> = HashMap::new();
+    for title in rooms
+        .iter()
+        .filter_map(|&id| map.room(id))
+        .filter_map(|r| r.title.first())
+    {
+        let name = title
+            .trim_start_matches('[')
+            .split([',', ']'])
+            .next()
+            .unwrap_or("")
+            .trim();
+        *votes.entry(name).or_default() += 1;
+    }
+    votes
+        .into_iter()
+        .max_by(|a, b| a.1.cmp(&b.1).then_with(|| b.0.cmp(a.0)))
+        .map(|(n, _)| n.to_owned())
+        .unwrap_or_default()
+}
+
 /// Hide with them the rooms reached only through hidden ones: a cluster of
 /// drawn rooms, not the area's biggest and not on Lich's picture, every
 /// walk into or out of which is a hidden room's. Hinterwilds' Chthonian
@@ -80,7 +191,7 @@ fn reached_only_through(map: &Map, hidden: &mut HashSet<RoomId>) {
         .filter(|id| !hidden.contains(id))
         .collect();
     // Walks between drawn rooms, either way round.
-    let mut next: std::collections::HashMap<RoomId, Vec<RoomId>> = std::collections::HashMap::new();
+    let mut next: HashMap<RoomId, Vec<RoomId>> = HashMap::new();
     for room in map.rooms() {
         for exit in room.exits.iter().filter(|e| is_passage(e)) {
             next.entry(room.id).or_default().push(exit.to);

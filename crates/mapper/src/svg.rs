@@ -136,6 +136,7 @@ pub fn sheet(
     let _ = writeln!(svg, "</g>");
 
     write_rooms(&mut svg, scene, &in_focus, streets, doors, &px, &py);
+    write_ways_in(&mut svg, scene, &|id| in_focus(id) || streets.contains(&id));
 
     // Labels name what is in focus: a building's label draws when the
     // building does. A label's unit is looked up by whether its group's
@@ -222,6 +223,40 @@ fn write_rooms(
             stroke = stroke,
             tip = escape(&format!("{} — {}", room.id.0, room.title)),
         );
+    }
+    let _ = writeln!(svg, "</g>");
+}
+
+/// A dot beside a street room for each way into a place not drawn, the
+/// big ones named.
+#[allow(clippy::cast_precision_loss)]
+fn write_ways_in(svg: &mut String, scene: &SheetScene, shown: &dyn Fn(RoomId) -> bool) {
+    let px = |x: f32| MARGIN + (x - scene.min.x as f32) * CELL_PX + CELL_PX / 2.0;
+    let py = |y: f32| MARGIN + (y - scene.min.y as f32) * CELL_PX + CELL_PX / 2.0;
+    let _ = writeln!(
+        svg,
+        r#"<g fill="{ENTRANCE_STROKE}" font-family="sans-serif" font-size="13">"#
+    );
+    for door in scene.doors.iter().filter(|d| shown(d.street)) {
+        let (x, y) = (px(door.at.x), py(door.at.y));
+        let r = if door.named() { 9.0 } else { 5.0 };
+        let _ = writeln!(
+            svg,
+            r#"<circle cx="{x:.1}" cy="{y:.1}" r="{r}"><title>{}</title></circle>"#,
+            escape(&format!(
+                "{} ({} rooms) from {}",
+                door.place, door.rooms, door.street.0
+            )),
+        );
+        if door.named() {
+            let _ = writeln!(
+                svg,
+                r#"<text x="{:.1}" y="{:.1}">{}</text>"#,
+                x + r + 3.0,
+                y + 4.0,
+                escape(&door.place),
+            );
+        }
     }
     let _ = writeln!(svg, "</g>");
 }

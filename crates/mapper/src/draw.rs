@@ -223,6 +223,7 @@ pub fn scene(
     draw_rooms(
         &painter, sheet, focus, interiors, *camera, canvas, selected, picked, hovered,
     );
+    draw_ways_in(&painter, sheet, focus, interiors, *camera, canvas, labels);
     if labels && camera.scale >= LABEL_MIN_SCALE {
         draw_labels(&painter, scene, focus, *camera, canvas);
     }
@@ -470,6 +471,40 @@ fn draw_rooms(
                 2.0,
                 Stroke::new(1.0, SELECTED_STROKE),
                 StrokeKind::Outside,
+            );
+        }
+    }
+}
+
+/// A dot beside a street room for each way into a place not drawn
+/// (`doors`), the big ones named.
+fn draw_ways_in(
+    painter: &egui::Painter,
+    sheet: &SheetScene,
+    focus: &Focus<'_>,
+    interiors: bool,
+    camera: Camera,
+    canvas: Rect,
+    labels: bool,
+) {
+    for door in sheet
+        .doors
+        .iter()
+        .filter(|d| focus.shows(d.street, interiors))
+    {
+        let at = camera.point_to_screen(door.at.x, door.at.y, canvas);
+        if !canvas.contains(at) {
+            continue;
+        }
+        let r = (ROOM_PX * camera.scale * if door.named() { 0.45 } else { 0.28 }).max(2.5);
+        painter.circle_filled(at, r, ENTRANCE_STROKE);
+        if door.named() && labels {
+            painter.text(
+                at + Vec2::new(r + 3.0, 0.0),
+                Align2::LEFT_CENTER,
+                &door.place,
+                FontId::proportional(12.0_f32.max(12.0 * camera.scale)),
+                ENTRANCE_STROKE,
             );
         }
     }

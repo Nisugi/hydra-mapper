@@ -30,10 +30,15 @@ use crate::scene::{Point, SceneEdgeKind, SceneRoom, SheetScene};
 pub const CLEARANCE: f32 = 0.4;
 
 /// Every full line on the sheet that crosses a room it does not connect,
-/// rerouted around it where a bend can clear. Stubs are left alone: they
-/// are drawn as ticks at their ends, not as lines.
+/// rerouted around it where a bend can clear, or, for a line with no
+/// direction, the route-finder's way round with as many turns as it takes
+/// (a group put down beside its link is put there on that way:
+/// `stretch::beside`). Stubs are left alone: they are drawn as ticks at
+/// their ends, not as lines.
 pub fn route_edges(sheet: &mut SheetScene) {
     let rooms = Obstacles::of(&sheet.rooms);
+    let room_cells: HashSet<(i32, i32)> =
+        sheet.rooms.iter().map(|r| (r.cell.x, r.cell.y)).collect();
     for edge in &mut sheet.edges {
         if edge.kind == SceneEdgeKind::Stub {
             continue;
@@ -45,6 +50,10 @@ pub fn route_edges(sheet: &mut SheetScene) {
             continue;
         }
         if let Some(via) = best_detour(a, b, &blockers, &rooms, &ends) {
+            edge.via = via;
+        } else if edge.kind == SceneEdgeKind::Connector
+            && let Some(via) = crate::route_finder::find(edge.a, edge.b, &room_cells, |_| false)
+        {
             edge.via = via;
         }
     }
@@ -210,7 +219,7 @@ fn better_route(
 }
 
 /// A drawn edge as the polyline it is drawn along.
-fn path_of(edge: &crate::scene::SceneEdge) -> Vec<Point> {
+pub(crate) fn path_of(edge: &crate::scene::SceneEdge) -> Vec<Point> {
     let mut path = vec![point(edge.a)];
     path.extend(edge.via.iter().copied());
     path.push(point(edge.b));

@@ -59,20 +59,7 @@ pub(crate) fn shrink(
             if idx == biggest {
                 continue;
             }
-            let anchors: Vec<AnchorLine> = edges
-                .get(&idx)
-                .map(|l| {
-                    l.iter()
-                        .filter(|e| groups[e.other_group].base_offset.is_some())
-                        .map(|e| AnchorLine {
-                            internal: groups[idx].positions[&e.room_id],
-                            target: groups[e.other_group].final_cell(e.other_room_id),
-                            room_id: e.room_id,
-                            other_room_id: e.other_room_id,
-                        })
-                        .collect()
-                })
-                .unwrap_or_default();
+            let anchors = anchors_of(groups, idx, edges);
             if anchors.is_empty() {
                 continue;
             }
@@ -124,9 +111,142 @@ pub(crate) fn shrink(
     }
 }
 
+/// Group `idx`'s links to placed groups, as lines from its own rooms.
+pub(crate) fn anchors_of(
+    groups: &[Group],
+    idx: usize,
+    edges: &HashMap<usize, Vec<Edge>>,
+) -> Vec<AnchorLine> {
+    edges
+        .get(&idx)
+        .map(|l| {
+            l.iter()
+                .filter(|e| groups[e.other_group].base_offset.is_some())
+                .map(|e| AnchorLine {
+                    internal: groups[idx].positions[&e.room_id],
+                    target: groups[e.other_group].final_cell(e.other_room_id),
+                    room_id: e.room_id,
+                    other_room_id: e.other_room_id,
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Group `idx` put down beside its links, if it can be: the spot, of those
+/// where one of its links runs no more than `steps`, where it is clear as
+/// [`find_clear_offset`] would have it, but for its links, which may bend
+/// round what is in their way ([`routed`]), as the scene's route-finder
+/// will draw them. Of those, the one whose links are shortest in total.
+pub(crate) fn beside(
+    group: &Group,
+    anchor_lines: &[AnchorLine],
+    occupied: &HashSet<Cell>,
+    placed_segments: &[Segment],
+    dirs: &DirectionMap,
+    steps: i32,
+) -> Option<Cell> {
+    let placed = Placed {
+        occupied,
+        segments: placed_segments,
+        dirs,
+    };
+    let cells: Vec<Cell> = group.positions.values().copied().collect();
+    let bounds = group.bounds();
+    let mut spots: Vec<Cell> = Vec::new();
+    for a in anchor_lines {
+        for dx in -steps..=steps {
+            for dy in -steps..=steps {
+                spots.push(Cell {
+                    x: a.target.x - a.internal.x + dx,
+                    y: a.target.y - a.internal.y + dy,
+                });
+            }
+        }
+    }
+    spots.sort_unstable_by_key(|c| (c.x, c.y));
+    spots.dedup();
+    let mut best: Option<(i64, Cell)> = None;
+    for at in spots {
+        let length: i64 = anchor_lines
+            .iter()
+            .map(|a| i64::from(chebyshev(shift(a.internal, at), a.target)))
+            .sum();
+        if best.is_some_and(|(shortest, _)| length >= shortest) {
+            continue;
+        }
+        if rooms_clear(&cells, bounds, at, &placed)
+            && anchor_lines.iter().all(|a| {
+                let end = shift(a.internal, at);
+                pointing(a, end, &placed)
+                    && (straight_clear(a, end, &cells, at, &placed)
+                        || routed(a, end, &cells, at, &placed))
+            })
+        {
+            best = Some((length, at));
+        }
+    }
+    best.map(|(_, at)| at)
+}
+
+/// Whether link `a`, from `end`, can bend round what is in its way: the
+/// route-finder's way (`route_finder`), across no line and past no room.
+fn routed(a: &AnchorLine, end: Cell, own: &[Cell], at: Cell, placed: &Placed<'_>) -> bool {
+    // Rooms, and the cells lines run through: a route stepping onto a line
+    // at one of its cells touches it rather than crossing it, and slipped
+    // through a ring's wall that way.
+    let mut rooms: HashSet<(i32, i32)> = placed
+        .occupied
+        .iter()
+        .map(|c| (c.x, c.y))
+        .chain(own.iter().map(|&c| {
+            let s = shift(c, at);
+            (s.x, s.y)
+        }))
+        .collect();
+    for seg in placed
+        .segments
+        .iter()
+        .filter(|s| ![s.ra, s.rb].contains(&a.room_id) && ![s.ra, s.rb].contains(&a.other_room_id))
+    {
+        let (dx, dy) = (seg.b.x - seg.a.x, seg.b.y - seg.a.y);
+        let steps = gcd(dx.abs(), dy.abs()).max(1);
+        for k in 0..=steps {
+            rooms.insert((seg.a.x + dx / steps * k, seg.a.y + dy / steps * k));
+        }
+    }
+    let Some(bends) = crate::route_finder::find(end, a.target, &rooms, |_| false) else {
+        return false;
+    };
+    let mut path: Vec<Cell> = vec![end];
+    #[allow(clippy::cast_possible_truncation)]
+    path.extend(bends.iter().map(|p| Cell {
+        x: p.x.round() as i32,
+        y: p.y.round() as i32,
+    }));
+    path.push(a.target);
+    path.windows(2).all(|w| {
+        !placed.segments.iter().any(|seg| {
+            ![seg.ra, seg.rb].contains(&a.room_id)
+                && ![seg.ra, seg.rb].contains(&a.other_room_id)
+                && crosses(w[0], w[1], seg.a, seg.b)
+        })
+    })
+}
+
+/// The greatest common divisor of two non-negative numbers.
+const fn gcd(a: i32, b: i32) -> i32 {
+    if b == 0 { a } else { gcd(b, a % b) }
+}
+
 /// A placed group's own lines and its links, as segments for what comes
 /// after to steer clear of.
-fn lines_of(group: &Group, anchors: &[AnchorLine], map: &Map, segments: &mut Vec<Segment>) {
+pub(crate) fn lines_of(
+    group: &Group,
+    anchors: &[AnchorLine],
+    map: &Map,
+    segments: &mut Vec<Segment>,
+) {
     let mut seen: HashSet<(RoomId, RoomId)> = HashSet::new();
     for &room_id in &group.room_ids {
         let Some(room) = map.room(room_id) else {
@@ -216,6 +336,16 @@ fn clear(
     anchor_lines: &[AnchorLine],
     placed: &Placed<'_>,
 ) -> bool {
+    rooms_clear(cells, bounds, at, placed)
+        && anchor_lines.iter().all(|a| {
+            let end = shift(a.internal, at);
+            pointing(a, end, placed) && straight_clear(a, end, cells, at, placed)
+        })
+}
+
+/// Whether the group's rooms, moved by `at`, are on free cells, with no
+/// room and no line of anyone else's inside the box around them.
+fn rooms_clear(cells: &[Cell], bounds: Bounds, at: Cell, placed: &Placed<'_>) -> bool {
     if cells
         .iter()
         .any(|&c| placed.occupied.contains(&shift(c, at)))
@@ -248,31 +378,56 @@ fn clear(
         {
             return false;
         }
-    }
-    // Its connector lines: across no placed line, past no room, and one
-    // with a compass direction pointing its way.
-    for anchor in anchor_lines {
-        let end = shift(anchor.internal, at);
-        if let Some(dir) = placed.dirs.get(anchor.room_id, anchor.other_room_id)
-            && dir.is_compass()
+        // Nor a line through one of its rooms: a line along the box's edge,
+        // or through a one-room box, crosses no side of it. The Atoll's
+        // Rapids, four groups of one room each, were put down on the beach's
+        // lines.
+        let (lo_x, hi_x) = (seg.a.x.min(seg.b.x), seg.a.x.max(seg.b.x));
+        let (lo_y, hi_y) = (seg.a.y.min(seg.b.y), seg.a.y.max(seg.b.y));
+        if lo_x <= max_x
+            && hi_x >= min_x
+            && lo_y <= max_y
+            && hi_y >= min_y
+            && cells.iter().any(|&c| {
+                distance_to_segment(shift(c, at), seg.a, seg.b) < crate::routing::CLEARANCE
+            })
         {
-            let (ex, ey) = dir.offset();
-            if (anchor.target.x - end.x).signum() != ex.signum()
-                || (anchor.target.y - end.y).signum() != ey.signum()
-            {
-                return false;
-            }
-        }
-        let crossing = placed.segments.iter().any(|seg| {
-            ![seg.ra, seg.rb].contains(&anchor.room_id)
-                && ![seg.ra, seg.rb].contains(&anchor.other_room_id)
-                && crosses(end, anchor.target, seg.a, seg.b)
-        });
-        if crossing || passes_a_room(end, anchor.target, placed.occupied, cells, at) {
             return false;
         }
     }
     true
+}
+
+/// Whether a link with a compass direction still points its way from
+/// `end` (one with none always does).
+fn pointing(anchor: &AnchorLine, end: Cell, placed: &Placed<'_>) -> bool {
+    let Some(dir) = placed
+        .dirs
+        .get(anchor.room_id, anchor.other_room_id)
+        .filter(|d| d.is_compass())
+    else {
+        return true;
+    };
+    let (ex, ey) = dir.offset();
+    (anchor.target.x - end.x).signum() == ex.signum()
+        && (anchor.target.y - end.y).signum() == ey.signum()
+}
+
+/// Whether a link drawn straight from `end` crosses no placed line and
+/// passes no room.
+fn straight_clear(
+    anchor: &AnchorLine,
+    end: Cell,
+    own: &[Cell],
+    at: Cell,
+    placed: &Placed<'_>,
+) -> bool {
+    let crossing = placed.segments.iter().any(|seg| {
+        ![seg.ra, seg.rb].contains(&anchor.room_id)
+            && ![seg.ra, seg.rb].contains(&anchor.other_room_id)
+            && crosses(end, anchor.target, seg.a, seg.b)
+    });
+    !crossing && !passes_a_room(end, anchor.target, placed.occupied, own, at)
 }
 
 /// Whether the straight line `a`-`b` passes within routing's clearance of

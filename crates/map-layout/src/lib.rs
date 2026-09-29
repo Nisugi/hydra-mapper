@@ -37,7 +37,9 @@
 pub mod classifier;
 mod cut;
 pub mod direction;
+pub mod doors;
 pub mod hidden;
+mod hole;
 pub mod interior_shelf;
 pub mod outdoor_packing;
 pub mod overrides;

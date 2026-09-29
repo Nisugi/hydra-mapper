@@ -37,6 +37,10 @@ pub struct Layout {
     /// drawn as marks.
     #[serde(default)]
     pub cut: Vec<usize>,
+    /// The ways into what is left off the sheet (`hidden`), each drawn as
+    /// a dot beside its street room.
+    #[serde(default)]
+    pub ways_in: Vec<hidden::WayIn>,
 }
 
 /// The knobs a layout is built with.
@@ -155,10 +159,13 @@ fn generate_layout_impl(map: &Map, edges: &[EdgeOverride], params: LayoutParams)
             groups.push(group);
         }
     }
+    // A ring too tight for what hangs inside it is spread out (`hole`).
+    crate::hole::make_room(&mut groups, &outdoor, whole, &dirs);
     let mut pack_info = outdoor_packing::pack_groups(&mut groups, &outdoor, whole, &dirs);
     // The islands go to their own sheet (`cut`), and the rest is packed
     // again without them.
     let mut cut: Vec<usize> = Vec::new();
+    crate::cut::pull_in(&mut groups, &outdoor, whole, &dirs, crate::cut::STEPS);
     let islands = crate::cut::islands(&groups, &outdoor, whole, &dirs, crate::cut::STEPS);
     if !islands.is_empty() {
         for group in &mut groups {
@@ -208,5 +215,6 @@ fn generate_layout_impl(map: &Map, edges: &[EdgeOverride], params: LayoutParams)
         edges: edges.to_vec(),
         town_scale,
         cut,
+        ways_in: hidden::ways_in(whole, &hidden),
     }
 }
