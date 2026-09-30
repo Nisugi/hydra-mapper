@@ -6,12 +6,15 @@
 //! ([`MapOverrides::area_maps`]), baked into `gs.map` as `meta:hydramap:` by
 //! `retag`, and read back by [`cena_map_layout::areas::baked`].
 //!
-//! No field in the data says which areas make one map. The region spans
-//! caravans (Icemule Trace holds the Hinterwilds and Icemule itself), and
-//! `location` is noise across areas: 89 of 318 locations in
-//! `gs.overrides.areas.tsv` span more than one. So maps are chosen by a
-//! person, and [`suggest`] offers the candidates: areas a walk joins whose
-//! rooms mostly name the same location.
+//! No field alone says which areas make one map. The region spans caravans
+//! (Icemule Trace holds the Hinterwilds and Icemule itself), and `location`
+//! is noise across the whole map: 89 of 318 locations in
+//! `gs.overrides.areas.tsv` span more than one area. But areas a walk joins
+//! whose rooms mostly name the same location are one place, as Cold River
+//! and the Hinterwilds are: [`automatic`] puts them on one map unless a
+//! person said otherwise (the author, 2026-09-29: *"Perhaps we should use
+//! location for that?"*). Quests and events (`special-*`) are never put
+//! on one (*"the quests and events are on their own"*).
 
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write as _;
@@ -21,13 +24,40 @@ use cena_map::{Map, RoomId};
 use crate::areas::{Area, AreaKind};
 use crate::overrides::{Baseline, MapOverrides, RoomKey};
 
+/// The map each area is on: the one a person chose (on no map, if so),
+/// else the one `gs.map` carries, else the one [`automatic`] finds.
+pub fn chosen<'a>(
+    store: &'a MapOverrides,
+    baseline: &'a Baseline,
+    auto: &'a BTreeMap<String, String>,
+    area: &str,
+) -> Option<&'a str> {
+    if store.area_maps.contains_key(area) || baseline.area_map.contains_key(area) {
+        return store.map_of_area(area, baseline);
+    }
+    auto.get(area).map(String::as_str)
+}
+
+/// The areas [`suggest`] puts on one map, each with the map's name: every
+/// suggestion, taken.
+pub fn automatic(map: &Map, store: &MapOverrides, baseline: &Baseline) -> BTreeMap<String, String> {
+    suggest(map, store, baseline)
+        .into_iter()
+        .flat_map(|s| {
+            let name = s.name;
+            s.areas.into_iter().map(move |area| (area, name.clone()))
+        })
+        .collect()
+}
+
 /// Every map with rooms on it, by name: the rooms of all its areas.
 pub fn map_areas(map: &Map, store: &MapOverrides, baseline: &Baseline) -> Vec<Area> {
+    let auto = automatic(map, store, baseline);
     let mut by_map: BTreeMap<&str, Vec<RoomId>> = BTreeMap::new();
     for room in map.rooms() {
         let on = store
             .area_of(RoomKey::of(room.id, map), baseline)
-            .and_then(|area| store.map_of_area(area, baseline));
+            .and_then(|area| chosen(store, baseline, &auto, area));
         if let Some(on) = on {
             by_map.entry(on).or_default().push(room.id);
         }
@@ -51,15 +81,20 @@ pub struct Suggestion {
     pub areas: Vec<String>,
 }
 
-/// Areas on no map yet that a walk joins and whose rooms mostly name one
-/// location, each group offered under that location's name. Cold River
-/// and the Hinterwilds are the case it was made for: two official areas,
-/// every room of both saying *the Hinterwilds*, joined at the Long Snow.
+/// Areas no person put on a map or off one, and not a quest's or an
+/// event's (`special-*`), that a walk joins and whose rooms mostly name one
+/// location, each group under that location's name. Cold River and the
+/// Hinterwilds are the case it was made for: two official areas, every room
+/// of both saying *the Hinterwilds*, joined at the Long Snow.
 pub fn suggest(map: &Map, store: &MapOverrides, baseline: &Baseline) -> Vec<Suggestion> {
     let area_of = |id: RoomId| {
         store
             .area_of(RoomKey::of(id, map), baseline)
-            .filter(|area| store.map_of_area(area, baseline).is_none())
+            .filter(|area| {
+                !store.area_maps.contains_key(*area)
+                    && !baseline.area_map.contains_key(*area)
+                    && !store.area_title(area, baseline).starts_with("special-")
+            })
     };
     // Each area's commonest location.
     let mut votes: HashMap<&str, HashMap<&str, usize>> = HashMap::new();
@@ -272,6 +307,42 @@ mod tests {
         assert_eq!(maps[0].name, "the-hinterwilds");
         assert_eq!(maps[0].rooms, vec![RoomId(1), RoomId(2)]);
         assert!(suggest(&map, &store, &baseline).is_empty());
+    }
+
+    /// Areas a walk joins under one location are on one map without being
+    /// accepted; a quest's area is never on one, and an area a person took
+    /// off a map stays off.
+    #[test]
+    fn location_makes_the_maps_but_not_for_quests_or_against_a_person() {
+        let map = Map::from_rooms(vec![
+            room(1, "cold-river", "the Hinterwilds", &[2]),
+            room(2, "hinterwilds", "the Hinterwilds", &[1, 3]),
+            room(3, "special-long-snow", "the Hinterwilds", &[2]),
+        ])
+        .expect("unique ids");
+        let baseline = Baseline::of(&map);
+        let mut store = MapOverrides::default();
+        let auto = automatic(&map, &store, &baseline);
+        assert_eq!(
+            chosen(&store, &baseline, &auto, "cold.river"),
+            Some("the-hinterwilds")
+        );
+        assert_eq!(
+            chosen(&store, &baseline, &auto, "hinterwilds"),
+            Some("the-hinterwilds")
+        );
+        assert_eq!(
+            chosen(&store, &baseline, &auto, "special.long.snow"),
+            None,
+            "a quest's own"
+        );
+        store.set_area_map("cold.river", None);
+        let auto = automatic(&map, &store, &baseline);
+        assert_eq!(
+            chosen(&store, &baseline, &auto, "cold.river"),
+            None,
+            "taken off stays off"
+        );
     }
 
     /// Simutronics' own `mapname:`, on 228 rooms of gs.map, is not a map

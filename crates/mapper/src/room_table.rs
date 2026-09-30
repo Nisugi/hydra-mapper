@@ -140,12 +140,13 @@ pub fn assignments_toml(map: &Map, store: &MapOverrides, baseline: &Baseline) ->
             by_area.entry(area).or_default().push(key);
         }
     }
+    let auto = crate::maps::automatic(map, store, baseline);
     for (area, keys) in &mut by_area {
         let (uids, ids) = split(keys);
         let _ = writeln!(out, "[[area]]");
         let _ = writeln!(out, "key = {area:?}");
         let _ = writeln!(out, "name = {:?}", store.area_title(area, baseline));
-        if let Some(on) = store.map_of_area(area, baseline) {
+        if let Some(on) = crate::maps::chosen(store, baseline, &auto, area) {
             let _ = writeln!(out, "map = {on:?}");
         }
         let _ = writeln!(out, "# {} rooms", keys.len());

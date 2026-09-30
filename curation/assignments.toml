@@ -17,6 +17,7 @@ uids = [
 [[area]]
 key = "aradhul.road"
 name = "Aradhul Road"
+map = "aradhul-road"
 # 12 rooms
 uids = [
   17005012, 17005013, 17005014, 17005015, 17005016, 17005017, 17005018, 17005019, 17005020, 17005021, 17005022, 17005023,
@@ -25,6 +26,7 @@ uids = [
 [[area]]
 key = "aradhul.road.transport.routes"
 name = "Aradhul Road (Transport routes)"
+map = "aradhul-road"
 # 18 rooms
 uids = [
   17005003, 17005004, 17005005, 17005006, 17005007, 17005008, 17005009, 17005010, 17005027, 17005028, 17005029, 17005030,
@@ -240,6 +242,7 @@ ids = [
 [[area]]
 key = "elven.nations.old.tafaendryl"
 name = "elven-nations-old-tafaendryl"
+map = "old-tafaendryl"
 # 142 rooms
 uids = [
   13032050, 17000001, 17000002, 17000003, 17000004, 17000005, 17000006, 17000007, 17000008, 17000009, 17000018, 17000019,
@@ -259,6 +262,7 @@ uids = [
 [[area]]
 key = "elven.nations.old.tafaendryl.east.woods"
 name = "elven-nations-old-tafaendryl-east-woods"
+map = "old-tafaendryl"
 # 48 rooms
 uids = [
   17002201, 17002202, 17002203, 17002204, 17002205, 17002206, 17002207, 17002208, 17002209, 17002210, 17002211, 17002212,
@@ -270,6 +274,7 @@ uids = [
 [[area]]
 key = "elven.nations.old.tafaendryl.west"
 name = "elven-nations-old-tafaendryl-west"
+map = "old-tafaendryl"
 # 168 rooms
 uids = [
   17001201, 17001202, 17001203, 17002301, 17002302, 17002303, 17002304, 17002305, 17002306, 17002307, 17002308, 17002309,
@@ -311,6 +316,7 @@ uids = [
 [[area]]
 key = "elven.nations.sapphire.gate.and.whistlers.pass.north"
 name = "elven-nations-sapphire-gate-and-whistlers-pass-north"
+map = "whistlers-pass"
 # 166 rooms
 uids = [
   142006, 710001, 710002, 710003, 710004, 710005, 710006, 710007, 710008, 710009, 710010, 710011,
@@ -382,6 +388,7 @@ uids = [
 [[area]]
 key = "elven.nations.sylvarraend.road"
 name = "elven-nations-sylvarraend-road"
+map = "taillistim"
 # 382 rooms
 uids = [
   158101, 158102, 158103, 275001, 275002, 275003, 275004, 275005, 275006, 275007, 275008, 275009,
@@ -423,6 +430,7 @@ ids = [
 [[area]]
 key = "elven.nations.sylvarraend.town"
 name = "elven-nations-sylvarraend-town"
+map = "taillistim"
 # 59 rooms
 uids = [
   566001, 566002, 566003, 2022176, 2022177, 2022178, 2022179, 2022180, 2022181, 13050001, 13050002, 13050003,
@@ -598,6 +606,7 @@ uids = [
 [[area]]
 key = "elven.nations.whistlers.pass"
 name = "elven-nations-whistlers-pass"
+map = "whistlers-pass"
 # 196 rooms
 uids = [
   2006601, 2006602, 2006603, 2006604, 2006605, 13015003, 13015004, 13015005, 13015006, 13015007, 13015008, 13015009,
@@ -702,6 +711,7 @@ uids = [
 [[area]]
 key = "hollowlair"
 name = "Hollowlair"
+map = "naidem"
 # 26 rooms
 uids = [
   8088051, 8088052, 8088053, 8088054, 8088055, 8088056, 8088057, 8088058, 8088059, 8088061, 8088063, 8088064,
@@ -715,6 +725,7 @@ ids = [
 [[area]]
 key = "house.of.paupers"
 name = "House of Paupers"
+map = "wehnimers-landing"
 # 11 rooms
 uids = [
   104001, 104002, 104003, 104403, 104500, 104501, 104502, 104503, 104504, 104505, 104901,
@@ -723,6 +734,7 @@ uids = [
 [[area]]
 key = "icemule.trace.abbey"
 name = "icemule-trace-abbey"
+map = "the-abbey"
 # 67 rooms
 uids = [
   4132011, 4132012, 4132013, 4132014, 4132015, 4132016, 4132017, 4132018, 4132019, 4132020, 4132021, 4132022,
@@ -739,6 +751,7 @@ ids = [
 [[area]]
 key = "icemule.trace.bard.guild"
 name = "icemule-trace-bard-guild"
+map = "icemule-trace"
 # 20 rooms
 uids = [
   280001, 280002, 280003, 280004, 280005, 280006, 280007, 280008, 280009, 280010, 280011, 280012,
@@ -748,6 +761,7 @@ uids = [
 [[area]]
 key = "icemule.trace.cleric.guild"
 name = "icemule-trace-cleric-guild"
+map = "icemule-trace"
 # 34 rooms
 uids = [
   670001, 670002, 670003, 670004, 670005, 670006, 670007, 670008, 670009, 670010, 670011, 670012,
@@ -758,6 +772,7 @@ uids = [
 [[area]]
 key = "icemule.trace.clovertooth.hall"
 name = "icemule-trace-clovertooth-hall"
+map = "icemule-trace"
 # 75 rooms
 uids = [
   111051, 4042307, 4043031, 4043032, 4043033, 4043034, 4043035, 4043036, 4043037, 4043038, 4043039, 4043040,
@@ -786,6 +801,7 @@ uids = [
 [[area]]
 key = "icemule.trace.den.of.rot"
 name = "icemule-trace-den-of-rot"
+map = "the-abbey"
 # 46 rooms
 uids = [
   4132201, 4132202, 4132203, 4132204, 4132205, 4132206, 4132207, 4132208, 4132209, 4132210, 4132211, 4132212,
@@ -797,6 +813,7 @@ uids = [
 [[area]]
 key = "icemule.trace.empath.guild"
 name = "icemule-trace-empath-guild"
+map = "icemule-trace"
 # 24 rooms
 uids = [
   650001, 650002, 650003, 650004, 650005, 650006, 650007, 650008, 650009, 650010, 650013, 650014,
@@ -806,6 +823,7 @@ uids = [
 [[area]]
 key = "icemule.trace.faire.of.the.north"
 name = "icemule-trace-faire-of-the-north"
+map = "icemule-trace"
 # 30 rooms
 ids = [
   27055, 27394, 27758, 27759, 27760, 27761, 27762, 27763, 27764, 27765, 27766, 27767,
@@ -942,6 +960,7 @@ ids = [
 [[area]]
 key = "icemule.trace.playershops"
 name = "icemule-trace-playershops"
+map = "icemule-trace"
 # 367 rooms
 uids = [
   631393, 631394, 631395, 632033, 632034, 632035, 634401, 635033, 635065, 635066, 635067, 635105,
@@ -991,6 +1010,7 @@ uids = [
 [[area]]
 key = "icemule.trace.rogue.guild"
 name = "icemule-trace-rogue-guild"
+map = "icemule-trace"
 # 81 rooms
 uids = [
   260001, 260003, 260004, 260005, 260006, 260007, 260008, 260009, 260010, 260011, 260012, 260013,
@@ -1064,6 +1084,7 @@ ids = [
 [[area]]
 key = "icemule.trace.south.gate.wilds"
 name = "icemule-trace-south-gate-wilds"
+map = "icemule-trace"
 # 321 rooms
 uids = [
   561001, 561002, 561003, 561004, 561005, 561006, 561007, 561008, 704101, 704102, 704103, 704104,
@@ -1162,6 +1183,7 @@ uids = [
 [[area]]
 key = "icemule.trace.town"
 name = "icemule-trace-town"
+map = "icemule-trace"
 # 547 rooms
 uids = [
   34301, 34302, 34303, 34304, 34305, 34306, 110021, 110022, 110023, 110024, 110025, 110026,
@@ -1309,6 +1331,7 @@ ids = [
 [[area]]
 key = "icemule.trace.wizard.guild"
 name = "icemule-trace-wizard-guild"
+map = "icemule-trace"
 # 36 rooms
 uids = [
   680001, 680002, 680003, 680004, 680005, 680006, 680007, 680008, 680009, 680010, 680011, 680012,
@@ -1319,6 +1342,7 @@ uids = [
 [[area]]
 key = "isle.of.the.four.winds.bard.guild"
 name = "isle-of-the-four-winds-bard-guild"
+map = "mist-harbor"
 # 26 rooms
 uids = [
   289102, 289103, 289104, 289105, 289106, 289107, 289108, 289109, 289110, 289111, 289112, 289113,
@@ -1329,6 +1353,7 @@ uids = [
 [[area]]
 key = "isle.of.the.four.winds.boreas"
 name = "isle-of-the-four-winds-boreas"
+map = "mist-harbor"
 # 2 rooms
 uids = [
   711002,
@@ -1340,6 +1365,7 @@ ids = [
 [[area]]
 key = "isle.of.the.four.winds.circle.of.trees"
 name = "isle-of-the-four-winds-circle-of-trees"
+map = "mist-harbor"
 # 168 rooms
 uids = [
   4410151, 4410152, 4422201, 4422202, 4422203, 4422204, 4422205, 4422206, 4422207, 4422208, 4422209, 4422210,
@@ -1364,6 +1390,7 @@ ids = [
 [[area]]
 key = "isle.of.the.four.winds.cleric.guild"
 name = "isle-of-the-four-winds-cleric-guild"
+map = "mist-harbor"
 # 22 rooms
 uids = [
   678001, 678002, 678003, 678004, 678005, 678006, 678007, 678008, 678009, 678010, 678011, 678012,
@@ -1382,6 +1409,7 @@ uids = [
 [[area]]
 key = "isle.of.the.four.winds.eastern.waterway"
 name = "isle-of-the-four-winds-eastern-waterway"
+map = "mist-harbor"
 # 171 rooms
 uids = [
   3223026, 3223722, 3223723, 3223724, 3223725, 3223726, 3223727, 3223728, 3223729, 3223742, 3223743, 3223744,
@@ -1412,6 +1440,7 @@ uids = [
 [[area]]
 key = "isle.of.the.four.winds.empath.guild"
 name = "isle-of-the-four-winds-empath-guild"
+map = "mist-harbor"
 # 24 rooms
 uids = [
   659001, 659002, 659003, 659004, 659005, 659006, 659007, 659008, 659009, 659010, 659011, 659012,
@@ -1421,6 +1450,7 @@ uids = [
 [[area]]
 key = "isle.of.the.four.winds.firefly.villa"
 name = "isle-of-the-four-winds-firefly-villa"
+map = "mist-harbor"
 # 56 rooms
 uids = [
   3209316, 3209317, 3209318, 3209319, 3209320, 3209321, 3209322, 3209323, 3209324, 3209325, 3209326, 3209327,
@@ -1433,6 +1463,7 @@ uids = [
 [[area]]
 key = "isle.of.the.four.winds.iyo.glade"
 name = "isle-of-the-four-winds-iyo-glade"
+map = "mist-harbor"
 # 110 rooms
 uids = [
   4410001, 4410002, 4410003, 4410004, 4410005, 4410006, 4410007, 4410008, 4410009, 4410010, 4410011, 4410012,
@@ -1452,6 +1483,7 @@ ids = [
 [[area]]
 key = "isle.of.the.four.winds.mist.harbor.town"
 name = "isle-of-the-four-winds-mist-harbor-town"
+map = "mist-harbor"
 # 645 rooms
 uids = [
   32200, 32201, 32202, 32203, 32204, 32205, 32206, 32207, 32208, 32209, 32210, 32211,
@@ -1529,6 +1561,7 @@ uids = [
 [[area]]
 key = "isle.of.the.four.winds.playershops"
 name = "isle-of-the-four-winds-playershops"
+map = "mist-harbor"
 # 302 rooms
 uids = [
   631369, 631370, 631371, 634209, 634210, 634211, 635185, 641209, 641210, 641211, 645017, 645018,
@@ -1564,6 +1597,7 @@ ids = [
 [[area]]
 key = "isle.of.the.four.winds.ranger.guild"
 name = "isle-of-the-four-winds-ranger-guild"
+map = "mist-harbor"
 # 23 rooms
 uids = [
   279004, 279005, 279006, 279007, 279008, 279009, 279010, 279011, 279012, 279013, 279014, 279900,
@@ -1576,6 +1610,7 @@ ids = [
 [[area]]
 key = "isle.of.the.four.winds.rogue.guild"
 name = "isle-of-the-four-winds-rogue-guild"
+map = "mist-harbor"
 # 116 rooms
 uids = [
   265001, 265002, 265003, 265004, 265005, 265006, 265007, 265008, 265009, 265010, 265011, 265012,
@@ -1614,6 +1649,7 @@ ids = [
 [[area]]
 key = "isle.of.the.four.winds.tideswept.bazaar"
 name = "isle-of-the-four-winds-tideswept-bazaar"
+map = "mist-harbor"
 # 72 rooms
 uids = [
   4410302, 4410303, 4410304, 4410305, 4410306, 4410307, 4410308, 4410309, 4410310, 4410311, 4410312, 4410313,
@@ -1627,6 +1663,7 @@ uids = [
 [[area]]
 key = "isle.of.the.four.winds.voln.monastery.grounds"
 name = "isle-of-the-four-winds-voln-monastery-grounds"
+map = "mist-harbor"
 # 31 rooms
 uids = [
   3214002, 3214003, 3214004, 3214005, 3214006, 3214007, 3214034, 3214035, 3214036, 3214037, 3214038, 3214039,
@@ -1637,6 +1674,7 @@ uids = [
 [[area]]
 key = "isle.of.the.four.winds.warrior.guild"
 name = "isle-of-the-four-winds-warrior-guild"
+map = "mist-harbor"
 # 46 rooms
 uids = [
   255001, 255002, 255003, 255004, 255005, 255006, 255007, 255008, 255011, 255012, 255013, 255014,
@@ -1701,6 +1739,7 @@ uids = [
 [[area]]
 key = "isle.of.the.four.winds.windfellows.retreat"
 name = "isle-of-the-four-winds-windfellows-retreat"
+map = "mist-harbor"
 # 97 rooms
 ids = [
   19778, 19779, 19780, 19783, 22485, 22486, 23757, 23800, 23865, 23878, 24835, 27356,
@@ -1717,6 +1756,7 @@ ids = [
 [[area]]
 key = "isle.of.the.four.winds.wizard.guild"
 name = "isle-of-the-four-winds-wizard-guild"
+map = "mist-harbor"
 # 38 rooms
 uids = [
   686001, 686002, 686003, 686004, 686005, 686006, 686007, 686008, 686009, 686010, 686011, 686012,
@@ -1739,6 +1779,7 @@ uids = [
 [[area]]
 key = "kraken.manor"
 name = "Kraken Manor"
+map = "solhaven"
 # 8 rooms
 uids = [
   4220010, 4220011, 4220012, 4220013, 4220014, 4220015, 4220016, 4220017,
@@ -1759,6 +1800,7 @@ uids = [
 [[area]]
 key = "krakens.fall.nereids.cradle"
 name = "krakens-fall-nereids-cradle"
+map = "krakens-fall"
 # 80 rooms
 uids = [
   634241, 634242, 634243, 642361, 642362, 642363, 642369, 642370, 642371, 642377, 642378, 642379,
@@ -1773,6 +1815,7 @@ uids = [
 [[area]]
 key = "krakens.fall.town"
 name = "krakens-fall-town"
+map = "krakens-fall"
 # 377 rooms
 uids = [
   160026, 160027, 160028, 589001, 589002, 589003, 589004, 589005, 589011, 589012, 689001, 689010,
@@ -1841,6 +1884,7 @@ uids = [
 [[area]]
 key = "moot.hall"
 name = "Moot Hall"
+map = "wehnimers-landing"
 # 32 rooms
 uids = [
   2018, 2019, 2020, 2021, 2022, 2023, 2024, 2058, 2060, 2062, 2500, 2501,
@@ -2028,6 +2072,7 @@ uids = [
 [[area]]
 key = "paupers"
 name = "Paupers"
+map = "wehnimers-landing"
 # 37 rooms
 uids = [
   104004, 104005, 104008, 104009, 104010, 104100, 104101, 104102, 104103, 104104, 104120, 104200,
@@ -2054,6 +2099,7 @@ uids = [
 [[area]]
 key = "rivers.rest.citadel"
 name = "rivers-rest-citadel"
+map = "the-citadel"
 # 63 rooms
 uids = [
   377002, 377003, 377004, 377005, 377006, 377007, 377008, 377009, 377010, 377012, 377013, 377014,
@@ -2067,6 +2113,7 @@ uids = [
 [[area]]
 key = "rivers.rest.citadel.exterior"
 name = "rivers-rest-citadel-exterior"
+map = "the-citadel"
 # 238 rooms
 uids = [
   36001, 36002, 36003, 36004, 36005, 36006, 36007, 36008, 36009, 36010, 40001, 40002,
@@ -2094,6 +2141,7 @@ uids = [
 [[area]]
 key = "rivers.rest.citadel.garrison"
 name = "rivers-rest-citadel-garrison"
+map = "the-citadel"
 # 57 rooms
 uids = [
   2100001, 2100002, 2100003, 2100004, 2100005, 2100006, 2100007, 2100008, 2100009, 2100010, 2100011, 2100012,
@@ -2141,6 +2189,7 @@ ids = [
 [[area]]
 key = "rivers.rest.krolvin.carrack"
 name = "rivers-rest-krolvin-carrack"
+map = "the-shattered-moors"
 # 44 rooms
 uids = [
   420001, 420002, 420501, 420502, 420503, 420504, 420505, 420506, 420507, 420508, 420509, 420510,
@@ -2152,6 +2201,7 @@ uids = [
 [[area]]
 key = "rivers.rest.maelstrom.bay.and.shattered.moors"
 name = "rivers-rest-maelstrom-bay-and-shattered-moors"
+map = "the-shattered-moors"
 # 45 rooms
 uids = [
   420003, 420004, 420005, 420006, 420007, 420008, 420009, 420010, 420011, 420012, 420013, 420014,
@@ -2304,6 +2354,7 @@ uids = [
 [[area]]
 key = "sonreeva"
 name = "Sonreeva"
+map = "naidem"
 # 45 rooms
 uids = [
   8088003, 8088004, 8088005, 8088006, 8088007, 8088008, 8088009, 8088010, 8088011, 8088012, 8088013, 8088014,
@@ -2570,6 +2621,7 @@ uids = [
 [[area]]
 key = "spitfire"
 name = "Spitfire"
+map = "wehnimers-landing"
 # 219 rooms
 ids = [
   19045, 19047, 19048, 19049, 19050, 19051, 19052, 19053, 19054, 19055, 19056, 19057,
@@ -2596,6 +2648,7 @@ ids = [
 [[area]]
 key = "swords.n.boards"
 name = "Swords 'n Boards"
+map = "wehnimers-landing"
 # 6 rooms
 ids = [
   19105, 19106, 23468, 23469, 23470, 23471,
@@ -2939,6 +2992,7 @@ uids = [
 [[area]]
 key = "tropic.treasure"
 name = "Tropic Treasure"
+map = "wehnimers-landing"
 # 6 rooms
 ids = [
   19125, 19155, 19156, 19157, 19158, 19159,
@@ -2947,6 +3001,7 @@ ids = [
 [[area]]
 key = "underground.cavern"
 name = "Underground Cavern"
+map = "wehnimers-landing"
 # 7 rooms
 ids = [
   24756, 24760, 24761, 24804, 26383, 26384, 27974,
@@ -3004,6 +3059,7 @@ uids = [
 [[area]]
 key = "vornavis.caravansary"
 name = "vornavis-caravansary"
+map = "solhaven"
 # 334 rooms
 uids = [
   142004, 712002, 712003, 712004, 712005, 712006, 712007, 712008, 712009, 712010, 712011, 712012,
@@ -3042,6 +3098,7 @@ ids = [
 [[area]]
 key = "vornavis.foggy.valley"
 name = "vornavis-foggy-valley"
+map = "the-vornavian-coast"
 # 194 rooms
 uids = [
   1304101, 1304102, 1304103, 1304104, 1304105, 4006001, 4006002, 4006003, 4006004, 4006005, 4006006, 4006007,
@@ -3079,6 +3136,7 @@ uids = [
 [[area]]
 key = "vornavis.north.beach"
 name = "vornavis-north-beach"
+map = "the-vornavian-coast"
 # 118 rooms
 uids = [
   4202110, 4202111, 4202161, 4202162, 4202163, 4202164, 4202165, 4202166, 4202167, 4202168, 4202169, 4202170,
@@ -3131,6 +3189,7 @@ ids = [
 [[area]]
 key = "vornavis.solhaven.town"
 name = "vornavis-solhaven-town"
+map = "solhaven"
 # 1835 rooms
 uids = [
   34201, 34202, 34203, 34204, 34206, 34207, 34208, 34209, 34210, 34211, 34212, 34213,
@@ -3522,6 +3581,7 @@ uids = [
 [[area]]
 key = "wehnimers.landing.graveyard"
 name = "wehnimers-landing-graveyard"
+map = "the-graveyard"
 # 236 rooms
 uids = [
   18001, 18002, 18003, 18004, 18005, 18006, 18007, 18008, 18009, 18010, 18011, 18012,
@@ -3549,6 +3609,7 @@ uids = [
 [[area]]
 key = "wehnimers.landing.graveyard.north"
 name = "wehnimers-landing-graveyard-north"
+map = "the-graveyard"
 # 77 rooms
 uids = [
   18018, 18019, 18020, 18021, 18022, 18023, 18024, 18025, 18026, 18027, 18028, 18029,
@@ -3563,6 +3624,7 @@ uids = [
 [[area]]
 key = "wehnimers.landing.halcyon.hills"
 name = "wehnimers-landing-halcyon-hills"
+map = "wehnimers-landing"
 # 189 rooms
 uids = [
   52001, 52002, 52003, 52004, 52005, 52006, 52007, 52008, 52009, 52010, 52011, 52012,
@@ -3754,6 +3816,7 @@ uids = [
 [[area]]
 key = "wehnimers.landing.outside.gates"
 name = "wehnimers-landing-outside-gates"
+map = "wehnimers-landing"
 # 552 rooms
 uids = [
   6100, 6102, 6103, 6151, 6153, 6154, 6155, 6156, 9001, 9002, 9003, 9004,
@@ -3906,6 +3969,7 @@ uids = [
 [[area]]
 key = "wehnimers.landing.town"
 name = "wehnimers-landing-town"
+map = "wehnimers-landing"
 # 2595 rooms
 uids = [
   1015, 1016, 1017, 1019, 1021, 1023, 1024, 1025, 1027, 1028, 1029, 1032,
@@ -4150,6 +4214,7 @@ uids = [
 [[area]]
 key = "wine.cellar"
 name = "Wine Cellar"
+map = "solhaven"
 # 9 rooms
 uids = [
   4220001, 4220002, 4220003, 4220004, 4220005, 4220006, 4220007, 4220008, 4220009,
@@ -4158,6 +4223,7 @@ uids = [
 [[area]]
 key = "zul.logoth.cleric.guild"
 name = "zul-logoth-cleric-guild"
+map = "zul-logoth"
 # 21 rooms
 uids = [
   677001, 677002, 677003, 677004, 677005, 677006, 677007, 677008, 677009, 677010, 677011, 677012,
@@ -4182,6 +4248,7 @@ uids = [
 [[area]]
 key = "zul.logoth.empath.guild"
 name = "zul-logoth-empath-guild"
+map = "zul-logoth"
 # 23 rooms
 uids = [
   658001, 658002, 658003, 658004, 658005, 658006, 658007, 658008, 658009, 658010, 658011, 658012,
@@ -4191,6 +4258,7 @@ uids = [
 [[area]]
 key = "zul.logoth.rogue.guild"
 name = "zul-logoth-rogue-guild"
+map = "zul-logoth"
 # 81 rooms
 uids = [
   268001, 268002, 268003, 268004, 268005, 268006, 268007, 268008, 268009, 268010, 268011, 268012,
@@ -4205,6 +4273,7 @@ uids = [
 [[area]]
 key = "zul.logoth.sorcerer.guild"
 name = "zul-logoth-sorcerer-guild"
+map = "zul-logoth"
 # 26 rooms
 uids = [
   668001, 668002, 668003, 668004, 668005, 668006, 668007, 668008, 668009, 668010, 668011, 668012,
@@ -4252,6 +4321,7 @@ uids = [
 [[area]]
 key = "zul.logoth.town"
 name = "zul-logoth-town"
+map = "zul-logoth"
 # 499 rooms
 uids = [
   34121, 34122, 34123, 34124, 34125, 34126, 34127, 111061, 160022, 160023, 258001, 278001,
@@ -4303,6 +4373,7 @@ ids = [
 [[area]]
 key = "zul.logoth.warrior.guild"
 name = "zul-logoth-warrior-guild"
+map = "zul-logoth"
 # 44 rooms
 uids = [
   258002, 258003, 258004, 258005, 258006, 258007, 258008, 258009, 258010, 258011, 258012, 258013,
@@ -4314,6 +4385,7 @@ uids = [
 [[area]]
 key = "zul.logoth.wizard.guild"
 name = "zul-logoth-wizard-guild"
+map = "zul-logoth"
 # 24 rooms
 uids = [
   688001, 688002, 688003, 688004, 688005, 688006, 688007, 688008, 688009, 688010, 688011, 688012,
