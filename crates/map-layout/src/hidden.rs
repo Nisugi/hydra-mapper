@@ -116,6 +116,14 @@ pub fn ways_in(map: &Map, hidden: &HashSet<RoomId>) -> Vec<WayIn> {
     out
 }
 
+/// Each hidden place's rooms: the hidden rooms joined by walks, either way
+/// round. A place is laid out alone, or opened on its area's sheet where
+/// its dot is (`open`).
+#[must_use]
+pub fn place_rooms(map: &Map, hidden: &HashSet<RoomId>) -> Vec<Vec<RoomId>> {
+    places(map, hidden).1
+}
+
 /// The hidden places: hidden rooms joined by walks, either way round. Each
 /// room's place, and each place's rooms.
 fn places(map: &Map, hidden: &HashSet<RoomId>) -> (HashMap<RoomId, usize>, Vec<Vec<RoomId>>) {

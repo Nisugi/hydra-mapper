@@ -334,6 +334,16 @@ pub fn build_scene(location: &str, layout: &Layout, map: &Map) -> MapScene {
         unit.door_rooms
             .retain(|r| !folded.iter().any(|w| w.inside == *r));
     }
+    // The rooms moved up where a folded one left: index them again.
+    if !folded.is_empty() {
+        scene.room_index = scene
+            .sheet
+            .rooms
+            .iter()
+            .enumerate()
+            .map(|(i, r)| (r.id, i))
+            .collect();
+    }
     let mut ways = layout.ways_in.clone();
     ways.extend(folded);
     crate::doors::place(&mut scene.sheet, &ways);
@@ -665,7 +675,7 @@ fn cluster_labels(
     labels
 }
 
-fn compute_sheet_bounds(scene: &mut MapScene) {
+pub(crate) fn compute_sheet_bounds(scene: &mut MapScene) {
     let sheet = &mut scene.sheet;
     let mut min = Cell {
         x: i32::MAX,

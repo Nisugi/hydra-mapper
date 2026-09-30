@@ -20,6 +20,7 @@ mod export;
 mod focus;
 mod inspect;
 mod maps;
+mod opened;
 mod overrides;
 mod placement;
 mod quality_report;
@@ -88,19 +89,8 @@ fn main() -> eframe::Result {
         ));
         return Ok(());
     }
-    // `--suggest-maps [map]`: the areas worth putting on one map.
-    // `--accept-map <name> [map]`: put the suggestion of that name on it,
-    // in the store, as the window's Accept does.
-    if flag.as_deref() == Some("--suggest-maps") {
-        finish(maps::suggest_headless(map_at(2).as_deref(), None));
-        return Ok(());
-    }
-    if flag.as_deref() == Some("--accept-map") {
-        let Some(name) = std::env::args().nth(2) else {
-            eprintln!("usage: cena-mapper --accept-map <name> [map]");
-            std::process::exit(2);
-        };
-        finish(maps::suggest_headless(map_at(3).as_deref(), Some(&name)));
+    if let Some(result) = map_command(flag.as_deref()) {
+        finish(result);
         return Ok(());
     }
     // `--plan-areas [map]`: say where the rooms with no area would go.
@@ -154,6 +144,22 @@ fn main() -> eframe::Result {
 }
 
 /// The map named by the `n`th argument, or `CENA_MAP`, or the bundled one.
+/// The maps' commands (`maps.rs`, `opened.rs`), or `None` for another
+/// `flag`: `--open-places [map]`, every hidden place opened where its dot
+/// is and how many fit; `--suggest-maps [map]`, the areas worth putting on
+/// one map; `--accept-map <name> [map]`, that suggestion put on its map in
+/// the store, as the window's Accept does.
+fn map_command(flag: Option<&str>) -> Option<Result<String, String>> {
+    let second = std::env::args().nth(2);
+    Some(match (flag?, second.as_deref()) {
+        ("--open-places", _) => opened::open_places_headless(map_at(2).as_deref()),
+        ("--suggest-maps", _) => maps::suggest_headless(map_at(2).as_deref(), None),
+        ("--accept-map", Some(name)) => maps::suggest_headless(map_at(3).as_deref(), Some(name)),
+        ("--accept-map", None) => Err("usage: cena-mapper --accept-map <name> [map]".to_owned()),
+        _ => return None,
+    })
+}
+
 fn map_at(n: usize) -> Option<PathBuf> {
     std::env::args()
         .nth(n)

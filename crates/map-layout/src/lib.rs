@@ -42,6 +42,7 @@ pub mod doors;
 pub mod hidden;
 mod hole;
 pub mod interior_shelf;
+pub mod open;
 pub mod outdoor_packing;
 pub mod overrides;
 pub mod packer;

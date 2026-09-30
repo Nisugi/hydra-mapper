@@ -285,6 +285,30 @@ mod tests {
         assert!(map_areas(&map, &MapOverrides::default(), &baseline).is_empty());
     }
 
+    /// On the Hinterwilds, whose river current is folded to dots, every
+    /// room drawn is found by its number: the fold indexes them again.
+    #[test]
+    fn the_hinterwilds_rooms_are_found_after_the_fold() {
+        let map = crate::app::load_map(Some(std::path::Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../gs.map"
+        ))))
+        .expect("gs.map loads");
+        let placeable = cena_map_layout::regions::placeable_rooms(&map);
+        let rooms = cena_map_layout::areas::layout_rooms(
+            &cena_map_layout::areas::baked(&map)["the-hinterwilds"],
+            &map,
+            &placeable,
+        );
+        let subset = Map::from_rooms(rooms).expect("a subset");
+        let layout = cena_map_layout::generate_layout(&subset);
+        let scene = cena_map_layout::build_scene("the-hinterwilds", &layout, &subset);
+        assert!(scene.room(RoomId(30115)).is_none(), "the current is folded");
+        for room in &scene.sheet.rooms {
+            assert_eq!(scene.room(room.id).map(|r| r.id), Some(room.id));
+        }
+    }
+
     #[test]
     fn a_location_is_slugged_as_the_areas_are() {
         assert_eq!(slug("the Hinterwilds"), "the-hinterwilds");
